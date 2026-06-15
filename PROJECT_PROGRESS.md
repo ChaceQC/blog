@@ -22,6 +22,7 @@
 - 按最新协作要求补充开发环境为 Windows 11，生产部署环境为 Linux Debian。
 - 补充分支与提交节奏：日常开发使用 `dev` 分支，一个完整功能完成后再合并到 `main`，实现过程按可验证小步 commit 并 push。
 - 已创建并切换到本地 `dev` 分支，后续开发在 `dev` 上推进。
+- 按最新协作要求补充语言规范：界面文案、说明文字、代码注释、README 和项目文档默认使用中文。
 - 初始化 `backend` 后端工程，使用 `uv` 管理 FastAPI 依赖和开发工具。
 - 创建后端 `app` 分层结构：`api`、`core`、`models`、`schemas`、`services`、`repositories`、`providers`、`tasks`。
 - 实现 FastAPI 应用工厂、Trusted Host、CORS、安全配置校验、结构化日志、数据库连接和 `/healthz`、`/readyz` 健康检查。
@@ -31,6 +32,7 @@
 ### 进行中
 
 - 正在初始化前端与部署脚手架。
+- 正在将前端界面文案从模板英文改为中文。
 
 ### 阻塞与风险
 
