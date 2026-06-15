@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     secret_key: str
     access_token_expire_minutes: int = Field(default=15, ge=1, le=1440)
     refresh_token_expire_days: int = Field(default=14, ge=1, le=90)
+    encryption_session_expire_seconds: int = Field(default=300, ge=60, le=3600)
     admin_cookie_secure: bool = False
     admin_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
 

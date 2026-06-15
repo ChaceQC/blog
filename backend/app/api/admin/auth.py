@@ -4,8 +4,10 @@ from app.api.admin.dependencies import (
     AdminCsrfDependency,
     AuthServiceDependency,
     CurrentAdminUserDependency,
+    EncryptionSessionManagerDependency,
     SettingsDependency,
 )
+from app.api.admin.encrypted_response import maybe_encrypt_response
 from app.api.admin.session import (
     clear_admin_session_cookies,
     create_csrf_token,
@@ -14,6 +16,7 @@ from app.api.admin.session import (
     session_response,
     set_admin_session_cookies,
 )
+from app.core.encryption import EncryptionProfile
 from app.schemas.auth import (
     AuthSessionResponse,
     LoginRequest,
@@ -21,19 +24,21 @@ from app.schemas.auth import (
     LogoutResponse,
     RefreshTokenRequest,
 )
+from app.schemas.encryption import EncryptedApiResponse
 from app.services.auth import AuthenticationError
 
 router = APIRouter(prefix="/auth", tags=["admin-auth"])
 
 
-@router.post("/login", response_model=AuthSessionResponse)
+@router.post("/login", response_model=AuthSessionResponse | EncryptedApiResponse)
 async def login(
     payload: LoginRequest,
     request: Request,
     response: Response,
     service: AuthServiceDependency,
     settings: SettingsDependency,
-) -> AuthSessionResponse:
+    encryption_manager: EncryptionSessionManagerDependency,
+) -> AuthSessionResponse | EncryptedApiResponse:
     try:
         tokens = await service.login(
             username=payload.username,
@@ -51,22 +56,28 @@ async def login(
         csrf_token=csrf_token,
         settings=settings,
     )
-    return session_response(
-        user=tokens.user,
-        csrf_token=csrf_token,
-        expires_in=tokens.expires_in,
+    return maybe_encrypt_response(
+        session_response(
+            user=tokens.user,
+            csrf_token=csrf_token,
+            expires_in=tokens.expires_in,
+        ),
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.SENSITIVE,
     )
 
 
-@router.post("/refresh", response_model=AuthSessionResponse)
+@router.post("/refresh", response_model=AuthSessionResponse | EncryptedApiResponse)
 async def refresh(
     request: Request,
     response: Response,
     _: AdminCsrfDependency,
     service: AuthServiceDependency,
     settings: SettingsDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
     payload: RefreshTokenRequest | None = None,
-) -> AuthSessionResponse:
+) -> AuthSessionResponse | EncryptedApiResponse:
     refresh_token = (
         payload.refresh_token if payload is not None else None
     ) or refresh_token_from_request(request)
@@ -85,10 +96,15 @@ async def refresh(
         csrf_token=csrf_token,
         settings=settings,
     )
-    return session_response(
-        user=tokens.user,
-        csrf_token=csrf_token,
-        expires_in=tokens.expires_in,
+    return maybe_encrypt_response(
+        session_response(
+            user=tokens.user,
+            csrf_token=csrf_token,
+            expires_in=tokens.expires_in,
+        ),
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.SENSITIVE,
     )
 
 
@@ -110,18 +126,24 @@ async def logout(
     return LogoutResponse()
 
 
-@router.get("/me", response_model=AuthSessionResponse)
+@router.get("/me", response_model=AuthSessionResponse | EncryptedApiResponse)
 async def me(
     current_user: CurrentAdminUserDependency,
     request: Request,
     response: Response,
     settings: SettingsDependency,
-) -> AuthSessionResponse:
+    encryption_manager: EncryptionSessionManagerDependency,
+) -> AuthSessionResponse | EncryptedApiResponse:
     csrf_token = ensure_csrf_cookie(request, response, settings=settings)
-    return session_response(
-        user=current_user,
-        csrf_token=csrf_token,
-        expires_in=settings.access_token_expire_minutes * 60,
+    return maybe_encrypt_response(
+        session_response(
+            user=current_user,
+            csrf_token=csrf_token,
+            expires_in=settings.access_token_expire_minutes * 60,
+        ),
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.SENSITIVE,
     )
 
 

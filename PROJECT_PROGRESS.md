@@ -76,21 +76,28 @@
 - 前端后台菜单按当前用户权限过滤，直接访问无权限子路由时显示权限不足状态。
 - 在 `PROJECT_PLAN.md` 中补充应用层加密传输规划：敏感后台数据使用 `sensitive-v1`，文章/页面/草稿等内容使用 `content-v1`，公开已发布文章仍兼顾 SEO 和缓存。
 - 新增后端应用层加密信封基础 `backend/app/core/encryption.py`，提供 `sensitive-v1` 与 `content-v1` 两套独立 profile、HKDF 派生上下文和 AES-GCM JSON 信封。
+- 新增后端应用层加密协商接口 `POST /api/admin/encryption/sessions`，使用浏览器兼容的 P-256 ECDH 生成短期会话密钥。
+- 后端认证接口 `POST /api/admin/auth/login`、`POST /api/admin/auth/refresh` 和 `GET /api/admin/auth/me` 已支持请求携带 `X-Encryption-Session` 时返回 `sensitive-v1` 加密信封；未携带时保持原 JSON 响应，兼容现有调用和测试。
+- 前端新增 WebCrypto 协商与解密工具，后台登录和当前用户恢复流程已接入 `sensitive-v1` 解密；`content-v1` 解密基础已可供后续文章、页面和草稿管理接口复用。
+- 新增 `BLOG_ENCRYPTION_SESSION_EXPIRE_SECONDS` 配置，并同步 `backend/.env.example` 和 `deploy/env/backend.env.example`。
+- 新增后端集成测试，覆盖协商短期密钥后解开登录接口返回的 `sensitive-v1` 加密信封。
+- 更新 `README.md` 和 `PROJECT_PLAN.md`，记录加密协商接口、当前接入范围和进程内存会话存储的生产替换要求。
 
 ### 进行中
 
-- M1 认证与后台框架正在推进，后台登录、Cookie 会话、CSRF、当前用户校验和菜单权限状态已形成第一版闭环。
+- M1 认证与后台框架正在推进，后台登录、Cookie 会话、CSRF、当前用户校验、菜单权限状态和 `sensitive-v1` 加密响应已形成第一版闭环。
 
 ### 阻塞与风险
 
 - 待确认真实域名、服务器环境、证书申请方式和对象存储选择。
 - 真实 MySQL 验证已在临时库完成；生产数据库迁移仍需在正式环境备份后执行。
-- 应用层加密传输已完成分层规划和后端信封基础，但密钥协商、接口接入和前端解密流程仍需在后续小步落地。
+- 应用层加密协商当前使用后端进程内存保存短期会话密钥，仅适合单进程开发和最小闭环验证；多实例生产部署前需替换为 Redis 或数据库，并补充会话清理、审计和限流。
+- `content-v1` 已具备前端解密基础，但尚未接入实际文章、页面和草稿 CRUD 接口。
 
 ### 下一步
 
-- 接入 `sensitive-v1` 和 `content-v1` 应用层加密信封的密钥协商、接口约定和前端解密流程。
-- 继续补充认证审计日志查询、基础限流和文章、文件、设置的最小 CRUD。
+- 补充认证审计日志查询、加密协商接口限流、登录接口限流和限流命中日志。
+- 将 `content-v1` 接入文章、页面和草稿管理接口，继续实现文章、文件、设置的最小 CRUD。
 
 ### 验证
 
@@ -141,3 +148,7 @@
 - Cookie 会话、CSRF 和权限菜单小步已运行 `npm.cmd run lint`，通过。
 - Cookie 会话、CSRF 和权限菜单小步已运行 `npm.cmd run build`，通过。
 - Cookie 会话、CSRF、权限菜单和加密信封小步已运行 `git diff --check`，未发现空白或行尾问题。
+- 加密协商和前端解密接入后已运行 `uv run ruff check .`，通过。
+- 加密协商和前端解密接入后已运行 `uv run pytest`，23 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 加密协商和前端解密接入后已运行 `npm.cmd run lint`，通过。
+- 加密协商和前端解密接入后已运行 `npm.cmd run build`，通过。

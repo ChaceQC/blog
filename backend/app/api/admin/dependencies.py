@@ -15,6 +15,7 @@ from app.core.database import get_session
 from app.policies.auth import AuthPolicy
 from app.repositories.auth import AuthRepository
 from app.services.auth import AuthenticatedUser, AuthenticationError, AuthService
+from app.services.encryption import EncryptionSessionManager
 
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
@@ -35,6 +36,18 @@ def get_auth_service(
 
 
 AuthServiceDependency = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def get_encryption_session_manager(
+    settings: SettingsDependency,
+) -> EncryptionSessionManager:
+    return EncryptionSessionManager(settings)
+
+
+EncryptionSessionManagerDependency = Annotated[
+    EncryptionSessionManager,
+    Depends(get_encryption_session_manager),
+]
 
 
 async def get_current_admin_user(

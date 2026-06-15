@@ -1,13 +1,24 @@
-import { apiGet, apiPost } from '../../api/client.ts'
+import {
+  apiGetEncrypted,
+  apiPost,
+  apiPostEncrypted,
+} from '../../api/client.ts'
 
 import type { AuthSessionResponse, LoginPayload } from './types.ts'
 
 export function loginAdmin(payload: LoginPayload): Promise<AuthSessionResponse> {
-  return apiPost<LoginPayload, AuthSessionResponse>('/admin/auth/login', payload)
+  return apiPostEncrypted<LoginPayload, AuthSessionResponse>(
+    '/admin/auth/login',
+    payload,
+    'sensitive-v1',
+  )
 }
 
 export function getCurrentAdminSession(): Promise<AuthSessionResponse> {
-  return apiGet<AuthSessionResponse>('/admin/auth/me')
+  return apiGetEncrypted<AuthSessionResponse>(
+    '/admin/auth/me',
+    'sensitive-v1',
+  )
 }
 
 export function logoutAdmin(csrfToken: string): Promise<{ status: 'ok' }> {

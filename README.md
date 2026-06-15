@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-当前版本处于 `v0.1.0` 脚手架阶段，开发分支为 `dev`。M0 脚手架、生产部署骨架和初始 Alembic 迁移已完成，M1 已开始落地后台登录、当前用户接口、初始管理员创建命令、Cookie 会话、CSRF 防护和前端权限菜单。
+当前版本处于 `v0.1.0` 脚手架阶段，开发分支为 `dev`。M0 脚手架、生产部署骨架和初始 Alembic 迁移已完成，M1 已开始落地后台登录、当前用户接口、初始管理员创建命令、Cookie 会话、CSRF 防护、前端权限菜单，以及 `sensitive-v1` / `content-v1` 应用层加密协商基础。
 
 ## 技术栈
 
@@ -82,7 +82,7 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml co
 
 本地 MySQL 验证：
 
-Windows 本机安装 MySQL 8 时，可以用本地临时库验证真实迁移、初始管理员创建和后台认证流程。浏览器后台会话使用 HttpOnly Cookie 保存 Access Token 和 Refresh Token，前端只保留内存中的用户信息与 CSRF Token；写操作通过 `X-CSRF-Token` 校验。根目录 `auth.txt` 可保存本机 MySQL root 凭据供本地验证使用，该文件属于机密文件，已被 `.gitignore` 忽略，禁止提交。
+Windows 本机安装 MySQL 8 时，可以用本地临时库验证真实迁移、初始管理员创建和后台认证流程。浏览器后台会话使用 HttpOnly Cookie 保存 Access Token 和 Refresh Token，前端只保留内存中的用户信息与 CSRF Token；写操作通过 `X-CSRF-Token` 校验。后台前端会通过 `/api/admin/encryption/sessions` 协商短期 P-256 ECDH 会话密钥，登录、当前用户和刷新接口可返回 `sensitive-v1` 加密信封；`content-v1` 的前端解密基础已具备，后续接入文章和草稿管理接口。当前加密会话存储为后端进程内存实现，仅适合单进程开发与最小闭环验证，多实例生产部署前需替换为 Redis 或数据库。根目录 `auth.txt` 可保存本机 MySQL root 凭据供本地验证使用，该文件属于机密文件，已被 `.gitignore` 忽略，禁止提交。
 
 建议只操作临时库，例如 `blog_codex_migration_test`：创建临时库后临时设置 `BLOG_DATABASE_URL`，运行 `uv run alembic upgrade head`、`uv run python -m app.cli create-admin ...`，验证完成后运行 `uv run alembic downgrade base` 并删除临时库。
 
