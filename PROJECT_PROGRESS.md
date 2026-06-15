@@ -46,19 +46,22 @@
 - 更新 `deploy/env/backend.env.example`，补齐后端运行所需配置字段。
 - 新增根目录 `README.md`，记录整个项目总览、当前阶段、目录结构、本地开发、验证命令、部署边界和文档维护规则。
 - 在 `AGENT.md` 和 `PROJECT_PLAN.md` 中补充要求：实现、重构、测试、部署配置或规则变化时，必须实时更新 `README.md`、`PROJECT_PLAN.md`、`PROJECT_PROGRESS.md` 和 `AGENT.md` 中受影响的内容。
+- 新增初始 Alembic 迁移 `20260615_0001_initial_schema.py`，覆盖用户权限、文章页面、文件管理、友链、站点导航、系统设置和日志相关数据表。
+- 初始迁移已处理 `users.avatar_file_id` 与 `files.uploader_id` 的循环外键，建表后再补加用户头像外键。
+- 更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，标记 M0 脚手架与初始迁移完成，并将下一步调整为 M1 认证与后台框架。
 
 ### 进行中
 
-- M0 脚手架基础已完成，待补充初始 Alembic 迁移文件。
+- M1 认证与后台框架设计准备开始。
 
 ### 阻塞与风险
 
 - 待确认真实域名、服务器环境、证书申请方式和对象存储选择。
-- 初始 Alembic 迁移文件尚未创建，后续需要在数据库服务配置完成后补齐并验证迁移。
+- 初始 Alembic 迁移已完成离线 SQL 验证；真实 MySQL 的 `upgrade head` 和回滚验证需要在本地或生产数据库服务启动后执行。
 
 ### 下一步
 
-- 补充初始 Alembic 迁移文件并验证迁移生成。
+- 按规则将完成并验证后的 `dev` 分支合并回 `main`。
 - 开始 M1 认证与后台框架设计。
 
 ### 验证
@@ -77,3 +80,8 @@
 - 已检查本地监听端口，确认本项目开发服务器已关闭。
 - 配置外置调整后已重新运行 `uv run ruff check .`、`uv run pytest`、`npm run lint`、`npm run build`，均通过。
 - 已再次检查 `15173`、`18080`、`14173`、`5173`、`8000`，确认没有开发服务器监听。
+- 已运行 `uv run alembic upgrade head --sql`，初始迁移升级 SQL 可生成。
+- 已运行 `uv run alembic downgrade 20260615_0001:base --sql`，初始迁移回滚 SQL 可生成。
+- 初始迁移新增后已重新运行 `uv run ruff check .`，通过。
+- 初始迁移新增后已重新运行 `uv run pytest`，2 个健康检查测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 已运行 `git diff --check`，未发现空白或行尾问题。

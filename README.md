@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-当前版本处于 `v0.1.0` 脚手架阶段，开发分支为 `dev`。已完成后端、前端和生产部署基础骨架，下一步进入初始数据库迁移和 M1 认证模块。
+当前版本处于 `v0.1.0` 脚手架阶段，开发分支为 `dev`。M0 脚手架、生产部署骨架和初始 Alembic 迁移已完成，下一步进入 M1 认证与后台框架模块。
 
 ## 技术栈
 
@@ -60,6 +60,9 @@ npm run dev
 cd backend
 uv run ruff check .
 uv run pytest
+$env:PYTHONUTF8='1'
+uv run alembic upgrade head --sql
+uv run alembic downgrade 20260615_0001:base --sql
 ```
 
 前端：
