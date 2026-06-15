@@ -475,6 +475,25 @@ img {
   gap: 6px;
 }
 
+.admin-forbidden {
+  display: grid;
+  gap: 8px;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.admin-forbidden span {
+  color: var(--warm);
+  font-weight: 760;
+}
+
+.admin-forbidden h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
 .admin-heading span {
   color: var(--accent-ink);
   font-weight: 760;

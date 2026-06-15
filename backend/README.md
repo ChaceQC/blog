@@ -26,9 +26,9 @@ uv run python -m app.cli --help
 - `POST /login`：校验用户名和密码，签发短期 Access Token 与 Refresh Token。
 - `POST /refresh`：校验并轮换 Refresh Token，重新签发令牌。
 - `POST /logout`：吊销当前 Refresh Token。
-- `GET /me`：通过 `Authorization: Bearer <access_token>` 校验当前后台用户，返回用户、角色和权限信息。
+- `GET /me`：通过 HttpOnly Access Token Cookie 或 Bearer Token 校验当前后台用户，返回用户、角色、权限和 CSRF Token。
 
-密码使用 Argon2id 校验，Access Token 使用 Bearer Token 方式保护后台接口，Refresh Token 只存储 SHA-256 哈希。Token 有效期通过 `BLOG_ACCESS_TOKEN_EXPIRE_MINUTES` 和 `BLOG_REFRESH_TOKEN_EXPIRE_DAYS` 配置。
+密码使用 Argon2id 校验。浏览器会话使用 HttpOnly Cookie 保存 Access Token 和 Refresh Token，前端只持有用户信息和 CSRF Token；刷新和退出等写操作必须携带 `X-CSRF-Token`。Refresh Token 只存储 SHA-256 哈希。Token 有效期通过 `BLOG_ACCESS_TOKEN_EXPIRE_MINUTES` 和 `BLOG_REFRESH_TOKEN_EXPIRE_DAYS` 配置，Cookie 安全属性通过 `BLOG_ADMIN_COOKIE_SECURE` 和 `BLOG_ADMIN_COOKIE_SAMESITE` 配置。
 
 MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，依赖文件中已显式保留该运行依赖。
 

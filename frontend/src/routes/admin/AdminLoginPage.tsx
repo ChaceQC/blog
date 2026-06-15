@@ -10,7 +10,7 @@ type LoginLocationState = {
 }
 
 export function AdminLoginPage() {
-  const { login, session } = useAuth()
+  const { isChecking, login, session } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
@@ -20,6 +20,10 @@ export function AdminLoginPage() {
 
   const state = location.state as LoginLocationState | null
   const redirectTo = state?.from ?? '/admin'
+
+  if (isChecking) {
+    return <main className="admin-auth-loading">正在校验登录状态</main>
+  }
 
   if (session !== null) {
     return <Navigate to={redirectTo} replace />

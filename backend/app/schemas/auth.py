@@ -11,13 +11,13 @@ class LoginRequest(BaseModel):
 
 
 class RefreshTokenRequest(BaseModel):
-    refresh_token: str = Field(min_length=32, max_length=256)
+    refresh_token: str | None = Field(default=None, min_length=32, max_length=256)
 
     model_config = ConfigDict(extra="forbid")
 
 
 class LogoutRequest(BaseModel):
-    refresh_token: str = Field(min_length=32, max_length=256)
+    refresh_token: str | None = Field(default=None, min_length=32, max_length=256)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -38,6 +38,14 @@ class TokenPairResponse(BaseModel):
     token_type: Literal["bearer"] = "bearer"
     expires_in: int
     user: AuthUserResponse
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AuthSessionResponse(BaseModel):
+    user: AuthUserResponse
+    csrf_token: str
+    expires_in: int
 
     model_config = ConfigDict(extra="forbid")
 

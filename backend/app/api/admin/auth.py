@@ -1,28 +1,39 @@
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from app.api.admin.dependencies import (
+    AdminCsrfDependency,
     AuthServiceDependency,
     CurrentAdminUserDependency,
+    SettingsDependency,
+)
+from app.api.admin.session import (
+    clear_admin_session_cookies,
+    create_csrf_token,
+    ensure_csrf_cookie,
+    refresh_token_from_request,
+    session_response,
+    set_admin_session_cookies,
 )
 from app.schemas.auth import (
-    AuthUserResponse,
+    AuthSessionResponse,
     LoginRequest,
     LogoutRequest,
     LogoutResponse,
     RefreshTokenRequest,
-    TokenPairResponse,
 )
-from app.services.auth import AuthenticatedUser, AuthenticationError, TokenPair
+from app.services.auth import AuthenticationError
 
 router = APIRouter(prefix="/auth", tags=["admin-auth"])
 
 
-@router.post("/login", response_model=TokenPairResponse)
+@router.post("/login", response_model=AuthSessionResponse)
 async def login(
     payload: LoginRequest,
     request: Request,
+    response: Response,
     service: AuthServiceDependency,
-) -> TokenPairResponse:
+    settings: SettingsDependency,
+) -> AuthSessionResponse:
     try:
         tokens = await service.login(
             username=payload.username,
@@ -32,51 +43,85 @@ async def login(
         )
     except AuthenticationError as exc:
         raise _unauthorized() from exc
-    return _token_response(tokens)
+
+    csrf_token = create_csrf_token()
+    set_admin_session_cookies(
+        response,
+        tokens=tokens,
+        csrf_token=csrf_token,
+        settings=settings,
+    )
+    return session_response(
+        user=tokens.user,
+        csrf_token=csrf_token,
+        expires_in=tokens.expires_in,
+    )
 
 
-@router.post("/refresh", response_model=TokenPairResponse)
+@router.post("/refresh", response_model=AuthSessionResponse)
 async def refresh(
-    payload: RefreshTokenRequest,
+    request: Request,
+    response: Response,
+    _: AdminCsrfDependency,
     service: AuthServiceDependency,
-) -> TokenPairResponse:
+    settings: SettingsDependency,
+    payload: RefreshTokenRequest | None = None,
+) -> AuthSessionResponse:
+    refresh_token = (
+        payload.refresh_token if payload is not None else None
+    ) or refresh_token_from_request(request)
+    if refresh_token is None:
+        raise _unauthorized()
+
     try:
-        tokens = await service.refresh(refresh_token=payload.refresh_token)
+        tokens = await service.refresh(refresh_token=refresh_token)
     except AuthenticationError as exc:
         raise _unauthorized() from exc
-    return _token_response(tokens)
+
+    csrf_token = create_csrf_token()
+    set_admin_session_cookies(
+        response,
+        tokens=tokens,
+        csrf_token=csrf_token,
+        settings=settings,
+    )
+    return session_response(
+        user=tokens.user,
+        csrf_token=csrf_token,
+        expires_in=tokens.expires_in,
+    )
 
 
 @router.post("/logout", response_model=LogoutResponse)
 async def logout(
-    payload: LogoutRequest,
+    request: Request,
+    response: Response,
+    _: AdminCsrfDependency,
     service: AuthServiceDependency,
+    settings: SettingsDependency,
+    payload: LogoutRequest | None = None,
 ) -> LogoutResponse:
-    await service.logout(refresh_token=payload.refresh_token)
+    refresh_token = (
+        payload.refresh_token if payload is not None else None
+    ) or refresh_token_from_request(request)
+    if refresh_token is not None:
+        await service.logout(refresh_token=refresh_token)
+    clear_admin_session_cookies(response, settings=settings)
     return LogoutResponse()
 
 
-@router.get("/me", response_model=AuthUserResponse)
-async def me(current_user: CurrentAdminUserDependency) -> AuthUserResponse:
-    return _user_response(current_user)
-
-
-def _token_response(tokens: TokenPair) -> TokenPairResponse:
-    return TokenPairResponse(
-        access_token=tokens.access_token,
-        refresh_token=tokens.refresh_token,
-        expires_in=tokens.expires_in,
-        user=_user_response(tokens.user),
-    )
-
-
-def _user_response(user: AuthenticatedUser) -> AuthUserResponse:
-    return AuthUserResponse(
-        id=user.id,
-        username=user.username,
-        display_name=user.display_name,
-        roles=user.roles,
-        permissions=user.permissions,
+@router.get("/me", response_model=AuthSessionResponse)
+async def me(
+    current_user: CurrentAdminUserDependency,
+    request: Request,
+    response: Response,
+    settings: SettingsDependency,
+) -> AuthSessionResponse:
+    csrf_token = ensure_csrf_cookie(request, response, settings=settings)
+    return session_response(
+        user=current_user,
+        csrf_token=csrf_token,
+        expires_in=settings.access_token_expire_minutes * 60,
     )
 
 

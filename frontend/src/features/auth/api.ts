@@ -1,18 +1,19 @@
 import { apiGet, apiPost } from '../../api/client.ts'
 
-import type { AuthUser, LoginPayload, TokenPair } from './types.ts'
+import type { AuthSessionResponse, LoginPayload } from './types.ts'
 
-export function loginAdmin(payload: LoginPayload): Promise<TokenPair> {
-  return apiPost<LoginPayload, TokenPair>('/admin/auth/login', payload)
+export function loginAdmin(payload: LoginPayload): Promise<AuthSessionResponse> {
+  return apiPost<LoginPayload, AuthSessionResponse>('/admin/auth/login', payload)
 }
 
-export function getCurrentAdminUser(accessToken: string): Promise<AuthUser> {
-  return apiGet<AuthUser>('/admin/auth/me', { accessToken })
+export function getCurrentAdminSession(): Promise<AuthSessionResponse> {
+  return apiGet<AuthSessionResponse>('/admin/auth/me')
 }
 
-export function logoutAdmin(refreshToken: string): Promise<{ status: 'ok' }> {
-  return apiPost<{ refresh_token: string }, { status: 'ok' }>(
+export function logoutAdmin(csrfToken: string): Promise<{ status: 'ok' }> {
+  return apiPost<Record<string, never>, { status: 'ok' }>(
     '/admin/auth/logout',
-    { refresh_token: refreshToken },
+    {},
+    { csrfToken },
   )
 }

@@ -6,12 +6,10 @@ export type AuthUser = {
   permissions: string[]
 }
 
-export type TokenPair = {
-  access_token: string
-  refresh_token: string
-  token_type: 'bearer'
-  expires_in: number
+export type AuthSessionResponse = {
   user: AuthUser
+  csrf_token: string
+  expires_in: number
 }
 
 export type LoginPayload = {

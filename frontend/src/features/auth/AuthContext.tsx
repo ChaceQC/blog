@@ -6,44 +6,33 @@ import {
   type PropsWithChildren,
 } from 'react'
 
-import { getCurrentAdminUser, loginAdmin, logoutAdmin } from './api.ts'
+import { getCurrentAdminSession, loginAdmin, logoutAdmin } from './api.ts'
 import {
-  clearAuthSession,
   createAuthSession,
-  readAuthSession,
-  saveAuthSession,
   type AuthSession,
 } from './session.ts'
 import { AuthContext } from './authContext.ts'
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [initialSession] = useState<AuthSession | null>(() => readAuthSession())
-  const [session, setSession] = useState<AuthSession | null>(initialSession)
-  const [isChecking, setIsChecking] = useState(initialSession !== null)
+  const [session, setSession] = useState<AuthSession | null>(null)
+  const [isChecking, setIsChecking] = useState(true)
 
   useEffect(() => {
-    if (initialSession === null) {
-      return
-    }
-
     let isMounted = true
 
-    getCurrentAdminUser(initialSession.accessToken)
-      .then((user) => {
+    getCurrentAdminSession()
+      .then((response) => {
         if (!isMounted) {
           return
         }
 
-        const nextSession = { ...initialSession, user }
-        saveAuthSession(nextSession)
-        setSession(nextSession)
+        setSession(createAuthSession(response))
       })
       .catch(() => {
         if (!isMounted) {
           return
         }
 
-        clearAuthSession()
         setSession(null)
       })
       .finally(() => {
@@ -55,24 +44,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return () => {
       isMounted = false
     }
-  }, [initialSession])
+  }, [])
 
   const login = useCallback(async (username: string, password: string) => {
-    const tokens = await loginAdmin({ username, password })
-    const nextSession = createAuthSession(tokens)
-    saveAuthSession(nextSession)
-    setSession(nextSession)
+    const response = await loginAdmin({ username, password })
+    setSession(createAuthSession(response))
     setIsChecking(false)
   }, [])
 
   const logout = useCallback(async () => {
     const currentSession = session
-    clearAuthSession()
     setSession(null)
     setIsChecking(false)
     if (currentSession !== null) {
       try {
-        await logoutAdmin(currentSession.refreshToken)
+        await logoutAdmin(currentSession.csrfToken)
       } catch {
         // 本地退出优先完成；后端吊销失败由后续登录轮换策略兜底。
       }

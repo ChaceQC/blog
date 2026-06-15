@@ -1,7 +1,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 type ApiRequestOptions = {
-  accessToken?: string
+  csrfToken?: string
 }
 
 export class ApiError extends Error {
@@ -18,6 +18,7 @@ export async function apiGet<T>(
   options: ApiRequestOptions = {},
 ): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
+    credentials: 'include',
     headers: jsonHeaders(options),
   })
 
@@ -35,6 +36,7 @@ export async function apiPost<TBody, TResponse>(
 ): Promise<TResponse> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: 'POST',
+    credentials: 'include',
     headers: jsonHeaders(options, { includeContentType: true }),
     body: JSON.stringify(body),
   })
@@ -58,8 +60,8 @@ function jsonHeaders(
     headers['Content-Type'] = 'application/json'
   }
 
-  if (options.accessToken) {
-    headers.Authorization = `Bearer ${options.accessToken}`
+  if (options.csrfToken) {
+    headers['X-CSRF-Token'] = options.csrfToken
   }
 
   return headers

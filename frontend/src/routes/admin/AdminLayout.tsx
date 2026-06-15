@@ -7,18 +7,26 @@ import {
 } from 'lucide-react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
+import { hasAnyAdminPermission } from '../../features/auth/permissions.ts'
 import { useAuth } from '../../features/auth/useAuth.ts'
+import { adminAccess } from './adminAccess.ts'
 
 const adminLinks = [
-  { to: '/admin', label: '总览', icon: FileText },
-  { to: '/admin/files', label: '文件', icon: FolderOpen },
-  { to: '/admin/links', label: '友链', icon: LinkIcon },
-  { to: '/admin/settings', label: '设置', icon: Settings },
+  { to: '/admin', label: '总览', icon: FileText, permissions: adminAccess.dashboard },
+  { to: '/admin/files', label: '文件', icon: FolderOpen, permissions: adminAccess.files },
+  { to: '/admin/links', label: '友链', icon: LinkIcon, permissions: adminAccess.links },
+  { to: '/admin/settings', label: '设置', icon: Settings, permissions: adminAccess.settings },
 ]
 
 export function AdminLayout() {
   const { logout, session } = useAuth()
   const navigate = useNavigate()
+  const visibleLinks =
+    session === null
+      ? []
+      : adminLinks.filter((item) =>
+          hasAnyAdminPermission(session.user, item.permissions),
+        )
 
   async function handleLogout() {
     await logout()
@@ -32,7 +40,7 @@ export function AdminLayout() {
           个人博客 CMS
         </NavLink>
         <nav aria-label="后台导航">
-          {adminLinks.map((item) => {
+          {visibleLinks.map((item) => {
             const Icon = item.icon
 
             return (

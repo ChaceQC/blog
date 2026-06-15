@@ -69,22 +69,27 @@
 - 更新根目录 `README.md` 和后端 `README.md`，记录 Windows 本机 MySQL 可用于临时库真实迁移、初始管理员和认证流程验证；`auth.txt` 仅作本地机密文件使用，禁止提交。
 - 新增后台当前用户接口 `GET /api/admin/auth/me` 和可复用 Bearer Token 鉴权依赖。
 - 认证服务新增 Access Token 解析与当前用户加载能力，当前用户响应复用角色和权限聚合逻辑。
-- 前端登录态启动时会调用当前用户接口校验本地 Access Token，失效 session 会自动清理。
+- 前端登录态启动时会通过 Cookie 调用当前用户接口恢复会话，失效 session 会自动进入未登录状态。
+- 将浏览器后台会话从 `localStorage` Token 调整为 HttpOnly Cookie，前端不再持久保存 Access Token 和 Refresh Token。
+- 新增后台 CSRF 双提交校验，刷新和退出等写操作需要携带 `X-CSRF-Token`。
+- 新增后台权限依赖 `require_admin_permission`，并补充 CSRF、权限和会话响应安全测试。
+- 前端后台菜单按当前用户权限过滤，直接访问无权限子路由时显示权限不足状态。
+- 在 `PROJECT_PLAN.md` 中补充应用层加密传输规划：敏感后台数据使用 `sensitive-v1`，文章/页面/草稿等内容使用 `content-v1`，公开已发布文章仍兼顾 SEO 和缓存。
+- 新增后端应用层加密信封基础 `backend/app/core/encryption.py`，提供 `sensitive-v1` 与 `content-v1` 两套独立 profile、HKDF 派生上下文和 AES-GCM JSON 信封。
 
 ### 进行中
 
-- M1 认证与后台框架正在推进，后台登录和当前用户校验闭环已覆盖后端接口、初始管理员创建命令和前端登录态保护。
+- M1 认证与后台框架正在推进，后台登录、Cookie 会话、CSRF、当前用户校验和菜单权限状态已形成第一版闭环。
 
 ### 阻塞与风险
 
 - 待确认真实域名、服务器环境、证书申请方式和对象存储选择。
 - 真实 MySQL 验证已在临时库完成；生产数据库迁移仍需在正式环境备份后执行。
-- 当前前端会话保存在 `localStorage`，后续如改为 Cookie 会话，需要补充 CSRF 防护策略。
-- 后台接口已具备登录、当前用户、刷新和退出，仍需补充权限校验依赖和后台菜单权限状态。
+- 应用层加密传输已完成分层规划和后端信封基础，但密钥协商、接口接入和前端解密流程仍需在后续小步落地。
 
 ### 下一步
 
-- 接入菜单权限状态和更细的后台路由保护。
+- 接入 `sensitive-v1` 和 `content-v1` 应用层加密信封的密钥协商、接口约定和前端解密流程。
 - 继续补充认证审计日志查询、基础限流和文章、文件、设置的最小 CRUD。
 
 ### 验证
@@ -131,3 +136,8 @@
 - 当前用户接口小步已运行 `npm.cmd run lint`，通过。
 - 当前用户接口小步已运行 `npm.cmd run build`，通过。
 - 当前用户接口小步已运行 `git diff --check`，未发现空白或行尾问题。
+- Cookie 会话、CSRF 和权限菜单小步已运行 `uv run ruff check .`，通过。
+- Cookie 会话、CSRF、权限菜单和加密信封小步已运行 `uv run pytest`，认证服务、初始管理员创建、后台安全、加密信封和健康检查共 22 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- Cookie 会话、CSRF 和权限菜单小步已运行 `npm.cmd run lint`，通过。
+- Cookie 会话、CSRF 和权限菜单小步已运行 `npm.cmd run build`，通过。
+- Cookie 会话、CSRF、权限菜单和加密信封小步已运行 `git diff --check`，未发现空白或行尾问题。

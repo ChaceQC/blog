@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     secret_key: str
     access_token_expire_minutes: int = Field(default=15, ge=1, le=1440)
     refresh_token_expire_days: int = Field(default=14, ge=1, le=90)
+    admin_cookie_secure: bool = False
+    admin_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
 
     allowed_hosts: list[str]
     cors_origins: list[str]
@@ -45,6 +47,10 @@ class Settings(BaseSettings):
             raise ValueError("BLOG_DOCS_ENABLED must be false in production")
         if self.secret_key == "dev-only-change-me" or len(self.secret_key) < 32:
             raise ValueError("BLOG_SECRET_KEY must be strong in production")
+        if not self.admin_cookie_secure:
+            raise ValueError("BLOG_ADMIN_COOKIE_SECURE must be true in production")
+        if self.admin_cookie_samesite == "none" and not self.admin_cookie_secure:
+            raise ValueError("BLOG_ADMIN_COOKIE_SAMESITE=none requires secure cookies")
         if "*" in self.allowed_hosts:
             raise ValueError("BLOG_ALLOWED_HOSTS cannot contain '*' in production")
         if "*" in self.cors_origins:
