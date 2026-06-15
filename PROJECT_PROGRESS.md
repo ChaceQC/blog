@@ -77,11 +77,15 @@
 - 在 `PROJECT_PLAN.md` 中补充应用层加密传输规划：敏感后台数据使用 `sensitive-v1`，文章/页面/草稿等内容使用 `content-v1`，公开已发布文章仍兼顾 SEO 和缓存。
 - 新增后端应用层加密信封基础 `backend/app/core/encryption.py`，提供 `sensitive-v1` 与 `content-v1` 两套独立 profile、HKDF 派生上下文和 AES-GCM JSON 信封。
 - 新增后端应用层加密协商接口 `POST /api/admin/encryption/sessions`，使用浏览器兼容的 P-256 ECDH 生成短期会话密钥。
-- 后端认证接口 `POST /api/admin/auth/login`、`POST /api/admin/auth/refresh` 和 `GET /api/admin/auth/me` 已支持请求携带 `X-Encryption-Session` 时返回 `sensitive-v1` 加密信封；未携带时保持原 JSON 响应，兼容现有调用和测试。
+- 后端认证接口 `POST /api/admin/auth/login`、`POST /api/admin/auth/refresh` 和 `GET /api/admin/auth/me` 已支持请求携带 `X-Encryption-Session` 时返回 `sensitive-v1` 加密信封。
 - 前端新增 WebCrypto 协商与解密工具，后台登录和当前用户恢复流程已接入 `sensitive-v1` 解密；`content-v1` 解密基础已可供后续文章、页面和草稿管理接口复用。
 - 新增 `BLOG_ENCRYPTION_SESSION_EXPIRE_SECONDS` 配置，并同步 `backend/.env.example` 和 `deploy/env/backend.env.example`。
 - 新增后端集成测试，覆盖协商短期密钥后解开登录接口返回的 `sensitive-v1` 加密信封。
-- 更新 `README.md` 和 `PROJECT_PLAN.md`，记录加密协商接口、当前接入范围和进程内存会话存储的生产替换要求。
+- 更新 `README.md` 和 `PROJECT_PLAN.md`，记录加密协商接口、当前接入范围和数据库会话存储要求。
+- 新增加密会话数据表 `encryption_sessions`、SQLAlchemy 模型、Repository 和 Alembic 迁移，开发环境与生产环境均通过数据库保存短期应用层加密会话。
+- 移除认证接口的旧明文 JSON 响应形态，登录、刷新和当前用户接口现在强制要求 `X-Encryption-Session` 并返回 `sensitive-v1` 加密信封。
+- 前端 encrypted API client 移除明文响应兜底，收到非加密响应会直接报错。
+- 更新后端 `README.md`，同步加密协商、强制加密响应和最新迁移验证命令。
 
 ### 进行中
 
@@ -91,7 +95,7 @@
 
 - 待确认真实域名、服务器环境、证书申请方式和对象存储选择。
 - 真实 MySQL 验证已在临时库完成；生产数据库迁移仍需在正式环境备份后执行。
-- 应用层加密协商当前使用后端进程内存保存短期会话密钥，仅适合单进程开发和最小闭环验证；多实例生产部署前需替换为 Redis 或数据库，并补充会话清理、审计和限流。
+- 应用层加密协商已改为数据库保存短期会话密钥；仍需补充过期会话定时清理、审计记录和限流。
 - `content-v1` 已具备前端解密基础，但尚未接入实际文章、页面和草稿 CRUD 接口。
 
 ### 下一步
@@ -152,3 +156,10 @@
 - 加密协商和前端解密接入后已运行 `uv run pytest`，23 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 加密协商和前端解密接入后已运行 `npm.cmd run lint`，通过。
 - 加密协商和前端解密接入后已运行 `npm.cmd run build`，通过。
+- 加密会话改为数据库存储并移除旧响应形态后已运行 `uv run ruff check .`，通过。
+- 加密会话改为数据库存储并移除旧响应形态后已运行 `uv run pytest`，24 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 加密会话改为数据库存储并移除旧响应形态后已运行 `uv run alembic upgrade head --sql`，迁移升级 SQL 可生成。
+- 加密会话改为数据库存储并移除旧响应形态后已运行 `uv run alembic downgrade 20260615_0002:20260615_0001 --sql`，迁移回滚 SQL 可生成。
+- 加密会话改为数据库存储并移除旧响应形态后已运行 `npm.cmd run lint`，通过。
+- 加密会话改为数据库存储并移除旧响应形态后已运行 `npm.cmd run build`，通过。
+- 加密会话改为数据库存储并移除旧响应形态后已运行 `git diff --check`，未发现空白或行尾问题。

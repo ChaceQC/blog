@@ -91,12 +91,11 @@ async function requestJson<T>(
   }
 
   const payload = (await response.json()) as T | EncryptedApiResponse
-  if (encryption && isEncryptedApiResponse(payload)) {
-    return decryptEncryptedResponse<T>(
-      payload,
-      encryption.profile,
-      encryption.session,
-    )
+  if (encryption) {
+    if (!isEncryptedApiResponse(payload)) {
+      throw new Error('接口未返回加密响应')
+    }
+    return decryptEncryptedResponse<T>(payload, encryption.profile, encryption.session)
   }
   return payload as T
 }

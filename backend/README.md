@@ -14,6 +14,7 @@ uv run pytest
 uv run ruff check .
 $env:PYTHONUTF8='1'
 uv run alembic upgrade head --sql
+uv run alembic downgrade 20260615_0002:20260615_0001 --sql
 uv run python -m app.cli --help
 ```
 
@@ -23,12 +24,12 @@ uv run python -m app.cli --help
 
 后台认证接口位于 `/api/admin/auth`：
 
-- `POST /login`：校验用户名和密码，签发短期 Access Token 与 Refresh Token。
-- `POST /refresh`：校验并轮换 Refresh Token，重新签发令牌。
+- `POST /login`：校验用户名和密码，签发短期 Access Token 与 Refresh Token，并返回 `sensitive-v1` 加密信封。
+- `POST /refresh`：校验并轮换 Refresh Token，重新签发令牌，并返回 `sensitive-v1` 加密信封。
 - `POST /logout`：吊销当前 Refresh Token。
-- `GET /me`：通过 HttpOnly Access Token Cookie 或 Bearer Token 校验当前后台用户，返回用户、角色、权限和 CSRF Token。
+- `GET /me`：通过 HttpOnly Access Token Cookie 或 Bearer Token 校验当前后台用户，并返回包含用户、角色、权限和 CSRF Token 的 `sensitive-v1` 加密信封。
 
-密码使用 Argon2id 校验。浏览器会话使用 HttpOnly Cookie 保存 Access Token 和 Refresh Token，前端只持有用户信息和 CSRF Token；刷新和退出等写操作必须携带 `X-CSRF-Token`。Refresh Token 只存储 SHA-256 哈希。Token 有效期通过 `BLOG_ACCESS_TOKEN_EXPIRE_MINUTES` 和 `BLOG_REFRESH_TOKEN_EXPIRE_DAYS` 配置，Cookie 安全属性通过 `BLOG_ADMIN_COOKIE_SECURE` 和 `BLOG_ADMIN_COOKIE_SAMESITE` 配置。
+密码使用 Argon2id 校验。浏览器会话使用 HttpOnly Cookie 保存 Access Token 和 Refresh Token，前端只持有用户信息和 CSRF Token；刷新和退出等写操作必须携带 `X-CSRF-Token`。登录、刷新和当前用户接口必须先通过 `/api/admin/encryption/sessions` 协商 P-256 ECDH 短期加密会话，并在请求中携带 `X-Encryption-Session`，旧的明文 JSON 响应形态已移除。协商会话保存到 `encryption_sessions` 数据表。Refresh Token 只存储 SHA-256 哈希。Token 有效期通过 `BLOG_ACCESS_TOKEN_EXPIRE_MINUTES` 和 `BLOG_REFRESH_TOKEN_EXPIRE_DAYS` 配置，Cookie 安全属性通过 `BLOG_ADMIN_COOKIE_SECURE` 和 `BLOG_ADMIN_COOKIE_SAMESITE` 配置。
 
 MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，依赖文件中已显式保留该运行依赖。
 
@@ -62,7 +63,7 @@ Windows 本机安装 MySQL 8 时，可以使用临时库验证真实迁移和认
 2. 临时设置 `BLOG_DATABASE_URL` 指向该临时库。
 3. 运行 `uv run alembic upgrade head` 验证真实建表。
 4. 运行 `uv run python -m app.cli create-admin ...` 验证初始管理员创建。
-5. 通过服务层或接口验证登录、当前用户、刷新令牌和退出。
+5. 通过服务层或接口验证加密协商、登录、当前用户、刷新令牌和退出。
 6. 运行 `uv run alembic downgrade base` 后删除临时库。
 
 ## 部署目标

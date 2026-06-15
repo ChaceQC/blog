@@ -1,9 +1,12 @@
 from base64 import urlsafe_b64decode, urlsafe_b64encode
+from datetime import datetime
+from types import SimpleNamespace
 
 from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi.testclient import TestClient
 
-from app.api.admin.dependencies import get_auth_service
+from app.api.admin.dependencies import get_auth_service, get_encryption_session_manager
+from app.core.config import get_settings
 from app.core.encryption import (
     EncryptedEnvelope,
     EncryptionProfile,
@@ -11,6 +14,52 @@ from app.core.encryption import (
 )
 from app.main import app
 from app.services.auth import AuthenticatedUser, TokenPair
+from app.services.encryption import EncryptionSessionManager
+
+
+class FakeEncryptionSessionRepository:
+    def __init__(self) -> None:
+        self.sessions: dict[str, SimpleNamespace] = {}
+        self.commit_count = 0
+
+    async def create_session(
+        self,
+        *,
+        session_id: str,
+        key_material: bytes,
+        expires_at: datetime,
+    ) -> SimpleNamespace:
+        session = SimpleNamespace(
+            session_id=session_id,
+            key_material=key_material,
+            expires_at=expires_at,
+        )
+        self.sessions[session_id] = session
+        return session
+
+    async def get_active_session(
+        self,
+        *,
+        session_id: str,
+        now: datetime,
+    ) -> SimpleNamespace | None:
+        session = self.sessions.get(session_id)
+        if session is None or session.expires_at <= now:
+            return None
+        return session
+
+    async def delete_expired_sessions(self, *, now: datetime) -> int:
+        expired_ids = [
+            session_id
+            for session_id, session in self.sessions.items()
+            if session.expires_at <= now
+        ]
+        for session_id in expired_ids:
+            self.sessions.pop(session_id)
+        return len(expired_ids)
+
+    async def commit(self) -> None:
+        self.commit_count += 1
 
 
 class FakeAuthService:
@@ -36,20 +85,44 @@ class FakeAuthService:
         )
 
 
+class RaisingAuthService:
+    async def login(
+        self,
+        *,
+        username: str,
+        password: str,
+        ip: str | None,
+        user_agent: str | None,
+    ) -> TokenPair:
+        raise AssertionError("login service should not be called")
+
+
 def test_login_response_can_use_sensitive_encryption_session() -> None:
     client_private_key = ec.generate_private_key(ec.SECP256R1())
     client = TestClient(app)
-
-    session_response = client.post(
-        "/api/admin/encryption/sessions",
-        json={
-            "client_public_key": _export_public_key(
-                client_private_key.public_key(),
-            ),
-        },
+    encryption_repository = FakeEncryptionSessionRepository()
+    encryption_manager = EncryptionSessionManager(
+        repository=encryption_repository,
+        settings=get_settings(),
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        encryption_manager
     )
 
+    try:
+        session_response = client.post(
+            "/api/admin/encryption/sessions",
+            json={
+                "client_public_key": _export_public_key(
+                    client_private_key.public_key(),
+                ),
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_encryption_session_manager, None)
+
     assert session_response.status_code == 200
+    assert encryption_repository.commit_count == 1
     session_payload = session_response.json()
     shared_key = client_private_key.exchange(
         ec.ECDH(),
@@ -57,6 +130,9 @@ def test_login_response_can_use_sensitive_encryption_session() -> None:
     )
 
     app.dependency_overrides[get_auth_service] = lambda: FakeAuthService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        encryption_manager
+    )
     try:
         login_response = client.post(
             "/api/admin/auth/login",
@@ -84,6 +160,27 @@ def test_login_response_can_use_sensitive_encryption_session() -> None:
     assert decrypted["user"]["username"] == "admin"
     assert decrypted["user"]["display_name"] == "管理员"
     assert decrypted["csrf_token"]
+
+
+def test_login_rejects_missing_encryption_session_header() -> None:
+    client = TestClient(app)
+    app.dependency_overrides[get_auth_service] = lambda: RaisingAuthService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        EncryptionSessionManager(
+            repository=FakeEncryptionSessionRepository(),
+            settings=get_settings(),
+        )
+    )
+    try:
+        response = client.post(
+            "/api/admin/auth/login",
+            json={"username": "admin", "password": "correct-password"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "missing encryption session"
 
 
 def _export_public_key(public_key: ec.EllipticCurvePublicKey) -> dict[str, str]:

@@ -14,6 +14,7 @@ from app.core.config import Settings, get_settings
 from app.core.database import get_session
 from app.policies.auth import AuthPolicy
 from app.repositories.auth import AuthRepository
+from app.repositories.encryption import EncryptionSessionRepository
 from app.services.auth import AuthenticatedUser, AuthenticationError, AuthService
 from app.services.encryption import EncryptionSessionManager
 
@@ -39,9 +40,13 @@ AuthServiceDependency = Annotated[AuthService, Depends(get_auth_service)]
 
 
 def get_encryption_session_manager(
+    session: SessionDependency,
     settings: SettingsDependency,
 ) -> EncryptionSessionManager:
-    return EncryptionSessionManager(settings)
+    return EncryptionSessionManager(
+        repository=EncryptionSessionRepository(session),
+        settings=settings,
+    )
 
 
 EncryptionSessionManagerDependency = Annotated[

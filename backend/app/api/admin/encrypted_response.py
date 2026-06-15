@@ -6,19 +6,17 @@ from app.schemas.encryption import EncryptedApiResponse
 from app.services.encryption import EncryptionSessionError, EncryptionSessionManager
 
 
-def maybe_encrypt_response(
+async def encrypted_response(
     payload: BaseModel,
     *,
     request: Request,
     manager: EncryptionSessionManager,
     profile: EncryptionProfile,
-) -> BaseModel | EncryptedApiResponse:
-    session_id = request.headers.get("x-encryption-session")
-    if session_id is None:
-        return payload
+) -> EncryptedApiResponse:
+    session_id = require_encryption_session(request)
 
     try:
-        return manager.encrypt_response(
+        return await manager.encrypt_response(
             session_id=session_id,
             profile=profile,
             payload=payload.model_dump(mode="json"),
@@ -28,3 +26,13 @@ def maybe_encrypt_response(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="invalid encryption session",
         ) from exc
+
+
+def require_encryption_session(request: Request) -> str:
+    session_id = request.headers.get("x-encryption-session")
+    if session_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="missing encryption session",
+        )
+    return session_id

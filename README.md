@@ -62,7 +62,7 @@ uv run ruff check .
 uv run pytest
 $env:PYTHONUTF8='1'
 uv run alembic upgrade head --sql
-uv run alembic downgrade 20260615_0001:base --sql
+uv run alembic downgrade 20260615_0002:20260615_0001 --sql
 uv run python -m app.cli --help
 ```
 
@@ -82,7 +82,7 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml co
 
 本地 MySQL 验证：
 
-Windows 本机安装 MySQL 8 时，可以用本地临时库验证真实迁移、初始管理员创建和后台认证流程。浏览器后台会话使用 HttpOnly Cookie 保存 Access Token 和 Refresh Token，前端只保留内存中的用户信息与 CSRF Token；写操作通过 `X-CSRF-Token` 校验。后台前端会通过 `/api/admin/encryption/sessions` 协商短期 P-256 ECDH 会话密钥，登录、当前用户和刷新接口可返回 `sensitive-v1` 加密信封；`content-v1` 的前端解密基础已具备，后续接入文章和草稿管理接口。当前加密会话存储为后端进程内存实现，仅适合单进程开发与最小闭环验证，多实例生产部署前需替换为 Redis 或数据库。根目录 `auth.txt` 可保存本机 MySQL root 凭据供本地验证使用，该文件属于机密文件，已被 `.gitignore` 忽略，禁止提交。
+Windows 本机安装 MySQL 8 时，可以用本地临时库验证真实迁移、初始管理员创建和后台认证流程。浏览器后台会话使用 HttpOnly Cookie 保存 Access Token 和 Refresh Token，前端只保留内存中的用户信息与 CSRF Token；写操作通过 `X-CSRF-Token` 校验。后台前端会通过 `/api/admin/encryption/sessions` 协商短期 P-256 ECDH 会话密钥，会话密钥保存到 `encryption_sessions` 数据表；登录、当前用户和刷新接口必须返回 `sensitive-v1` 加密信封，不再保留旧的明文 JSON 响应形态。`content-v1` 的前端解密基础已具备，后续接入文章和草稿管理接口。根目录 `auth.txt` 可保存本机 MySQL root 凭据供本地验证使用，该文件属于机密文件，已被 `.gitignore` 忽略，禁止提交。
 
 建议只操作临时库，例如 `blog_codex_migration_test`：创建临时库后临时设置 `BLOG_DATABASE_URL`，运行 `uv run alembic upgrade head`、`uv run python -m app.cli create-admin ...`，验证完成后运行 `uv run alembic downgrade base` 并删除临时库。
 

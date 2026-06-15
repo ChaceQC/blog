@@ -1,4 +1,5 @@
 from app.models.auth import (
+    EncryptionSession,
     Permission,
     RefreshToken,
     Role,
@@ -27,6 +28,7 @@ __all__ = [
     "Base",
     "BlogFile",
     "Category",
+    "EncryptionSession",
     "FileUsage",
     "FriendLink",
     "FriendLinkGroup",

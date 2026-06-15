@@ -7,7 +7,10 @@ from app.api.admin.dependencies import (
     EncryptionSessionManagerDependency,
     SettingsDependency,
 )
-from app.api.admin.encrypted_response import maybe_encrypt_response
+from app.api.admin.encrypted_response import (
+    encrypted_response,
+    require_encryption_session,
+)
 from app.api.admin.session import (
     clear_admin_session_cookies,
     create_csrf_token,
@@ -18,7 +21,6 @@ from app.api.admin.session import (
 )
 from app.core.encryption import EncryptionProfile
 from app.schemas.auth import (
-    AuthSessionResponse,
     LoginRequest,
     LogoutRequest,
     LogoutResponse,
@@ -30,7 +32,7 @@ from app.services.auth import AuthenticationError
 router = APIRouter(prefix="/auth", tags=["admin-auth"])
 
 
-@router.post("/login", response_model=AuthSessionResponse | EncryptedApiResponse)
+@router.post("/login", response_model=EncryptedApiResponse)
 async def login(
     payload: LoginRequest,
     request: Request,
@@ -38,7 +40,8 @@ async def login(
     service: AuthServiceDependency,
     settings: SettingsDependency,
     encryption_manager: EncryptionSessionManagerDependency,
-) -> AuthSessionResponse | EncryptedApiResponse:
+) -> EncryptedApiResponse:
+    require_encryption_session(request)
     try:
         tokens = await service.login(
             username=payload.username,
@@ -56,7 +59,7 @@ async def login(
         csrf_token=csrf_token,
         settings=settings,
     )
-    return maybe_encrypt_response(
+    return await encrypted_response(
         session_response(
             user=tokens.user,
             csrf_token=csrf_token,
@@ -68,7 +71,7 @@ async def login(
     )
 
 
-@router.post("/refresh", response_model=AuthSessionResponse | EncryptedApiResponse)
+@router.post("/refresh", response_model=EncryptedApiResponse)
 async def refresh(
     request: Request,
     response: Response,
@@ -77,7 +80,8 @@ async def refresh(
     settings: SettingsDependency,
     encryption_manager: EncryptionSessionManagerDependency,
     payload: RefreshTokenRequest | None = None,
-) -> AuthSessionResponse | EncryptedApiResponse:
+) -> EncryptedApiResponse:
+    require_encryption_session(request)
     refresh_token = (
         payload.refresh_token if payload is not None else None
     ) or refresh_token_from_request(request)
@@ -96,7 +100,7 @@ async def refresh(
         csrf_token=csrf_token,
         settings=settings,
     )
-    return maybe_encrypt_response(
+    return await encrypted_response(
         session_response(
             user=tokens.user,
             csrf_token=csrf_token,
@@ -126,16 +130,17 @@ async def logout(
     return LogoutResponse()
 
 
-@router.get("/me", response_model=AuthSessionResponse | EncryptedApiResponse)
+@router.get("/me", response_model=EncryptedApiResponse)
 async def me(
     current_user: CurrentAdminUserDependency,
     request: Request,
     response: Response,
     settings: SettingsDependency,
     encryption_manager: EncryptionSessionManagerDependency,
-) -> AuthSessionResponse | EncryptedApiResponse:
+) -> EncryptedApiResponse:
+    require_encryption_session(request)
     csrf_token = ensure_csrf_cookie(request, response, settings=settings)
-    return maybe_encrypt_response(
+    return await encrypted_response(
         session_response(
             user=current_user,
             csrf_token=csrf_token,

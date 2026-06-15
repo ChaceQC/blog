@@ -1,7 +1,7 @@
 from base64 import urlsafe_b64decode, urlsafe_b64encode
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from os import urandom
+from typing import Protocol
 
 from cryptography.exceptions import InvalidKey
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -17,6 +17,7 @@ from app.core.encryption import (
     EncryptionProfile,
     encrypt_json_payload_with_key_material,
 )
+from app.models.auth import EncryptionSession
 from app.schemas.encryption import (
     BrowserPublicKey,
     CreateEncryptionSessionResponse,
@@ -25,11 +26,25 @@ from app.schemas.encryption import (
 )
 
 
-@dataclass(frozen=True)
-class EncryptionSession:
-    id: str
-    key_material: bytes
-    expires_at: datetime
+class EncryptionSessionRepositoryProtocol(Protocol):
+    async def create_session(
+        self,
+        *,
+        session_id: str,
+        key_material: bytes,
+        expires_at: datetime,
+    ) -> EncryptionSession: ...
+
+    async def get_active_session(
+        self,
+        *,
+        session_id: str,
+        now: datetime,
+    ) -> EncryptionSession | None: ...
+
+    async def delete_expired_sessions(self, *, now: datetime) -> int: ...
+
+    async def commit(self) -> None: ...
 
 
 class EncryptionSessionError(Exception):
@@ -37,29 +52,37 @@ class EncryptionSessionError(Exception):
 
 
 class EncryptionSessionManager:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        *,
+        repository: EncryptionSessionRepositoryProtocol,
+        settings: Settings,
+    ) -> None:
+        self._repository = repository
         self._settings = settings
 
-    def create_session(
+    async def create_session(
         self,
         *,
         client_public_key: BrowserPublicKey,
     ) -> CreateEncryptionSessionResponse:
-        self._remove_expired_sessions()
+        now = datetime.now(UTC)
+        await self._repository.delete_expired_sessions(now=now)
         server_private_key = ec.generate_private_key(ec.SECP256R1())
         shared_key = server_private_key.exchange(
             ec.ECDH(),
             _load_browser_public_key(client_public_key),
         )
         session_id = _random_token()
-        expires_at = datetime.now(UTC) + timedelta(
+        expires_at = now + timedelta(
             seconds=self._settings.encryption_session_expire_seconds,
         )
-        _SESSIONS[session_id] = EncryptionSession(
-            id=session_id,
+        await self._repository.create_session(
+            session_id=session_id,
             key_material=shared_key,
             expires_at=expires_at,
         )
+        await self._repository.commit()
 
         return CreateEncryptionSessionResponse(
             session_id=session_id,
@@ -70,14 +93,14 @@ class EncryptionSessionManager:
             expires_at=expires_at,
         )
 
-    def encrypt_response(
+    async def encrypt_response(
         self,
         *,
         session_id: str,
         profile: EncryptionProfile,
         payload: JsonObject,
     ) -> EncryptedApiResponse:
-        session = self._get_session(session_id)
+        session = await self._get_session(session_id)
         try:
             envelope = encrypt_json_payload_with_key_material(
                 payload,
@@ -88,32 +111,21 @@ class EncryptionSessionManager:
             raise EncryptionSessionError("failed to encrypt response") from exc
 
         return EncryptedApiResponse(
-            session_id=session.id,
+            session_id=session.session_id,
             profile=envelope.profile,
             algorithm=envelope.algorithm,
             nonce=envelope.nonce,
             ciphertext=envelope.ciphertext,
         )
 
-    def _get_session(self, session_id: str) -> EncryptionSession:
-        session = _SESSIONS.get(session_id)
-        if session is None or session.expires_at <= datetime.now(UTC):
-            _SESSIONS.pop(session_id, None)
+    async def _get_session(self, session_id: str) -> EncryptionSession:
+        session = await self._repository.get_active_session(
+            session_id=session_id,
+            now=datetime.now(UTC),
+        )
+        if session is None:
             raise EncryptionSessionError("encryption session is invalid or expired")
         return session
-
-    def _remove_expired_sessions(self) -> None:
-        now = datetime.now(UTC)
-        expired_ids = [
-            session_id
-            for session_id, session in _SESSIONS.items()
-            if session.expires_at <= now
-        ]
-        for session_id in expired_ids:
-            _SESSIONS.pop(session_id, None)
-
-
-_SESSIONS: dict[str, EncryptionSession] = {}
 
 
 def _load_browser_public_key(client_key: BrowserPublicKey) -> ec.EllipticCurvePublicKey:

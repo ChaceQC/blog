@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, SmallInteger, String, Text, func
+from sqlalchemy import ForeignKey, LargeBinary, SmallInteger, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import (
@@ -100,3 +100,17 @@ class RefreshToken(Base):
         nullable=False,
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class EncryptionSession(Base):
+    __tablename__ = "encryption_sessions"
+
+    id: Mapped[int] = pk_column()
+    session_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    key_material: Mapped[bytes] = mapped_column(LargeBinary(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DATETIME_6, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DATETIME_6,
+        server_default=func.now(),
+        nullable=False,
+    )
