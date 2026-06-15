@@ -20,6 +20,7 @@ pnpm-debug.log*
 .env.*
 !.env.example
 !.env.*.example
+auth.txt
 *.pem
 *.key
 *.crt
@@ -70,3 +71,5 @@ deploy/env/*.env
 # Generated assets
 *.tsbuildinfo
 *.map
+.playwright-cli/
+output/

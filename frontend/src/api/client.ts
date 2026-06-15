@@ -20,3 +20,23 @@ export async function apiGet<T>(path: string): Promise<T> {
 
   return response.json() as Promise<T>
 }
+
+export async function apiPost<TBody, TResponse>(
+  path: string,
+  body: TBody,
+): Promise<TResponse> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!response.ok) {
+    throw new ApiError(response.statusText, response.status)
+  }
+
+  return response.json() as Promise<TResponse>
+}

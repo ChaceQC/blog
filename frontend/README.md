@@ -21,6 +21,7 @@ npm run build
 - `src/routes/public`：前台公开页面。
 - `src/routes/admin`：后台管理页面。
 - `src/features`：按业务模块拆分文章、文件、友链、导航和设置。
+- `src/features/auth`：后台登录、会话保存和退出逻辑。
 - `src/api`：接口客户端与请求封装。
 - `src/components`：跨模块复用组件。
 

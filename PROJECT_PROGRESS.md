@@ -59,22 +59,29 @@
 - 新增 `uv run python -m app.cli create-admin` 初始管理员创建命令，支持交互式输入密码。
 - 新增初始管理员创建 Service 与 Repository，自动创建 `super_admin` 角色并绑定管理员用户。
 - 新增初始管理员创建测试，覆盖创建用户、角色绑定和重复用户名拒绝。
+- 新增 `cryptography` 后端运行依赖，支持 `asyncmy` 连接 MySQL 8 默认 `caching_sha2_password` 认证账号。
+- 已使用根目录本地机密文件 `auth.txt` 中的 Windows MySQL root 凭据完成本机 MySQL 验证；该文件已加入 `.gitignore`，不会提交。
+- 新增前端后台登录页 `/admin/login`、本地会话保存、后台路由保护和退出登录逻辑。
+- 扩展前端 API client，支持后台认证 POST 请求。
+- 使用 Playwright CLI + Microsoft Edge 检查 `/admin` 未登录重定向到 `/admin/login`，并保存本地截图到已忽略的 `output/playwright`。
+- 更新 `.gitignore`，忽略 `auth.txt`、`.playwright-cli/` 和 `output/` 本地产物。
 
 ### 进行中
 
-- M1 认证与后台框架正在推进，后端认证接口与初始管理员创建方式已完成第一版。
+- M1 认证与后台框架正在推进，后台登录闭环第一版已覆盖后端接口、初始管理员创建命令和前端登录页。
 
 ### 阻塞与风险
 
 - 待确认真实域名、服务器环境、证书申请方式和对象存储选择。
-- 初始 Alembic 迁移已完成离线 SQL 验证；真实 MySQL 的 `upgrade head` 和回滚验证需要在本地或生产数据库服务启动后执行。
-- 后台认证接口已完成服务层测试，尚未在真实 MySQL 环境执行端到端登录、刷新和退出验证。
-- 初始管理员创建命令已完成服务层测试，尚未在真实 MySQL 环境执行。
+- 真实 MySQL 验证已在临时库完成；生产数据库迁移仍需在正式环境备份后执行。
+- 当前前端会话保存在 `localStorage`，后续如改为 Cookie 会话，需要补充 CSRF 防护策略。
+- 后台接口已具备登录、刷新和退出，仍需补充当前用户接口、Bearer Token 鉴权依赖和权限校验依赖。
 
 ### 下一步
 
-- 接入前端后台登录页、登录态保存和权限路由保护。
-- 继续补充认证审计日志查询、基础限流和真实 MySQL 端到端验证。
+- 补充后台当前用户接口和 Bearer Token 鉴权依赖。
+- 接入菜单权限状态和更细的后台路由保护。
+- 继续补充认证审计日志查询、基础限流和文章、文件、设置的最小 CRUD。
 
 ### 验证
 
@@ -104,3 +111,11 @@
 - 初始管理员创建小步已运行 `uv run ruff check .`，通过。
 - 初始管理员创建小步已运行 `uv run pytest`，认证服务、初始管理员创建和健康检查共 9 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 已运行 `uv run python -m app.cli --help`，CLI 入口可正常加载。
+- 已在本机 MySQL 临时库 `blog_codex_migration_test` 上运行 `uv run alembic upgrade head`，真实建表通过。
+- 已在本机 MySQL 临时库运行 `uv run python -m app.cli create-admin`，初始管理员创建通过。
+- 已在本机 MySQL 临时库通过服务层完成登录、刷新令牌和退出流程；本地开发密钥偏短时会触发 PyJWT 安全长度警告，测试已改用 32 位以上临时密钥。
+- 已在本机 MySQL 临时库运行 `uv run alembic downgrade base`，真实回滚通过；回滚后临时库仅剩 Alembic 版本表，随后已删除整个临时库。
+- 前端登录页小步已运行 `npm.cmd run lint`，通过。
+- 前端登录页小步已运行 `npm.cmd run build`，通过。
+- 已使用 Playwright CLI 打开 `http://127.0.0.1:15173/admin` 并确认重定向到 `/admin/login`。
+- 已通过截图检查后台登录页视觉状态，未发现空白或明显布局错位。

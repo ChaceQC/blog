@@ -2,6 +2,8 @@ import { createBrowserRouter } from 'react-router-dom'
 
 import { AdminDashboardPage } from '../routes/admin/AdminDashboardPage.tsx'
 import { AdminLayout } from '../routes/admin/AdminLayout.tsx'
+import { AdminLoginPage } from '../routes/admin/AdminLoginPage.tsx'
+import { RequireAdminAuth } from '../routes/admin/RequireAdminAuth.tsx'
 import { HomePage } from '../routes/public/HomePage.tsx'
 import { LinksPage } from '../routes/public/LinksPage.tsx'
 import { PostListPage } from '../routes/public/PostListPage.tsx'
@@ -20,13 +22,22 @@ export const router = createBrowserRouter([
     ],
   },
   {
-    path: '/admin',
-    element: <AdminLayout />,
+    path: '/admin/login',
+    element: <AdminLoginPage />,
+  },
+  {
+    element: <RequireAdminAuth />,
     children: [
-      { index: true, element: <AdminDashboardPage /> },
-      { path: 'files', element: <AdminDashboardPage /> },
-      { path: 'links', element: <AdminDashboardPage /> },
-      { path: 'settings', element: <AdminDashboardPage /> },
+      {
+        path: '/admin',
+        element: <AdminLayout />,
+        children: [
+          { index: true, element: <AdminDashboardPage /> },
+          { path: 'files', element: <AdminDashboardPage /> },
+          { path: 'links', element: <AdminDashboardPage /> },
+          { path: 'settings', element: <AdminDashboardPage /> },
+        ],
+      },
     ],
   },
 ])

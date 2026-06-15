@@ -29,6 +29,8 @@ uv run python -m app.cli --help
 
 密码使用 Argon2id 校验，Refresh Token 只存储 SHA-256 哈希。Token 有效期通过 `BLOG_ACCESS_TOKEN_EXPIRE_MINUTES` 和 `BLOG_REFRESH_TOKEN_EXPIRE_DAYS` 配置。
 
+MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，依赖文件中已显式保留该运行依赖。
+
 ## 初始管理员
 
 连接真实数据库并执行迁移后，使用 CLI 创建初始后台管理员：

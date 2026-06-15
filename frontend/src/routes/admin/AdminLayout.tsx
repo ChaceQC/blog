@@ -1,5 +1,13 @@
-import { FileText, FolderOpen, Link as LinkIcon, Settings } from 'lucide-react'
-import { NavLink, Outlet } from 'react-router-dom'
+import {
+  FileText,
+  FolderOpen,
+  Link as LinkIcon,
+  LogOut,
+  Settings,
+} from 'lucide-react'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+
+import { useAuth } from '../../features/auth/useAuth.ts'
 
 const adminLinks = [
   { to: '/admin', label: '总览', icon: FileText },
@@ -9,6 +17,14 @@ const adminLinks = [
 ]
 
 export function AdminLayout() {
+  const { logout, session } = useAuth()
+  const navigate = useNavigate()
+
+  async function handleLogout() {
+    await logout()
+    navigate('/admin/login', { replace: true })
+  }
+
   return (
     <div className="admin-shell">
       <aside className="admin-sidebar">
@@ -27,6 +43,13 @@ export function AdminLayout() {
             )
           })}
         </nav>
+        <div className="admin-session">
+          <span>{session?.user.display_name ?? session?.user.username}</span>
+          <button className="icon-button icon-button--dark" onClick={handleLogout}>
+            <LogOut size={17} strokeWidth={1.8} aria-hidden="true" />
+            <span className="sr-only">退出登录</span>
+          </button>
+        </div>
       </aside>
       <main className="admin-main">
         <Outlet />
