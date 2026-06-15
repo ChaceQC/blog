@@ -1,6 +1,7 @@
 import { API_BASE_URL } from './config.ts'
 import {
   decryptEncryptedResponse,
+  encryptRequestPayload,
   getEncryptionSession,
 } from './encryption.ts'
 
@@ -12,6 +13,7 @@ import type {
 
 type ApiRequestOptions = {
   csrfToken?: string
+  encryptRequest?: boolean
 }
 
 export class ApiError extends Error {
@@ -63,13 +65,16 @@ export async function apiPostEncrypted<TBody, TResponse>(
   options: ApiRequestOptions = {},
 ): Promise<TResponse> {
   const session = await getEncryptionSession(profile)
+  const requestBody = options.encryptRequest
+    ? await encryptRequestPayload(body, profile, session)
+    : body
   return requestJson<TResponse>(path, {
     method: 'POST',
     headers: jsonHeaders(options, {
       includeContentType: true,
       encryptionSessionId: session.id,
     }),
-    body: JSON.stringify(body),
+    body: JSON.stringify(requestBody),
     encryption: { profile, session },
   })
 }
@@ -81,13 +86,16 @@ export async function apiPatchEncrypted<TBody, TResponse>(
   options: ApiRequestOptions = {},
 ): Promise<TResponse> {
   const session = await getEncryptionSession(profile)
+  const requestBody = options.encryptRequest
+    ? await encryptRequestPayload(body, profile, session)
+    : body
   return requestJson<TResponse>(path, {
     method: 'PATCH',
     headers: jsonHeaders(options, {
       includeContentType: true,
       encryptionSessionId: session.id,
     }),
-    body: JSON.stringify(body),
+    body: JSON.stringify(requestBody),
     encryption: { profile, session },
   })
 }

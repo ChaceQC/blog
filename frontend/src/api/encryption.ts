@@ -99,6 +99,52 @@ export async function decryptEncryptedResponse<T>(
   return JSON.parse(decoder.decode(plaintext)) as T
 }
 
+export async function encryptRequestPayload<T>(
+  payload: T,
+  profile: EncryptionProfile,
+  session: EncryptionSession,
+): Promise<EncryptedApiResponse> {
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    session.sharedSecret,
+    'HKDF',
+    false,
+    ['deriveKey'],
+  )
+  const aesKey = await crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: textBytes('blog-cms-encryption-v1'),
+      info: textBytes(`blog-cms:${profile}`),
+    },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt'],
+  )
+  const nonce = crypto.getRandomValues(new Uint8Array(12))
+  const ciphertext = await crypto.subtle.encrypt(
+    {
+      name: 'AES-GCM',
+      iv: nonce,
+      additionalData: textBytes(`blog-cms:${profile}:json`),
+      tagLength: 128,
+    },
+    aesKey,
+    encoder.encode(JSON.stringify(payload)),
+  )
+
+  return {
+    encrypted: true,
+    session_id: session.id,
+    profile,
+    algorithm: 'AES-256-GCM-HKDF-SHA256',
+    nonce: base64urlEncode(nonce),
+    ciphertext: base64urlEncode(new Uint8Array(ciphertext)),
+  }
+}
+
 function isBrowserPublicKey(value: JsonWebKey): value is BrowserPublicKey {
   return value.kty === 'EC' && value.crv === 'P-256' && !!value.x && !!value.y
 }
@@ -165,6 +211,11 @@ function base64urlDecode(value: string): ArrayBuffer {
   const padded = `${base64}${'='.repeat((4 - (base64.length % 4)) % 4)}`
   const binary = atob(padded)
   return toArrayBuffer(Uint8Array.from(binary, (char) => char.charCodeAt(0)))
+}
+
+function base64urlEncode(value: Uint8Array): string {
+  const binary = Array.from(value, (byte) => String.fromCharCode(byte)).join('')
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
 }
 
 function textBytes(value: string): ArrayBuffer {

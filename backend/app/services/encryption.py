@@ -13,14 +13,17 @@ from cryptography.hazmat.primitives.serialization import (
 
 from app.core.config import Settings
 from app.core.encryption import (
+    EncryptedEnvelope,
     EncryptionError,
     EncryptionProfile,
+    decrypt_json_payload_with_key_material,
     encrypt_json_payload_with_key_material,
 )
 from app.models.auth import EncryptionSession
 from app.schemas.encryption import (
     BrowserPublicKey,
     CreateEncryptionSessionResponse,
+    EncryptedApiRequest,
     EncryptedApiResponse,
     JsonObject,
 )
@@ -117,6 +120,30 @@ class EncryptionSessionManager:
             nonce=envelope.nonce,
             ciphertext=envelope.ciphertext,
         )
+
+    async def decrypt_request(
+        self,
+        *,
+        session_id: str,
+        profile: EncryptionProfile,
+        payload: EncryptedApiRequest,
+    ) -> JsonObject:
+        if payload.session_id != session_id:
+            raise EncryptionSessionError("encrypted request session mismatch")
+        session = await self._get_session(session_id)
+        try:
+            return decrypt_json_payload_with_key_material(
+                EncryptedEnvelope(
+                    profile=payload.profile,
+                    algorithm=payload.algorithm,
+                    nonce=payload.nonce,
+                    ciphertext=payload.ciphertext,
+                ),
+                key_material=session.key_material,
+                expected_profile=profile,
+            )
+        except EncryptionError as exc:
+            raise EncryptionSessionError("failed to decrypt request") from exc
 
     async def _get_session(self, session_id: str) -> EncryptionSession:
         session = await self._repository.get_active_session(

@@ -41,4 +41,15 @@ class EncryptedApiResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class EncryptedApiRequest(BaseModel):
+    encrypted: Literal[True] = True
+    session_id: str
+    profile: EncryptionProfile
+    algorithm: str
+    nonce: str
+    ciphertext: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
 JsonObject = dict[str, Any]

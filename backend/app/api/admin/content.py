@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, ValidationError
 
 from app.api.admin.dependencies import (
     AdminCsrfDependency,
@@ -8,7 +9,10 @@ from app.api.admin.dependencies import (
     EncryptionSessionManagerDependency,
     require_admin_permission,
 )
-from app.api.admin.encrypted_response import encrypted_response
+from app.api.admin.encrypted_response import (
+    decrypt_encrypted_request,
+    encrypted_response,
+)
 from app.core.encryption import EncryptionProfile
 from app.schemas.content import (
     AdminPageItem,
@@ -20,7 +24,7 @@ from app.schemas.content import (
     PostCreateRequest,
     PostUpdateRequest,
 )
-from app.schemas.encryption import EncryptedApiResponse
+from app.schemas.encryption import EncryptedApiRequest, EncryptedApiResponse
 from app.services.auth import AuthenticatedUser
 from app.services.content import (
     ContentNotFoundError,
@@ -70,25 +74,31 @@ async def list_posts(
 
 @router.post("/posts", response_model=EncryptedApiResponse)
 async def create_post(
-    payload: PostCreateRequest,
+    payload: EncryptedApiRequest,
     current_user: PostWriterDependency,
     request: Request,
     _: AdminCsrfDependency,
     service: ContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
 ) -> EncryptedApiResponse:
+    decrypted_payload = await _decrypt_content_payload(
+        payload,
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+    post_payload = _validate_decrypted_payload(PostCreateRequest, decrypted_payload)
     try:
         post = await service.create_post(
             CreatePostCommand(
-                title=payload.title,
-                slug=payload.slug,
-                summary=payload.summary,
-                content_md=payload.content_md,
+                title=post_payload.title,
+                slug=post_payload.slug,
+                summary=post_payload.summary,
+                content_md=post_payload.content_md,
                 author_id=current_user.id,
-                status=payload.status,
-                visibility=payload.visibility,
-                seo_title=payload.seo_title,
-                seo_description=payload.seo_description,
+                status=post_payload.status,
+                visibility=post_payload.visibility,
+                seo_title=post_payload.seo_title,
+                seo_description=post_payload.seo_description,
             ),
         )
     except ContentSlugExistsError as exc:
@@ -124,17 +134,23 @@ async def get_post(
 @router.patch("/posts/{post_id}", response_model=EncryptedApiResponse)
 async def update_post(
     post_id: int,
-    payload: PostUpdateRequest,
+    payload: EncryptedApiRequest,
     _: AdminCsrfDependency,
     __: PostWriterDependency,
     request: Request,
     service: ContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
 ) -> EncryptedApiResponse:
+    decrypted_payload = await _decrypt_content_payload(
+        payload,
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+    post_payload = _validate_decrypted_payload(PostUpdateRequest, decrypted_payload)
     try:
         post = await service.update_post(
             post_id=post_id,
-            changes=payload.model_dump(exclude_unset=True),
+            changes=post_payload.model_dump(exclude_unset=True),
         )
     except ContentNotFoundError as exc:
         raise _not_found("post not found") from exc
@@ -190,24 +206,30 @@ async def list_pages(
 
 @router.post("/pages", response_model=EncryptedApiResponse)
 async def create_page(
-    payload: PageCreateRequest,
+    payload: EncryptedApiRequest,
     _: AdminCsrfDependency,
     __: PageWriterDependency,
     request: Request,
     service: ContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
 ) -> EncryptedApiResponse:
+    decrypted_payload = await _decrypt_content_payload(
+        payload,
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+    page_payload = _validate_decrypted_payload(PageCreateRequest, decrypted_payload)
     try:
         page = await service.create_page(
             CreatePageCommand(
-                title=payload.title,
-                slug=payload.slug,
-                content_md=payload.content_md,
-                status=payload.status,
-                show_in_nav=payload.show_in_nav,
-                sort_order=payload.sort_order,
-                seo_title=payload.seo_title,
-                seo_description=payload.seo_description,
+                title=page_payload.title,
+                slug=page_payload.slug,
+                content_md=page_payload.content_md,
+                status=page_payload.status,
+                show_in_nav=page_payload.show_in_nav,
+                sort_order=page_payload.sort_order,
+                seo_title=page_payload.seo_title,
+                seo_description=page_payload.seo_description,
             ),
         )
     except ContentSlugExistsError as exc:
@@ -243,17 +265,23 @@ async def get_page(
 @router.patch("/pages/{page_id}", response_model=EncryptedApiResponse)
 async def update_page(
     page_id: int,
-    payload: PageUpdateRequest,
+    payload: EncryptedApiRequest,
     _: AdminCsrfDependency,
     __: PageWriterDependency,
     request: Request,
     service: ContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
 ) -> EncryptedApiResponse:
+    decrypted_payload = await _decrypt_content_payload(
+        payload,
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+    page_payload = _validate_decrypted_payload(PageUpdateRequest, decrypted_payload)
     try:
         page = await service.update_page(
             page_id=page_id,
-            changes=payload.model_dump(exclude_unset=True),
+            changes=page_payload.model_dump(exclude_unset=True),
         )
     except ContentNotFoundError as exc:
         raise _not_found("page not found") from exc
@@ -284,6 +312,33 @@ async def _content_response(
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
     )
+
+
+async def _decrypt_content_payload(
+    payload: EncryptedApiRequest,
+    *,
+    request: Request,
+    encryption_manager: EncryptionSessionManager,
+) -> dict[str, object]:
+    return await decrypt_encrypted_request(
+        payload,
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+
+
+def _validate_decrypted_payload[T: BaseModel](
+    model: type[T],
+    payload: dict[str, object],
+) -> T:
+    try:
+        return model.model_validate(payload)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="invalid encrypted request payload",
+        ) from exc
 
 
 def _not_found(detail: str) -> HTTPException:
