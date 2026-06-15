@@ -2,6 +2,7 @@ import { ArrowLeft, Clock3 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 
+import { MathHtml } from '../../components/MathHtml.tsx'
 import { getPublicPost } from '../../features/posts/api.ts'
 import {
   formatPostDate,
@@ -58,9 +59,9 @@ export function PostDetailPage() {
           </span>
         </div>
       </header>
-      <div
+      <MathHtml
         className="post-prose"
-        dangerouslySetInnerHTML={{ __html: post.content_html }}
+        html={post.content_html}
       />
     </article>
   )

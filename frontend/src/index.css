@@ -709,6 +709,27 @@ img {
   line-height: 1.9;
 }
 
+.post-prose .katex-display,
+.content-preview .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 4px 0;
+  padding: 8px 0;
+}
+
+.post-prose .math.block,
+.content-preview .math.block {
+  display: block;
+  overflow-x: auto;
+}
+
+.post-prose .math.inline,
+.content-preview .math.inline {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: baseline;
+}
+
 .post-prose :where(h1, h2, h3) {
   margin: 18px 0 0;
   color: var(--color-neutral-10);
@@ -1025,6 +1046,14 @@ img {
   align-items: start;
 }
 
+.admin-panel--list,
+.admin-panel--preview {
+  position: sticky;
+  top: 20px;
+  max-height: calc(100svh - 40px);
+  overflow: auto;
+}
+
 .admin-workspace--two {
   grid-template-columns: minmax(220px, 0.72fr) minmax(420px, 1.6fr);
 }
@@ -1067,6 +1096,10 @@ img {
   background: transparent;
   color: var(--color-neutral-8);
   text-align: left;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .content-row:first-child {
@@ -1080,6 +1113,10 @@ img {
 
 .content-row.active {
   box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
+.content-row:hover {
+  background: rgba(254, 254, 251, 0.56);
 }
 
 .content-row span {
@@ -1186,9 +1223,10 @@ img {
 
 .content-preview {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   color: var(--color-neutral-8);
   font-size: 0.94rem;
+  line-height: 1.78;
 }
 
 .content-preview h1,
@@ -1204,6 +1242,18 @@ img {
   margin: 0;
 }
 
+.content-preview :where(ul, ol) {
+  margin: 0;
+  padding-left: 1.35rem;
+}
+
+.content-preview blockquote {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--color-border);
+  color: var(--color-neutral-7);
+}
+
 .content-preview a {
   color: var(--color-info);
   text-decoration: underline;
@@ -1214,6 +1264,20 @@ img {
   border-radius: 6px;
   padding: 2px 5px;
   background: var(--color-neutral-2);
+}
+
+.content-preview pre {
+  overflow-x: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: rgba(254, 254, 251, 0.78);
+}
+
+.content-preview pre code {
+  padding: 0;
+  background: transparent;
 }
 
 .icon-button {
@@ -1366,6 +1430,12 @@ img {
 
   .admin-sidebar nav a {
     width: auto;
+  }
+
+  .admin-panel--list,
+  .admin-panel--preview {
+    position: static;
+    max-height: none;
   }
 
   .metric-grid,

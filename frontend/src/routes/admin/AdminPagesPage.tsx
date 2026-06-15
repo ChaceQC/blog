@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FilePlus2, Save } from 'lucide-react'
+import { Eye, FilePlus2, Save } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import { MathHtml } from '../../components/MathHtml.tsx'
 import {
   createAdminPage,
   listAdminPages,
@@ -87,7 +88,7 @@ export function AdminPagesPage() {
         </button>
       </section>
 
-      <div className="admin-workspace admin-workspace--two">
+      <div className="admin-workspace">
         <section className="admin-panel admin-panel--list">
           <div className="section-heading">
             <span>页面列表</span>
@@ -224,6 +225,24 @@ export function AdminPagesPage() {
               </button>
             </div>
           </form>
+        </section>
+
+        <section className="admin-panel admin-panel--preview">
+          <div className="section-heading">
+            <span>HTML 预览</span>
+            <small>
+              <Eye size={14} strokeWidth={1.8} aria-hidden="true" />
+              后端 sanitize
+            </small>
+          </div>
+          {selectedPage ? (
+            <MathHtml
+              className="content-preview"
+              html={selectedPage.content_html}
+            />
+          ) : (
+            <p className="empty-state">保存后可查看后端渲染结果。</p>
+          )}
         </section>
       </div>
     </div>

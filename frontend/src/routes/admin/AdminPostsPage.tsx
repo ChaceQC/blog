@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye, FilePlus2, Rocket, Save } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import { MathHtml } from '../../components/MathHtml.tsx'
 import {
   createAdminPost,
   listAdminPosts,
@@ -272,9 +273,9 @@ export function AdminPostsPage() {
             </small>
           </div>
           {selectedPost ? (
-            <article
+            <MathHtml
               className="content-preview"
-              dangerouslySetInnerHTML={{ __html: selectedPost.content_html }}
+              html={selectedPost.content_html}
             />
           ) : (
             <p className="empty-state">保存后可查看后端渲染结果。</p>
