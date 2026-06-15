@@ -74,6 +74,24 @@ export async function apiPostEncrypted<TBody, TResponse>(
   })
 }
 
+export async function apiPatchEncrypted<TBody, TResponse>(
+  path: string,
+  body: TBody,
+  profile: EncryptionProfile,
+  options: ApiRequestOptions = {},
+): Promise<TResponse> {
+  const session = await getEncryptionSession(profile)
+  return requestJson<TResponse>(path, {
+    method: 'PATCH',
+    headers: jsonHeaders(options, {
+      includeContentType: true,
+      encryptionSessionId: session.id,
+    }),
+    body: JSON.stringify(body),
+    encryption: { profile, session },
+  })
+}
+
 async function requestJson<T>(
   path: string,
   init: RequestInit & {

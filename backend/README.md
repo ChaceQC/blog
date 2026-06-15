@@ -43,6 +43,19 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 
 登录入口和加密协商入口已接入可配置限流，命中后返回 `429` 并写入 `security_events`。阈值通过 `BLOG_ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_MAX_ATTEMPTS` 和 `BLOG_ENCRYPTION_SESSION_RATE_LIMIT_WINDOW_SECONDS` 配置。当前实现为单进程内存限流器，适合 M1 单进程闭环验证；生产多实例或多进程部署前需要替换为 Redis 等共享存储适配器。
 
+## 后台内容管理
+
+后台文章和页面管理接口已接入 `content-v1` 加密响应，调用方需要先协商 `/api/admin/encryption/sessions` 并携带 `X-Encryption-Session`：
+
+- `GET /api/admin/posts`：后台文章列表，需要 `post:read` 权限。
+- `POST /api/admin/posts`：创建文章，需要 `post:write` 权限和 `X-CSRF-Token`。
+- `GET /api/admin/posts/{id}`：后台文章详情，需要 `post:read` 权限。
+- `PATCH /api/admin/posts/{id}`：更新文章，需要 `post:write` 权限和 `X-CSRF-Token`。
+- `POST /api/admin/posts/{id}/publish`：发布文章，需要 `post:publish` 权限和 `X-CSRF-Token`。
+- `GET /api/admin/pages`、`GET /api/admin/pages/{id}`、`POST /api/admin/pages`、`PATCH /api/admin/pages/{id}`：后台页面管理，需要 `page:write` 权限，写操作需要 `X-CSRF-Token`。
+
+当前创建和更新请求仍使用 HTTPS 下的普通 JSON，后续需要补充 `content-v1` 请求解密。`content_html` 由临时安全渲染器生成，只做 HTML 转义和段落包裹；完整 Markdown、LaTeX 和 HTML sanitize 策略仍需在后续文章编辑闭环中替换为正式渲染策略。
+
 ## 初始管理员
 
 连接真实数据库并执行迁移后，使用 CLI 创建初始后台管理员：

@@ -14,9 +14,11 @@ from app.core.config import Settings, get_settings
 from app.core.database import get_session
 from app.policies.auth import AuthPolicy
 from app.repositories.auth import AuthRepository
+from app.repositories.content import ContentRepository
 from app.repositories.encryption import EncryptionSessionRepository
 from app.repositories.logs import LogRepository
 from app.services.auth import AuthenticatedUser, AuthenticationError, AuthService
+from app.services.content import ContentService
 from app.services.encryption import EncryptionSessionManager
 from app.services.logs import LogService
 from app.services.rate_limit import RateLimitService
@@ -40,6 +42,13 @@ def get_auth_service(
 
 
 AuthServiceDependency = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def get_content_service(session: SessionDependency) -> ContentService:
+    return ContentService(repository=ContentRepository(session))
+
+
+ContentServiceDependency = Annotated[ContentService, Depends(get_content_service)]
 
 
 def get_encryption_session_manager(
