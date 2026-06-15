@@ -1,7 +1,14 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save, ShieldCheck, SlidersHorizontal } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
+import {
+  listAdminSettings,
+  SITE_PROFILE_SETTING_KEY,
+  updateAdminSetting,
+} from '../../features/settings/api.ts'
 import { siteSettings } from '../../features/settings/siteSettings.ts'
+import { useAuth } from '../../features/auth/useAuth.ts'
 
 type SiteSettingForm = {
   title: string
@@ -20,16 +27,68 @@ const initialForm: SiteSettingForm = {
 }
 
 export function AdminSettingsPage() {
-  const [form, setForm] = useState(initialForm)
+  const { session } = useAuth()
+  const queryClient = useQueryClient()
+  const [draftForm, setDraftForm] = useState<SiteSettingForm | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const { data, isError, isLoading } = useQuery({
+    queryKey: ['admin-settings'],
+    queryFn: listAdminSettings,
+  })
+  const siteProfileSetting = useMemo(
+    () =>
+      data?.items.find(
+        (setting) => setting.key_name === SITE_PROFILE_SETTING_KEY,
+      ) ?? null,
+    [data],
+  )
+  const loadedForm = useMemo(
+    () =>
+      siteProfileSetting
+        ? settingToForm(siteProfileSetting.value_json)
+        : initialForm,
+    [siteProfileSetting],
+  )
+  const form = draftForm ?? loadedForm
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!session) {
+        throw new Error('当前会话已失效')
+      }
+      return updateAdminSetting(
+        SITE_PROFILE_SETTING_KEY,
+        {
+          value_json: formToSettingValue(form),
+          group_name: 'site',
+          is_public: true,
+        },
+        session.csrfToken,
+      )
+    },
+    onSuccess: () => {
+      setDraftForm(null)
+      queryClient.invalidateQueries({ queryKey: ['admin-settings'] })
+      setNotice('设置已保存')
+    },
+    onError: (error) => {
+      setNotice(error instanceof Error ? error.message : '保存失败')
+    },
+  })
 
   return (
     <div className="admin-flow">
       <section className="admin-heading admin-heading--with-action">
         <span>SETTINGS</span>
         <h1>站点设置</h1>
-        <button className="text-button admin-heading__action" disabled type="button">
+        <button
+          className="text-button admin-heading__action"
+          disabled={!session || saveMutation.isPending}
+          onClick={() => saveMutation.mutate()}
+          type="button"
+        >
           <Save size={17} strokeWidth={1.8} aria-hidden="true" />
-          保存设置
+          {saveMutation.isPending ? '保存中' : '保存设置'}
         </button>
       </section>
 
@@ -37,8 +96,9 @@ export function AdminSettingsPage() {
         <section className="admin-panel admin-panel--editor">
           <div className="section-heading">
             <span>公开站点</span>
-            <small>site profile</small>
+            <small>{notice ?? (isLoading ? '加载中' : 'site profile')}</small>
           </div>
+          {isError ? <p className="form-error">设置加载失败</p> : null}
           <form className="content-form">
             <div className="form-grid form-grid--two">
               <label>
@@ -139,6 +199,30 @@ export function AdminSettingsPage() {
     key: Key,
     value: SiteSettingForm[Key],
   ) {
-    setForm((current) => ({ ...current, [key]: value }))
+    setDraftForm((current) => ({ ...(current ?? form), [key]: value }))
   }
+}
+
+function settingToForm(value: Record<string, unknown>): SiteSettingForm {
+  return {
+    title: stringValue(value.title, initialForm.title),
+    owner: stringValue(value.owner, initialForm.owner),
+    avatarUrl: stringValue(value.avatar_url, initialForm.avatarUrl),
+    description: stringValue(value.description, initialForm.description),
+    quote: stringValue(value.quote, initialForm.quote),
+  }
+}
+
+function formToSettingValue(form: SiteSettingForm): Record<string, unknown> {
+  return {
+    title: form.title,
+    owner: form.owner,
+    avatar_url: form.avatarUrl,
+    description: form.description,
+    quote: form.quote,
+  }
+}
+
+function stringValue(value: unknown, fallback: string): string {
+  return typeof value === 'string' ? value : fallback
 }

@@ -17,11 +17,13 @@ from app.repositories.auth import AuthRepository
 from app.repositories.content import ContentRepository
 from app.repositories.encryption import EncryptionSessionRepository
 from app.repositories.logs import LogRepository
+from app.repositories.settings import SettingRepository
 from app.services.auth import AuthenticatedUser, AuthenticationError, AuthService
 from app.services.content import ContentService
 from app.services.encryption import EncryptionSessionManager
 from app.services.logs import LogService
 from app.services.rate_limit import RateLimitService
+from app.services.settings import SettingService
 
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
@@ -72,6 +74,13 @@ def get_log_service(session: SessionDependency) -> LogService:
 
 
 LogServiceDependency = Annotated[LogService, Depends(get_log_service)]
+
+
+def get_setting_service(session: SessionDependency) -> SettingService:
+    return SettingService(repository=SettingRepository(session))
+
+
+SettingServiceDependency = Annotated[SettingService, Depends(get_setting_service)]
 
 
 _rate_limit_service = RateLimitService()
