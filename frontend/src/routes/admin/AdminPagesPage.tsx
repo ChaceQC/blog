@@ -145,7 +145,7 @@ export function AdminPagesPage() {
                 <input
                   value={form.slug}
                   onChange={(event) => updateForm('slug', event.target.value)}
-                  pattern="[a-z0-9][a-z0-9_-]*"
+                  pattern="[a-z0-9][a-z0-9_\-]*"
                   required
                 />
               </label>

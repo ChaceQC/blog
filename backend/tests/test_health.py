@@ -35,3 +35,23 @@ def test_admin_auth_me_requires_bearer_token() -> None:
     response = client.get("/api/admin/auth/me")
 
     assert response.status_code == 401
+
+
+def test_admin_cors_allows_encryption_session_header() -> None:
+    client = TestClient(app)
+
+    response = client.options(
+        "/api/admin/auth/login",
+        headers={
+            "Origin": "http://127.0.0.1:15173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": (
+                "content-type,x-encryption-session"
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    assert "x-encryption-session" in response.headers[
+        "access-control-allow-headers"
+    ].lower()

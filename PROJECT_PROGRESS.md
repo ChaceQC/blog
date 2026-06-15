@@ -27,6 +27,9 @@
 - 新增后台页面管理页 `/admin/pages`，支持页面列表、新建、编辑、导航显示、排序和 SEO 字段编辑。
 - 后台侧边栏和权限路由新增“文章”“页面”入口，分别绑定 `post:read` / `post:write` / `post:publish` 与 `page:write` 权限。
 - 更新后台内容表单、列表和预览样式，沿用当前 Yohaku 中性色、细边框和紧凑管理界面层级。
+- 前后端联调发现后台浏览器请求会被 CORS 预检拦截，已将 `X-Encryption-Session` 加入后端 CORS 允许请求头，并补充预检测试。
+- 前后端联调发现内容创建响应在读取 `created_at` / `updated_at` 时触发 SQLAlchemy async 隐式 IO，已在内容服务提交后显式 refresh 返回对象。
+- 前端联调发现 slug 输入的 `pattern` 在新版浏览器 `v` 正则模式下对未转义连字符报错，已修正文章和页面表单 slug pattern。
 
 ### 进行中
 
@@ -38,7 +41,7 @@
 - 当前限流器为单进程内存实现，适合 M1 单进程验证；生产多进程、多实例或横向扩展前，需要替换为 Redis 等共享存储适配器。
 - 应用层加密协商已改为数据库保存短期会话密钥；仍需补充过期会话定时清理和更多审计记录。
 - 当前后端会为 LaTeX 生成安全公式节点，但前台和后台预览尚未接入 KaTeX 等公式展示样式。
-- 本次前端内容管理已通过静态构建验证，仍需启动后端和本机 MySQL 临时库做真实登录、加密协商、创建、编辑、发布联调。
+- 本次已启动前后端和本机 MySQL 临时库完成真实登录、加密协商、文章创建、文章发布和页面创建联调；联调后按要求关闭前后端开发服务。
 - 本次改动按项目 Git 规则完成后直接 commit 并 push，不再额外等待人工确认。
 
 ### 下一步
@@ -46,17 +49,24 @@
 - 为前台和后台预览接入 KaTeX 等公式样式。
 - 继续实现文件和后台设置的最小 CRUD。
 - 补充加密会话过期清理任务，并评估 Redis 限流适配器。
-- 联调后台内容管理与真实 MySQL 临时库，随后接通公开文章列表和详情读取链路。
+- 接通公开文章列表和详情读取链路。
+- 继续为前台和后台预览接入 KaTeX 等公式样式。
 
 ### 验证
 
 - 已运行 `uv run ruff check .`，通过。
-- 已运行 `uv run pytest`，38 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 已运行 `uv run pytest`，39 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 已运行 `uv run alembic upgrade head --sql`，迁移升级 SQL 可生成。
 - 已运行 `npm.cmd run lint`，通过。
 - 已运行 `npm.cmd run build`，通过。
 - 本次后台内容前端接入后已重新运行 `npm.cmd run lint`，通过。
 - 本次后台内容前端接入后已重新运行 `npm.cmd run build`，通过。
+- 本次前后端联调修复后已重新运行 `uv run ruff check .`，通过。
+- 本次前后端联调修复后已重新运行 `uv run pytest`，39 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 本次前后端联调修复后已重新运行 `npm.cmd run lint`，通过。
+- 本次前后端联调修复后已重新运行 `npm.cmd run build`，通过。
+- 已使用本机 MySQL 临时库 `blog_codex_verify` 运行 Alembic 迁移并创建临时管理员，通过 Playwright CLI 验证后台登录、`/admin/posts` 文章创建与发布、`/admin/pages` 页面创建。
+- 联调完成后已关闭本项目启动或复用的前端 `15173` 与后端 `18080` 开发服务，确认两端口不再监听；已删除本机 MySQL 临时库 `blog_codex_verify`。
 
 ## 2026-06-15
 

@@ -116,3 +116,6 @@ class ContentRepository:
 
     async def commit(self) -> None:
         await self.session.commit()
+
+    async def refresh(self, instance: object) -> None:
+        await self.session.refresh(instance)

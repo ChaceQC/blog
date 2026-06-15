@@ -60,6 +60,8 @@ class ContentRepositoryProtocol(Protocol):
 
     async def commit(self) -> None: ...
 
+    async def refresh(self, instance: object) -> None: ...
+
 
 @dataclass(frozen=True)
 class CreatePostCommand:
@@ -123,6 +125,7 @@ class ContentService:
         if command.status == "published":
             post.published_at = utc_now()
         await self.repository.commit()
+        await self.repository.refresh(post)
         return post
 
     async def update_post(self, *, post_id: int, changes: dict[str, Any]) -> Post:
@@ -151,6 +154,7 @@ class ContentService:
         if post.status == "published" and post.published_at is None:
             post.published_at = utc_now()
         await self.repository.commit()
+        await self.repository.refresh(post)
         return post
 
     async def publish_post(self, post_id: int) -> Post:
@@ -158,6 +162,7 @@ class ContentService:
         post.status = "published"
         post.published_at = utc_now()
         await self.repository.commit()
+        await self.repository.refresh(post)
         return post
 
     async def list_pages(self, *, limit: int, offset: int) -> Sequence[Page]:
@@ -183,6 +188,7 @@ class ContentService:
             seo_description=command.seo_description,
         )
         await self.repository.commit()
+        await self.repository.refresh(page)
         return page
 
     async def update_page(self, *, page_id: int, changes: dict[str, Any]) -> Page:
@@ -207,6 +213,7 @@ class ContentService:
             page.content_md = changes["content_md"]
             page.content_html = self.renderer.render(page.content_md)
         await self.repository.commit()
+        await self.repository.refresh(page)
         return page
 
     async def _ensure_post_slug_available(

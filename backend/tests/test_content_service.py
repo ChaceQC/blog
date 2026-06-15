@@ -83,6 +83,9 @@ class FakeContentRepository:
     async def commit(self) -> None:
         self.commit_count += 1
 
+    async def refresh(self, instance: object) -> None:
+        return None
+
 
 @pytest.mark.anyio
 async def test_create_post_renders_safe_html_and_counts_words() -> None:
