@@ -4,6 +4,8 @@ import { AuthProvider } from '../features/auth/AuthContext.tsx'
 import { AdminDashboardPage } from '../routes/admin/AdminDashboardPage.tsx'
 import { AdminLayout } from '../routes/admin/AdminLayout.tsx'
 import { AdminLoginPage } from '../routes/admin/AdminLoginPage.tsx'
+import { AdminPagesPage } from '../routes/admin/AdminPagesPage.tsx'
+import { AdminPostsPage } from '../routes/admin/AdminPostsPage.tsx'
 import { adminAccess } from '../routes/admin/adminAccess.ts'
 import { RequireAdminAuth } from '../routes/admin/RequireAdminAuth.tsx'
 import { RequireAdminPermission } from '../routes/admin/RequireAdminPermission.tsx'
@@ -43,6 +45,22 @@ export const router = createBrowserRouter([
             element: <AdminLayout />,
             children: [
               { index: true, element: <AdminDashboardPage /> },
+              {
+                path: 'posts',
+                element: (
+                  <RequireAdminPermission permissions={adminAccess.posts}>
+                    <AdminPostsPage />
+                  </RequireAdminPermission>
+                ),
+              },
+              {
+                path: 'pages',
+                element: (
+                  <RequireAdminPermission permissions={adminAccess.pages}>
+                    <AdminPagesPage />
+                  </RequireAdminPermission>
+                ),
+              },
               {
                 path: 'files',
                 element: (

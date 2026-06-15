@@ -1,8 +1,10 @@
 import {
   FileText,
+  Files,
   FolderOpen,
   Link as LinkIcon,
   LogOut,
+  Newspaper,
   Settings,
 } from 'lucide-react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
@@ -13,6 +15,8 @@ import { adminAccess } from './adminAccess.ts'
 
 const adminLinks = [
   { to: '/admin', label: '总览', icon: FileText, permissions: adminAccess.dashboard },
+  { to: '/admin/posts', label: '文章', icon: Newspaper, permissions: adminAccess.posts },
+  { to: '/admin/pages', label: '页面', icon: Files, permissions: adminAccess.pages },
   { to: '/admin/files', label: '文件', icon: FolderOpen, permissions: adminAccess.files },
   { to: '/admin/links', label: '友链', icon: LinkIcon, permissions: adminAccess.links },
   { to: '/admin/settings', label: '设置', icon: Settings, permissions: adminAccess.settings },

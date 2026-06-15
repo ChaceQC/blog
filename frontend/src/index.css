@@ -842,6 +842,22 @@ img {
   gap: 6px;
 }
 
+.admin-heading--with-action {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.admin-heading--with-action span,
+.admin-heading--with-action h1 {
+  grid-column: 1;
+}
+
+.admin-heading__action {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: end;
+}
+
 .admin-forbidden,
 .admin-panel,
 .metric {
@@ -921,6 +937,23 @@ img {
   padding: 18px;
 }
 
+.admin-panel--list,
+.admin-panel--editor,
+.admin-panel--preview {
+  align-content: start;
+}
+
+.admin-workspace {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(420px, 1.45fr) minmax(260px, 0.83fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.admin-workspace--two {
+  grid-template-columns: minmax(220px, 0.72fr) minmax(420px, 1.6fr);
+}
+
 .admin-table__row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -938,6 +971,173 @@ img {
   gap: 12px;
   padding: 12px;
   border-radius: 8px;
+  background: var(--color-neutral-2);
+}
+
+.content-list {
+  display: grid;
+  gap: 4px;
+}
+
+.content-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 0;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-neutral-8);
+  text-align: left;
+}
+
+.content-row:first-child {
+  border-top: 0;
+}
+
+.content-row.active,
+.content-row:hover {
+  color: var(--color-neutral-10);
+}
+
+.content-row.active {
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
+.content-row span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding-left: 10px;
+}
+
+.content-row small,
+.empty-state {
+  color: var(--color-neutral-7);
+}
+
+.content-form {
+  display: grid;
+  gap: 14px;
+}
+
+.content-form label,
+.checkbox-field {
+  display: grid;
+  gap: 7px;
+  color: var(--color-neutral-7);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.content-form input,
+.content-form textarea,
+.content-form select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  outline: 0;
+  background: rgba(254, 254, 251, 0.72);
+  color: var(--color-neutral-9);
+}
+
+.content-form input,
+.content-form select {
+  min-height: 40px;
+  padding: 0 11px;
+}
+
+.content-form textarea {
+  min-height: 0;
+  resize: vertical;
+  padding: 10px 11px;
+}
+
+.content-form input:focus,
+.content-form textarea:focus,
+.content-form select:focus {
+  border-color: var(--color-accent);
+}
+
+.form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.form-grid--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.checkbox-field {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  align-self: end;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: rgba(254, 254, 251, 0.72);
+}
+
+.checkbox-field input {
+  width: 16px;
+  min-height: 16px;
+  accent-color: var(--color-accent);
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.text-button--muted {
+  background: var(--color-neutral-8);
+}
+
+.text-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+}
+
+.content-preview {
+  display: grid;
+  gap: 10px;
+  color: var(--color-neutral-8);
+  font-size: 0.94rem;
+}
+
+.content-preview h1,
+.content-preview h2,
+.content-preview h3 {
+  margin: 0;
+  color: var(--color-neutral-10);
+  font-family: var(--font-serif);
+  font-weight: 500;
+}
+
+.content-preview p {
+  margin: 0;
+}
+
+.content-preview a {
+  color: var(--color-info);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.content-preview code {
+  border-radius: 6px;
+  padding: 2px 5px;
   background: var(--color-neutral-2);
 }
 
@@ -1053,6 +1253,8 @@ img {
 
   .site-header,
   .admin-shell,
+  .admin-workspace,
+  .admin-workspace--two,
   .admin-columns,
   .home-board {
     grid-template-columns: 1fr;
@@ -1092,6 +1294,8 @@ img {
   }
 
   .metric-grid,
+  .form-grid--two,
+  .form-grid--three,
   .gateway-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1129,8 +1333,19 @@ img {
 
   .site-grid,
   .metric-grid,
+  .form-grid--two,
+  .form-grid--three,
   .gateway-list {
     grid-template-columns: 1fr;
+  }
+
+  .admin-heading--with-action {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-heading__action {
+    grid-column: 1;
+    grid-row: auto;
   }
 
   .recent-item {
