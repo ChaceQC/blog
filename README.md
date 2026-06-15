@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-当前版本处于 `v0.1.0` 脚手架阶段，开发分支为 `dev`。M0 脚手架、生产部署骨架和初始 Alembic 迁移已完成，M1 已开始落地后端认证接口与服务边界。
+当前版本处于 `v0.1.0` 脚手架阶段，开发分支为 `dev`。M0 脚手架、生产部署骨架和初始 Alembic 迁移已完成，M1 已开始落地后端认证接口、服务边界和初始管理员创建命令。
 
 ## 技术栈
 
@@ -63,6 +63,7 @@ uv run pytest
 $env:PYTHONUTF8='1'
 uv run alembic upgrade head --sql
 uv run alembic downgrade 20260615_0001:base --sql
+uv run python -m app.cli --help
 ```
 
 前端：

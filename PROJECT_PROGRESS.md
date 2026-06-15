@@ -56,21 +56,23 @@
 - 新增认证请求/响应 schema，并将后台认证路由接入 `/api/admin`。
 - 新增认证服务测试，覆盖登录成功、密码错误、刷新令牌轮换和退出吊销。
 - 更新 `backend/.env.example` 和 `deploy/env/backend.env.example`，补充 Access Token 与 Refresh Token 有效期配置。
+- 新增 `uv run python -m app.cli create-admin` 初始管理员创建命令，支持交互式输入密码。
+- 新增初始管理员创建 Service 与 Repository，自动创建 `super_admin` 角色并绑定管理员用户。
+- 新增初始管理员创建测试，覆盖创建用户、角色绑定和重复用户名拒绝。
 
 ### 进行中
 
-- M1 认证与后台框架正在推进，后端认证接口第一小步已完成。
+- M1 认证与后台框架正在推进，后端认证接口与初始管理员创建方式已完成第一版。
 
 ### 阻塞与风险
 
 - 待确认真实域名、服务器环境、证书申请方式和对象存储选择。
 - 初始 Alembic 迁移已完成离线 SQL 验证；真实 MySQL 的 `upgrade head` 和回滚验证需要在本地或生产数据库服务启动后执行。
-- 当前尚未提供初始管理员创建命令或种子数据，真实数据库接入后还需要补齐管理员初始化流程。
 - 后台认证接口已完成服务层测试，尚未在真实 MySQL 环境执行端到端登录、刷新和退出验证。
+- 初始管理员创建命令已完成服务层测试，尚未在真实 MySQL 环境执行。
 
 ### 下一步
 
-- 补充初始管理员创建方式。
 - 接入前端后台登录页、登录态保存和权限路由保护。
 - 继续补充认证审计日志查询、基础限流和真实 MySQL 端到端验证。
 
@@ -99,3 +101,6 @@
 - 已运行 `git merge --ff-only dev`，`main` 快进成功并推送到 `origin/main`。
 - 后端认证第一小步已运行 `uv run ruff check .`，通过。
 - 后端认证第一小步已运行 `uv run pytest`，认证服务和健康检查共 7 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 初始管理员创建小步已运行 `uv run ruff check .`，通过。
+- 初始管理员创建小步已运行 `uv run pytest`，认证服务、初始管理员创建和健康检查共 9 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 已运行 `uv run python -m app.cli --help`，CLI 入口可正常加载。
