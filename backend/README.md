@@ -33,6 +33,16 @@ uv run python -m app.cli --help
 
 MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，依赖文件中已显式保留该运行依赖。
 
+## 安全日志与限流
+
+后台只读日志接口：
+
+- `GET /api/admin/audit-logs`：操作审计日志，需要 `audit_log:read` 权限。
+- `GET /api/admin/login-logs`：后台登录日志，需要 `audit_log:read` 权限。
+- `GET /api/admin/security-events`：安全事件日志，需要 `audit_log:read` 权限。
+
+登录入口和加密协商入口已接入可配置限流，命中后返回 `429` 并写入 `security_events`。阈值通过 `BLOG_ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_MAX_ATTEMPTS` 和 `BLOG_ENCRYPTION_SESSION_RATE_LIMIT_WINDOW_SECONDS` 配置。当前实现为单进程内存限流器，适合 M1 单进程闭环验证；生产多实例或多进程部署前需要替换为 Redis 等共享存储适配器。
+
 ## 初始管理员
 
 连接真实数据库并执行迁移后，使用 CLI 创建初始后台管理员：

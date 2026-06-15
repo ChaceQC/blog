@@ -5,7 +5,12 @@ from types import SimpleNamespace
 from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi.testclient import TestClient
 
-from app.api.admin.dependencies import get_auth_service, get_encryption_session_manager
+from app.api.admin.dependencies import (
+    get_auth_service,
+    get_encryption_session_manager,
+    get_log_service,
+    get_rate_limit_service,
+)
 from app.core.config import get_settings
 from app.core.encryption import (
     EncryptedEnvelope,
@@ -15,6 +20,7 @@ from app.core.encryption import (
 from app.main import app
 from app.services.auth import AuthenticatedUser, TokenPair
 from app.services.encryption import EncryptionSessionManager
+from app.services.rate_limit import RateLimitService
 
 
 class FakeEncryptionSessionRepository:
@@ -97,6 +103,11 @@ class RaisingAuthService:
         raise AssertionError("login service should not be called")
 
 
+class FakeLogService:
+    async def record_security_event(self, **_: object) -> None:
+        raise AssertionError("security event should not be recorded")
+
+
 def test_login_response_can_use_sensitive_encryption_session() -> None:
     client_private_key = ec.generate_private_key(ec.SECP256R1())
     client = TestClient(app)
@@ -108,6 +119,8 @@ def test_login_response_can_use_sensitive_encryption_session() -> None:
     app.dependency_overrides[get_encryption_session_manager] = lambda: (
         encryption_manager
     )
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
 
     try:
         session_response = client.post(
@@ -119,7 +132,7 @@ def test_login_response_can_use_sensitive_encryption_session() -> None:
             },
         )
     finally:
-        app.dependency_overrides.pop(get_encryption_session_manager, None)
+        app.dependency_overrides.clear()
 
     assert session_response.status_code == 200
     assert encryption_repository.commit_count == 1
@@ -133,6 +146,8 @@ def test_login_response_can_use_sensitive_encryption_session() -> None:
     app.dependency_overrides[get_encryption_session_manager] = lambda: (
         encryption_manager
     )
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
     try:
         login_response = client.post(
             "/api/admin/auth/login",
@@ -171,6 +186,8 @@ def test_login_rejects_missing_encryption_session_header() -> None:
             settings=get_settings(),
         )
     )
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
     try:
         response = client.post(
             "/api/admin/auth/login",

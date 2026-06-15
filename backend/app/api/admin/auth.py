@@ -5,12 +5,15 @@ from app.api.admin.dependencies import (
     AuthServiceDependency,
     CurrentAdminUserDependency,
     EncryptionSessionManagerDependency,
+    LogServiceDependency,
+    RateLimitServiceDependency,
     SettingsDependency,
 )
 from app.api.admin.encrypted_response import (
     encrypted_response,
     require_encryption_session,
 )
+from app.api.admin.limits import client_ip, enforce_rate_limit
 from app.api.admin.session import (
     clear_admin_session_cookies,
     create_csrf_token,
@@ -28,6 +31,7 @@ from app.schemas.auth import (
 )
 from app.schemas.encryption import EncryptedApiResponse
 from app.services.auth import AuthenticationError
+from app.services.rate_limit import RateLimitRule
 
 router = APIRouter(prefix="/auth", tags=["admin-auth"])
 
@@ -40,13 +44,31 @@ async def login(
     service: AuthServiceDependency,
     settings: SettingsDependency,
     encryption_manager: EncryptionSessionManagerDependency,
+    rate_limiter: RateLimitServiceDependency,
+    logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
     require_encryption_session(request)
+    limit_key = (
+        f"admin-login:{client_ip(request) or 'unknown'}:"
+        f"{payload.username.casefold()}"
+    )
+    await enforce_rate_limit(
+        request=request,
+        limiter=rate_limiter,
+        logs=logs,
+        key=limit_key,
+        rule=RateLimitRule(
+            max_attempts=settings.admin_login_rate_limit_max_attempts,
+            window_seconds=settings.admin_login_rate_limit_window_seconds,
+        ),
+        event_type="rate_limit.admin_login",
+        detail_json={"username": payload.username},
+    )
     try:
         tokens = await service.login(
             username=payload.username,
             password=payload.password,
-            ip=_client_ip(request),
+            ip=client_ip(request),
             user_agent=request.headers.get("user-agent"),
         )
     except AuthenticationError as exc:
@@ -158,9 +180,3 @@ def _unauthorized() -> HTTPException:
         detail="invalid credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-
-
-def _client_ip(request: Request) -> str | None:
-    if request.client is None:
-        return None
-    return request.client.host

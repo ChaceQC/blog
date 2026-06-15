@@ -1,5 +1,40 @@
 # 项目进度
 
+## 2026-06-16
+
+### 已完成
+
+- 新增后端 `RateLimitService` 与单进程内存限流器，登录入口和加密协商入口已接入可配置限流。
+- 限流命中会返回 `429`，携带 `Retry-After`，并写入 `security_events` 安全事件日志。
+- 新增后台日志查询接口：`GET /api/admin/audit-logs`、`GET /api/admin/login-logs`、`GET /api/admin/security-events`，统一需要 `audit_log:read` 权限。
+- 新增日志 Repository、Service 和响应 schema，保持 API、业务和数据库访问分层。
+- 新增 `BLOG_ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_WINDOW_SECONDS` 配置，并同步后端与部署环境变量示例。
+- 补充限流服务、限流命中安全事件和后台登录日志查询接口测试。
+- 更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，记录后台日志查询、入口限流和生产替换风险。
+
+### 进行中
+
+- M1 认证与后台框架继续推进；后台登录、Cookie 会话、CSRF、权限菜单、`sensitive-v1` 加密响应、后台日志查询和入口限流已形成第一版闭环。
+
+### 阻塞与风险
+
+- 待确认真实域名、服务器环境、证书申请方式和对象存储选择。
+- 当前限流器为单进程内存实现，适合 M1 单进程验证；生产多进程、多实例或横向扩展前，需要替换为 Redis 等共享存储适配器。
+- 应用层加密协商已改为数据库保存短期会话密钥；仍需补充过期会话定时清理和更多审计记录。
+- `content-v1` 已具备前端解密基础，但尚未接入实际文章、页面和草稿 CRUD 接口。
+
+### 下一步
+
+- 将 `content-v1` 接入文章、页面和草稿管理接口，明确公开内容与后台内容的加密边界。
+- 继续实现文章、文件和后台设置的最小 CRUD。
+- 补充加密会话过期清理任务，并评估 Redis 限流适配器。
+
+### 验证
+
+- 已运行 `uv run ruff check .`，通过。
+- 已运行 `uv run pytest`，29 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 已运行 `uv run alembic upgrade head --sql`，迁移升级 SQL 可生成。
+
 ## 2026-06-15
 
 ### 已完成

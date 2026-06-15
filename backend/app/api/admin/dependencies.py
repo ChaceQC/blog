@@ -15,8 +15,11 @@ from app.core.database import get_session
 from app.policies.auth import AuthPolicy
 from app.repositories.auth import AuthRepository
 from app.repositories.encryption import EncryptionSessionRepository
+from app.repositories.logs import LogRepository
 from app.services.auth import AuthenticatedUser, AuthenticationError, AuthService
 from app.services.encryption import EncryptionSessionManager
+from app.services.logs import LogService
+from app.services.rate_limit import RateLimitService
 
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
@@ -52,6 +55,26 @@ def get_encryption_session_manager(
 EncryptionSessionManagerDependency = Annotated[
     EncryptionSessionManager,
     Depends(get_encryption_session_manager),
+]
+
+
+def get_log_service(session: SessionDependency) -> LogService:
+    return LogService(repository=LogRepository(session))
+
+
+LogServiceDependency = Annotated[LogService, Depends(get_log_service)]
+
+
+_rate_limit_service = RateLimitService()
+
+
+def get_rate_limit_service() -> RateLimitService:
+    return _rate_limit_service
+
+
+RateLimitServiceDependency = Annotated[
+    RateLimitService,
+    Depends(get_rate_limit_service),
 ]
 
 
