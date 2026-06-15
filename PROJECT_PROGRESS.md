@@ -17,10 +17,11 @@
 - 在 `PROJECT_PLAN.md` 和 `AGENT.md` 中补充 `.gitignore` 与依赖锁文件管理规则。
 - 已将本地默认分支调整为 `main`。
 - 已创建 GitHub 私有仓库 `ChaceQC/blog`，并配置 `origin` remote。
+- 已创建初始提交并推送 `main` 分支到 GitHub。
 
 ### 进行中
 
-- 已创建本地初始文档提交，正在推送到 GitHub。
+- 尚未开始代码脚手架实现。
 
 ### 阻塞与风险
 
@@ -28,7 +29,6 @@
 
 ### 下一步
 
-- push 当前文档到 GitHub。
 - 初始化 `backend` 与 `frontend` 目录。
 - 使用 `uv` 创建 FastAPI 后端工程。
 - 使用 `npm` 创建 React + Vite 前端工程。
