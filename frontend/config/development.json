@@ -1,0 +1,7 @@
+{
+  "devHost": "127.0.0.1",
+  "devPort": 15173,
+  "previewHost": "127.0.0.1",
+  "previewPort": 14173,
+  "apiBaseUrl": "http://127.0.0.1:18080/api"
+}

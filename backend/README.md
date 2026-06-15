@@ -1,20 +1,21 @@
-# Blog Backend
+# 后端工程
 
-FastAPI backend for the personal blog CMS.
+本目录是个人博客系统的 FastAPI 后端工程。
 
-## Local Development
+## 本地开发
 
-The development workstation is Windows 11. Use UTF-8 for terminal output and
-file operations.
+开发环境默认为 Windows 11，终端和文件读写统一使用 UTF-8。本地开发避免使用常见端口，后端默认端口为 `18080`。
 
 ```powershell
 uv sync
-uv run uvicorn app.main:app --reload
+Copy-Item .env.example .env
+uv run python main.py
 uv run pytest
 uv run ruff check .
 ```
 
-## Deployment Target
+本地端口、数据库连接、CORS 和上传目录都来自 `.env`，不要写死在代码里。
 
-Production deployment targets Linux Debian with Docker Compose, Nginx, MySQL
-and private container networks. Only Nginx should expose public `80/443`.
+## 部署目标
+
+生产部署环境为 Linux Debian，使用 Docker Compose、Nginx、MySQL 和私有容器网络。公网只允许 Nginx 暴露 `80/443`。

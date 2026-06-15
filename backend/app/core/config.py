@@ -7,33 +7,26 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "Blog CMS API"
-    version: str = "0.1.0"
-    environment: Literal["development", "test", "production"] = "development"
-    debug: bool = False
+    app_name: str
+    version: str
+    environment: Literal["development", "test", "production"]
+    debug: bool
 
-    public_base_url: str = "http://localhost:5173"
-    database_url: str = (
-        "mysql+asyncmy://blog_app:blog_dev_password@127.0.0.1:3306/"
-        "blog?charset=utf8mb4"
-    )
-    secret_key: str = "dev-only-change-me"
+    public_base_url: str
+    database_url: str
+    secret_key: str
 
-    allowed_hosts: list[str] = Field(
-        default_factory=lambda: ["localhost", "127.0.0.1", "testserver"]
-    )
-    cors_origins: list[str] = Field(
-        default_factory=lambda: [
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-        ]
-    )
-    docs_enabled: bool = True
-    readiness_check_database: bool = False
-    upload_root: Path = Path("var/uploads")
+    allowed_hosts: list[str]
+    cors_origins: list[str]
+    docs_enabled: bool
+    readiness_check_database: bool
+    upload_root: Path
+
+    dev_server_host: str
+    dev_server_port: int = Field(ge=1024, le=65535)
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env.example", ".env"),
         env_file_encoding="utf-8",
         env_prefix="BLOG_",
         case_sensitive=False,

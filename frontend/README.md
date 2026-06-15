@@ -4,7 +4,7 @@
 
 ## 本地开发
 
-开发环境默认为 Windows 11，终端和文件读写统一使用 UTF-8。
+开发环境默认为 Windows 11，终端和文件读写统一使用 UTF-8。本地开发避免使用常见端口，前端默认端口为 `15173`，预览默认端口为 `14173`。
 
 ```powershell
 npm install
@@ -12,6 +12,8 @@ npm run dev
 npm run lint
 npm run build
 ```
+
+本地开发端口、预览端口和 API 地址来自 `config/development.json`，不要写死在启动脚本或业务代码里。
 
 ## 目录约定
 

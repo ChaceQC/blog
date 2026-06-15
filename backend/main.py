@@ -1,11 +1,13 @@
+from app.core.config import get_settings
 from app.main import app
 
 
 def main() -> None:
-    """Development entry point used by `uv run python main.py`."""
+    """本地开发入口，用于 `uv run python main.py`。"""
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    settings = get_settings()
+    uvicorn.run(app, host=settings.dev_server_host, port=settings.dev_server_port)
 
 
 if __name__ == "__main__":
