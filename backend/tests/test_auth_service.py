@@ -236,3 +236,35 @@ async def test_logout_revokes_refresh_token() -> None:
 
     assert repository.refresh_tokens[0].revoked_at is not None
     assert repository.commit_count == 2
+
+
+@pytest.mark.anyio
+async def test_authenticate_access_token_returns_current_user() -> None:
+    repository = FakeAuthRepository(make_user())
+    service = AuthService(repository=repository, settings=make_settings())
+    tokens = await service.login(
+        username="admin",
+        password="correct-password",
+        ip=None,
+        user_agent=None,
+    )
+
+    current_user = await service.authenticate_access_token(
+        access_token=tokens.access_token,
+    )
+
+    assert current_user.id == 1
+    assert current_user.username == "admin"
+    assert current_user.roles == ["editor"]
+    assert current_user.permissions == ["post:read", "post:write"]
+
+
+@pytest.mark.anyio
+async def test_authenticate_access_token_rejects_invalid_token() -> None:
+    service = AuthService(
+        repository=FakeAuthRepository(make_user()),
+        settings=make_settings(),
+    )
+
+    with pytest.raises(AuthenticationError):
+        await service.authenticate_access_token(access_token="not-a-jwt")

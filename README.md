@@ -1,10 +1,10 @@
 # 个人博客系统
 
-这是一个自托管个人博客与轻量 CMS 项目。系统面向公网部署设计，包含文章发布、文件管理、友链、小网站导航和后台管理能力。
+这是一个自托管个人博客与轻量 CMS 项目。系统面向公网部署设计，包含支持 Markdown 与 LaTeX 公式的文章发布、文件管理、友链、小网站导航和后台管理能力。
 
 ## 当前阶段
 
-当前版本处于 `v0.1.0` 脚手架阶段，开发分支为 `dev`。M0 脚手架、生产部署骨架和初始 Alembic 迁移已完成，M1 已开始落地后台登录接口、初始管理员创建命令和前端登录页。
+当前版本处于 `v0.1.0` 脚手架阶段，开发分支为 `dev`。M0 脚手架、生产部署骨架和初始 Alembic 迁移已完成，M1 已开始落地后台登录、当前用户接口、初始管理员创建命令和前端登录态校验。
 
 ## 技术栈
 
@@ -79,6 +79,12 @@ npm run build
 ```powershell
 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet
 ```
+
+本地 MySQL 验证：
+
+Windows 本机安装 MySQL 8 时，可以用本地临时库验证真实迁移、初始管理员创建和后台认证流程。后台当前用户接口使用 `Authorization: Bearer <access_token>` 校验 Access Token。根目录 `auth.txt` 可保存本机 MySQL root 凭据供本地验证使用，该文件属于机密文件，已被 `.gitignore` 忽略，禁止提交。
+
+建议只操作临时库，例如 `blog_codex_migration_test`：创建临时库后临时设置 `BLOG_DATABASE_URL`，运行 `uv run alembic upgrade head`、`uv run python -m app.cli create-admin ...`，验证完成后运行 `uv run alembic downgrade base` 并删除临时库。
 
 ## 部署边界
 

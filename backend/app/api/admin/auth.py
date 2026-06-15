@@ -1,11 +1,9 @@
-from typing import Annotated
+from fastapi import APIRouter, HTTPException, Request, status
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.core.config import Settings, get_settings
-from app.core.database import get_session
-from app.repositories.auth import AuthRepository
+from app.api.admin.dependencies import (
+    AuthServiceDependency,
+    CurrentAdminUserDependency,
+)
 from app.schemas.auth import (
     AuthUserResponse,
     LoginRequest,
@@ -14,24 +12,9 @@ from app.schemas.auth import (
     RefreshTokenRequest,
     TokenPairResponse,
 )
-from app.services.auth import AuthenticationError, AuthService, TokenPair
+from app.services.auth import AuthenticatedUser, AuthenticationError, TokenPair
 
 router = APIRouter(prefix="/auth", tags=["admin-auth"])
-SessionDependency = Annotated[AsyncSession, Depends(get_session)]
-SettingsDependency = Annotated[Settings, Depends(get_settings)]
-
-
-def get_auth_service(
-    session: SessionDependency,
-    settings: SettingsDependency,
-) -> AuthService:
-    return AuthService(
-        repository=AuthRepository(session),
-        settings=settings,
-    )
-
-
-AuthServiceDependency = Annotated[AuthService, Depends(get_auth_service)]
 
 
 @router.post("/login", response_model=TokenPairResponse)
@@ -73,18 +56,27 @@ async def logout(
     return LogoutResponse()
 
 
+@router.get("/me", response_model=AuthUserResponse)
+async def me(current_user: CurrentAdminUserDependency) -> AuthUserResponse:
+    return _user_response(current_user)
+
+
 def _token_response(tokens: TokenPair) -> TokenPairResponse:
     return TokenPairResponse(
         access_token=tokens.access_token,
         refresh_token=tokens.refresh_token,
         expires_in=tokens.expires_in,
-        user=AuthUserResponse(
-            id=tokens.user.id,
-            username=tokens.user.username,
-            display_name=tokens.user.display_name,
-            roles=tokens.user.roles,
-            permissions=tokens.user.permissions,
-        ),
+        user=_user_response(tokens.user),
+    )
+
+
+def _user_response(user: AuthenticatedUser) -> AuthUserResponse:
+    return AuthUserResponse(
+        id=user.id,
+        username=user.username,
+        display_name=user.display_name,
+        roles=user.roles,
+        permissions=user.permissions,
     )
 
 

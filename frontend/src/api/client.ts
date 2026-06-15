@@ -1,5 +1,9 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
+type ApiRequestOptions = {
+  accessToken?: string
+}
+
 export class ApiError extends Error {
   readonly status: number
 
@@ -9,9 +13,12 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
+export async function apiGet<T>(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { Accept: 'application/json' },
+    headers: jsonHeaders(options),
   })
 
   if (!response.ok) {
@@ -24,13 +31,11 @@ export async function apiGet<T>(path: string): Promise<T> {
 export async function apiPost<TBody, TResponse>(
   path: string,
   body: TBody,
+  options: ApiRequestOptions = {},
 ): Promise<TResponse> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
+    headers: jsonHeaders(options, { includeContentType: true }),
     body: JSON.stringify(body),
   })
 
@@ -39,4 +44,23 @@ export async function apiPost<TBody, TResponse>(
   }
 
   return response.json() as Promise<TResponse>
+}
+
+function jsonHeaders(
+  options: ApiRequestOptions,
+  config: { includeContentType?: boolean } = {},
+): HeadersInit {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  }
+
+  if (config.includeContentType) {
+    headers['Content-Type'] = 'application/json'
+  }
+
+  if (options.accessToken) {
+    headers.Authorization = `Bearer ${options.accessToken}`
+  }
+
+  return headers
 }

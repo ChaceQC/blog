@@ -455,6 +455,16 @@ img {
   padding: 32px;
 }
 
+.admin-auth-loading {
+  display: grid;
+  min-height: 100svh;
+  place-items: center;
+  margin: 0;
+  background: #f3f1eb;
+  color: var(--text-muted);
+  font-weight: 720;
+}
+
 .admin-flow {
   display: grid;
   gap: 24px;

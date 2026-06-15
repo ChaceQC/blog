@@ -2,8 +2,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
 
+import jwt
+
 from app.core.auth import (
     create_access_token,
+    decode_access_token,
     generate_refresh_token,
     hash_refresh_token,
     utc_now,
@@ -175,15 +178,25 @@ class AuthService:
         )
         await self.repository.commit()
 
+    async def authenticate_access_token(
+        self,
+        *,
+        access_token: str,
+    ) -> AuthenticatedUser:
+        try:
+            payload = decode_access_token(access_token, self.settings.secret_key)
+            user_id = _user_id_from_access_token_payload(payload)
+        except (ValueError, jwt.InvalidTokenError) as exc:
+            raise AuthenticationError("invalid access token") from exc
+
+        user = await self.repository.get_user_by_id(user_id)
+        if user is None or not self.policy.can_login(user):
+            raise AuthenticationError("invalid access token")
+
+        return await self._authenticated_user(user)
+
     async def _issue_tokens(self, *, user: User, now: datetime) -> TokenPair:
-        authorization = await self.repository.get_authorization(user.id)
-        roles = sorted(authorization.roles)
-        permissions = sorted(
-            self.policy.token_permissions(
-                roles=authorization.roles,
-                permissions=authorization.permissions,
-            ),
-        )
+        authenticated_user = await self._authenticated_user(user)
         expires_delta = timedelta(minutes=self.settings.access_token_expire_minutes)
         refresh_token = generate_refresh_token()
         refresh_expires_at = now + timedelta(
@@ -200,21 +213,32 @@ class AuthService:
         return TokenPair(
             access_token=create_access_token(
                 user_id=user.id,
-                roles=roles,
-                permissions=permissions,
+                roles=authenticated_user.roles,
+                permissions=authenticated_user.permissions,
                 secret_key=self.settings.secret_key,
                 expires_delta=expires_delta,
                 now=now,
             ),
             refresh_token=refresh_token,
             expires_in=int(expires_delta.total_seconds()),
-            user=AuthenticatedUser(
-                id=user.id,
-                username=user.username,
-                display_name=user.display_name,
-                roles=roles,
-                permissions=permissions,
+            user=authenticated_user,
+        )
+
+    async def _authenticated_user(self, user: User) -> AuthenticatedUser:
+        authorization = await self.repository.get_authorization(user.id)
+        roles = sorted(authorization.roles)
+        permissions = sorted(
+            self.policy.token_permissions(
+                roles=authorization.roles,
+                permissions=authorization.permissions,
             ),
+        )
+        return AuthenticatedUser(
+            id=user.id,
+            username=user.username,
+            display_name=user.display_name,
+            roles=roles,
+            permissions=permissions,
         )
 
     async def _record_login_failure(
@@ -235,3 +259,15 @@ class AuthService:
             reason=reason,
         )
         await self.repository.commit()
+
+
+def _user_id_from_access_token_payload(payload: dict[str, object]) -> int:
+    subject = payload.get("sub")
+    if not isinstance(subject, str):
+        raise ValueError("missing subject")
+
+    user_id = int(subject)
+    if user_id <= 0:
+        raise ValueError("invalid subject")
+
+    return user_id

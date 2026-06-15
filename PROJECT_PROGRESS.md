@@ -65,21 +65,25 @@
 - 扩展前端 API client，支持后台认证 POST 请求。
 - 使用 Playwright CLI + Microsoft Edge 检查 `/admin` 未登录重定向到 `/admin/login`，并保存本地截图到已忽略的 `output/playwright`。
 - 更新 `.gitignore`，忽略 `auth.txt`、`.playwright-cli/` 和 `output/` 本地产物。
+- 更新 `PROJECT_PLAN.md`，明确文章和页面正文支持 Markdown 与 LaTeX 公式语法，渲染结果必须统一做 HTML sanitize。
+- 更新根目录 `README.md` 和后端 `README.md`，记录 Windows 本机 MySQL 可用于临时库真实迁移、初始管理员和认证流程验证；`auth.txt` 仅作本地机密文件使用，禁止提交。
+- 新增后台当前用户接口 `GET /api/admin/auth/me` 和可复用 Bearer Token 鉴权依赖。
+- 认证服务新增 Access Token 解析与当前用户加载能力，当前用户响应复用角色和权限聚合逻辑。
+- 前端登录态启动时会调用当前用户接口校验本地 Access Token，失效 session 会自动清理。
 
 ### 进行中
 
-- M1 认证与后台框架正在推进，后台登录闭环第一版已覆盖后端接口、初始管理员创建命令和前端登录页。
+- M1 认证与后台框架正在推进，后台登录和当前用户校验闭环已覆盖后端接口、初始管理员创建命令和前端登录态保护。
 
 ### 阻塞与风险
 
 - 待确认真实域名、服务器环境、证书申请方式和对象存储选择。
 - 真实 MySQL 验证已在临时库完成；生产数据库迁移仍需在正式环境备份后执行。
 - 当前前端会话保存在 `localStorage`，后续如改为 Cookie 会话，需要补充 CSRF 防护策略。
-- 后台接口已具备登录、刷新和退出，仍需补充当前用户接口、Bearer Token 鉴权依赖和权限校验依赖。
+- 后台接口已具备登录、当前用户、刷新和退出，仍需补充权限校验依赖和后台菜单权限状态。
 
 ### 下一步
 
-- 补充后台当前用户接口和 Bearer Token 鉴权依赖。
 - 接入菜单权限状态和更细的后台路由保护。
 - 继续补充认证审计日志查询、基础限流和文章、文件、设置的最小 CRUD。
 
@@ -119,3 +123,11 @@
 - 前端登录页小步已运行 `npm.cmd run build`，通过。
 - 已使用 Playwright CLI 打开 `http://127.0.0.1:15173/admin` 并确认重定向到 `/admin/login`。
 - 已通过截图检查后台登录页视觉状态，未发现空白或明显布局错位。
+- 文档补充后已运行 `git diff --check`，未发现空白或行尾问题。
+- 当前用户接口小步新增后端认证服务测试，覆盖有效 Access Token 返回当前用户、无效 Access Token 拒绝。
+- 当前用户接口小步新增健康路由测试，覆盖未携带 Bearer Token 访问 `/api/admin/auth/me` 返回 401。
+- 当前用户接口小步已运行 `uv run ruff check .`，通过。
+- 当前用户接口小步已运行 `uv run pytest`，认证服务、初始管理员创建和健康检查共 12 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 当前用户接口小步已运行 `npm.cmd run lint`，通过。
+- 当前用户接口小步已运行 `npm.cmd run build`，通过。
+- 当前用户接口小步已运行 `git diff --check`，未发现空白或行尾问题。

@@ -27,3 +27,11 @@ def test_admin_auth_login_endpoint_is_mounted() -> None:
     response = client.post("/api/admin/auth/login", json={})
 
     assert response.status_code == 422
+
+
+def test_admin_auth_me_requires_bearer_token() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/admin/auth/me")
+
+    assert response.status_code == 401

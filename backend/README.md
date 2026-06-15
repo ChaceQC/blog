@@ -26,8 +26,9 @@ uv run python -m app.cli --help
 - `POST /login`：校验用户名和密码，签发短期 Access Token 与 Refresh Token。
 - `POST /refresh`：校验并轮换 Refresh Token，重新签发令牌。
 - `POST /logout`：吊销当前 Refresh Token。
+- `GET /me`：通过 `Authorization: Bearer <access_token>` 校验当前后台用户，返回用户、角色和权限信息。
 
-密码使用 Argon2id 校验，Refresh Token 只存储 SHA-256 哈希。Token 有效期通过 `BLOG_ACCESS_TOKEN_EXPIRE_MINUTES` 和 `BLOG_REFRESH_TOKEN_EXPIRE_DAYS` 配置。
+密码使用 Argon2id 校验，Access Token 使用 Bearer Token 方式保护后台接口，Refresh Token 只存储 SHA-256 哈希。Token 有效期通过 `BLOG_ACCESS_TOKEN_EXPIRE_MINUTES` 和 `BLOG_REFRESH_TOKEN_EXPIRE_DAYS` 配置。
 
 MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，依赖文件中已显式保留该运行依赖。
 
@@ -50,6 +51,19 @@ uv run python -m app.cli create-admin --username admin --email admin@example.com
 $env:PYTHONUTF8='1'
 uv run alembic upgrade head
 ```
+
+## 本地 MySQL 验证
+
+Windows 本机安装 MySQL 8 时，可以使用临时库验证真实迁移和认证流程。根目录 `auth.txt` 可保存本机 MySQL root 凭据供本地验证使用，该文件属于机密文件，已被 `.gitignore` 忽略，禁止提交。
+
+验证建议只操作临时库，例如 `blog_codex_migration_test`：
+
+1. 创建或重建临时库。
+2. 临时设置 `BLOG_DATABASE_URL` 指向该临时库。
+3. 运行 `uv run alembic upgrade head` 验证真实建表。
+4. 运行 `uv run python -m app.cli create-admin ...` 验证初始管理员创建。
+5. 通过服务层或接口验证登录、当前用户、刷新令牌和退出。
+6. 运行 `uv run alembic downgrade base` 后删除临时库。
 
 ## 部署目标
 

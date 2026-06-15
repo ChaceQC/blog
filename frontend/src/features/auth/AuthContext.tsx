@@ -1,11 +1,12 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
   useState,
   type PropsWithChildren,
 } from 'react'
 
-import { loginAdmin, logoutAdmin } from './api.ts'
+import { getCurrentAdminUser, loginAdmin, logoutAdmin } from './api.ts'
 import {
   clearAuthSession,
   createAuthSession,
@@ -16,21 +17,59 @@ import {
 import { AuthContext } from './authContext.ts'
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [session, setSession] = useState<AuthSession | null>(() =>
-    readAuthSession(),
-  )
+  const [initialSession] = useState<AuthSession | null>(() => readAuthSession())
+  const [session, setSession] = useState<AuthSession | null>(initialSession)
+  const [isChecking, setIsChecking] = useState(initialSession !== null)
+
+  useEffect(() => {
+    if (initialSession === null) {
+      return
+    }
+
+    let isMounted = true
+
+    getCurrentAdminUser(initialSession.accessToken)
+      .then((user) => {
+        if (!isMounted) {
+          return
+        }
+
+        const nextSession = { ...initialSession, user }
+        saveAuthSession(nextSession)
+        setSession(nextSession)
+      })
+      .catch(() => {
+        if (!isMounted) {
+          return
+        }
+
+        clearAuthSession()
+        setSession(null)
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsChecking(false)
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [initialSession])
 
   const login = useCallback(async (username: string, password: string) => {
     const tokens = await loginAdmin({ username, password })
     const nextSession = createAuthSession(tokens)
     saveAuthSession(nextSession)
     setSession(nextSession)
+    setIsChecking(false)
   }, [])
 
   const logout = useCallback(async () => {
     const currentSession = session
     clearAuthSession()
     setSession(null)
+    setIsChecking(false)
     if (currentSession !== null) {
       try {
         await logoutAdmin(currentSession.refreshToken)
@@ -43,10 +82,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const value = useMemo(
     () => ({
       session,
+      isChecking,
       login,
       logout,
     }),
-    [login, logout, session],
+    [isChecking, login, logout, session],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

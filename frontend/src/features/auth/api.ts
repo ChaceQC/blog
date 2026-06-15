@@ -1,9 +1,13 @@
-import { apiPost } from '../../api/client.ts'
+import { apiGet, apiPost } from '../../api/client.ts'
 
-import type { LoginPayload, TokenPair } from './types.ts'
+import type { AuthUser, LoginPayload, TokenPair } from './types.ts'
 
 export function loginAdmin(payload: LoginPayload): Promise<TokenPair> {
   return apiPost<LoginPayload, TokenPair>('/admin/auth/login', payload)
+}
+
+export function getCurrentAdminUser(accessToken: string): Promise<AuthUser> {
+  return apiGet<AuthUser>('/admin/auth/me', { accessToken })
 }
 
 export function logoutAdmin(refreshToken: string): Promise<{ status: 'ok' }> {
