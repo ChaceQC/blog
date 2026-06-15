@@ -1029,13 +1029,14 @@ v1 可以暂缓：
 
 - 每次完成可验证改动后必须 commit。
 - 每次 commit 后必须 push 到 GitHub。
-- commit message 使用清晰的中文或英文短句，建议格式：
+- commit message 后续统一使用中文说明；可以保留 `docs:`、`feat:`、`fix:` 等英文类型前缀，但冒号后的说明必须为中文。
+- 建议格式：
 
 ```text
-docs: update version and git workflow
-feat: add post publishing service
-fix: validate private file access
-refactor: split file storage provider
+docs: 更新版本与 Git 工作流
+feat: 增加文章发布服务
+fix: 校验私有文件访问权限
+refactor: 拆分文件存储提供者
 ```
 
 - 文档、代码、测试、部署配置的改动都应进入 Git 管理。

@@ -18,6 +18,7 @@
 - 已将本地默认分支调整为 `main`。
 - 已创建 GitHub 私有仓库 `ChaceQC/blog`，并配置 `origin` remote。
 - 已创建初始提交并推送 `main` 分支到 GitHub。
+- 更新提交说明规范：后续 commit message 统一使用中文说明，可保留英文类型前缀。
 
 ### 进行中
 

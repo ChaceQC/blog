@@ -30,7 +30,8 @@
 - 提交前必须检查 `git status`，避免混入无关改动。
 - 必须维护 `.gitignore`，禁止提交 `.env`、密钥、证书私钥、依赖目录、构建产物、上传文件和备份文件。
 - 应提交依赖锁文件，例如后端 `uv.lock`、前端 `package-lock.json`。
-- commit message 应简短清晰，建议使用 `docs:`、`feat:`、`fix:`、`refactor:`、`test:`、`chore:` 前缀。
+- commit message 后续统一使用中文说明。
+- 可以保留 `docs:`、`feat:`、`fix:`、`refactor:`、`test:`、`chore:` 等英文类型前缀，但冒号后的说明必须为中文。
 - 若无法创建 GitHub 仓库、commit 或 push，必须写入 `PROJECT_PROGRESS.md`，并在最终说明中说明原因。
 
 ## 4. 项目进度记录
