@@ -55,11 +55,30 @@ class FakeContentRepository:
     async def list_posts(self, *, limit: int, offset: int) -> list[FakePost]:
         return self.posts[offset : offset + limit]
 
+    async def list_public_posts(self, *, limit: int, offset: int) -> list[FakePost]:
+        return [
+            post
+            for post in self.posts
+            if post.status == "published" and post.visibility == "public"
+        ][offset : offset + limit]
+
     async def get_post(self, post_id: int) -> FakePost | None:
         return next((post for post in self.posts if post.id == post_id), None)
 
     async def get_post_by_slug(self, slug: str) -> FakePost | None:
         return next((post for post in self.posts if post.slug == slug), None)
+
+    async def get_public_post_by_slug(self, slug: str) -> FakePost | None:
+        return next(
+            (
+                post
+                for post in self.posts
+                if post.slug == slug
+                and post.status == "published"
+                and post.visibility == "public"
+            ),
+            None,
+        )
 
     async def create_post(self, **payload: object) -> FakePost:
         post = FakePost(id=len(self.posts) + 1, **payload)
@@ -156,3 +175,41 @@ async def test_update_page_rerenders_content() -> None:
 
     assert updated.content_html == "<p>新内容 &lt;b&gt;</p>"
     assert repository.commit_count == 2
+
+
+@pytest.mark.anyio
+async def test_list_public_posts_only_returns_published_public_posts() -> None:
+    repository = FakeContentRepository()
+    service = ContentService(repository=repository)
+    await service.create_post(
+        CreatePostCommand(
+            title="公开文章",
+            slug="public-post",
+            summary=None,
+            content_md="正文",
+            author_id=1,
+            status="published",
+            visibility="public",
+            seo_title=None,
+            seo_description=None,
+        ),
+    )
+    await service.create_post(
+        CreatePostCommand(
+            title="隐藏文章",
+            slug="hidden-post",
+            summary=None,
+            content_md="正文",
+            author_id=1,
+            status="published",
+            visibility="hidden",
+            seo_title=None,
+            seo_description=None,
+        ),
+    )
+
+    posts = await service.list_public_posts(limit=10, offset=0)
+    post = await service.get_public_post_by_slug("public-post")
+
+    assert [item.slug for item in posts] == ["public-post"]
+    assert post.title == "公开文章"

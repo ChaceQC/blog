@@ -1,12 +1,25 @@
 import { ArrowRight, GitBranch, Mail, Rss, Send } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
-import { samplePosts } from '../../features/posts/samplePosts.ts'
+import { listPublicPosts } from '../../features/posts/api.ts'
+import {
+  formatPostDate,
+  formatRelativePostDate,
+} from '../../features/posts/postMeta.ts'
 import { siteSettings } from '../../features/settings/siteSettings.ts'
 import { sampleSites } from '../../features/sites/sampleSites.ts'
 
 export function HomePage() {
-  const featuredPosts = samplePosts.slice(0, 5)
+  const {
+    data: postsData,
+    isError: isPostsError,
+    isLoading: isPostsLoading,
+  } = useQuery({
+    queryKey: ['public-posts', 'home'],
+    queryFn: () => listPublicPosts({ limit: 5 }),
+  })
+  const featuredPosts = postsData?.items ?? []
   const featuredSites = sampleSites.slice(0, 3)
   const socialIconMap = {
     GitHub: GitBranch,
@@ -61,20 +74,33 @@ export function HomePage() {
           </div>
           <div className="recent-list">
             {featuredPosts.map((post, index) => (
-              <Link className="recent-item" to="/posts" key={post.id}>
+              <Link
+                className="recent-item"
+                to={`/posts/${post.slug}`}
+                key={post.id}
+              >
                 <span className="recent-item__index">
                   {String(index + 1).padStart(2, '0')}
                 </span>
                 <span className="recent-item__body">
                   <span className="recent-item__meta">
-                    {post.category} · {post.publishedAt}
+                    文章 · {formatPostDate(post.published_at)}
                   </span>
                   <strong>{post.title}</strong>
-                  <small>{post.status === 'draft' ? '草稿' : '文章 · 技术'}</small>
+                  <small>{post.summary ?? post.seo_description ?? '暂无摘要'}</small>
                 </span>
-                <time>{post.readingMinutes + index * 7} 天前</time>
+                <time>{formatRelativePostDate(post.published_at)}</time>
               </Link>
             ))}
+            {isPostsLoading ? (
+              <p className="empty-state">正在整理近期文章。</p>
+            ) : null}
+            {isPostsError ? (
+              <p className="empty-state">文章服务暂时不可用。</p>
+            ) : null}
+            {!isPostsLoading && !isPostsError && featuredPosts.length === 0 ? (
+              <p className="empty-state">还没有公开发布的文章。</p>
+            ) : null}
           </div>
           <Link className="timeline-link" to="/posts">
             翻阅完整时间线

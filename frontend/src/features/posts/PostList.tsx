@@ -2,15 +2,11 @@ import { Clock3 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { StatusBadge } from '../../components/StatusBadge.tsx'
-import type { PostSummary } from './samplePosts.ts'
-
-const statusLabels = {
-  draft: '草稿',
-  published: '已发布',
-} satisfies Record<PostSummary['status'], string>
+import { formatPostDate, getReadingMinutes } from './postMeta.ts'
+import type { PublicPostItem } from './types.ts'
 
 type PostListProps = {
-  posts: PostSummary[]
+  posts: PublicPostItem[]
 }
 
 export function PostList({ posts }: PostListProps) {
@@ -23,18 +19,18 @@ export function PostList({ posts }: PostListProps) {
           </span>
           <div className="post-row__body">
             <div className="post-row__meta">
-              <StatusBadge tone={post.status}>{statusLabels[post.status]}</StatusBadge>
-              <span>{post.category}</span>
+              <StatusBadge tone="published">已发布</StatusBadge>
+              <span>文章</span>
             </div>
             <h2>
-              <Link to="/posts">{post.title}</Link>
+              <Link to={`/posts/${post.slug}`}>{post.title}</Link>
             </h2>
-            <p>{post.summary}</p>
+            <p>{post.summary ?? post.seo_description ?? '这篇文章暂时没有摘要。'}</p>
             <div className="post-row__footer">
-              <span>{post.publishedAt}</span>
+              <span>{formatPostDate(post.published_at)}</span>
               <span>
                 <Clock3 size={16} strokeWidth={1.8} aria-hidden="true" />
-                {post.readingMinutes} 分钟
+                {getReadingMinutes(post.word_count)} 分钟
               </span>
             </div>
           </div>

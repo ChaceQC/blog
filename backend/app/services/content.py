@@ -18,9 +18,13 @@ class ContentSlugExistsError(Exception):
 class ContentRepositoryProtocol(Protocol):
     async def list_posts(self, *, limit: int, offset: int) -> Sequence[Post]: ...
 
+    async def list_public_posts(self, *, limit: int, offset: int) -> Sequence[Post]: ...
+
     async def get_post(self, post_id: int) -> Post | None: ...
 
     async def get_post_by_slug(self, slug: str) -> Post | None: ...
+
+    async def get_public_post_by_slug(self, slug: str) -> Post | None: ...
 
     async def create_post(
         self,
@@ -101,8 +105,17 @@ class ContentService:
     async def list_posts(self, *, limit: int, offset: int) -> Sequence[Post]:
         return await self.repository.list_posts(limit=limit, offset=offset)
 
+    async def list_public_posts(self, *, limit: int, offset: int) -> Sequence[Post]:
+        return await self.repository.list_public_posts(limit=limit, offset=offset)
+
     async def get_post(self, post_id: int) -> Post:
         post = await self.repository.get_post(post_id)
+        if post is None:
+            raise ContentNotFoundError("post not found")
+        return post
+
+    async def get_public_post_by_slug(self, slug: str) -> Post:
+        post = await self.repository.get_public_post_by_slug(slug)
         if post is None:
             raise ContentNotFoundError("post not found")
         return post

@@ -65,6 +65,30 @@ class AdminPostListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class PublicPostItem(BaseModel):
+    id: int
+    title: str
+    slug: str
+    summary: str | None
+    word_count: int
+    seo_title: str | None
+    seo_description: str | None
+    published_at: datetime | None
+    updated_at: datetime | None
+
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+
+class PublicPostDetail(PublicPostItem):
+    content_html: str
+
+
+class PublicPostListResponse(BaseModel):
+    items: list[PublicPostItem]
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class PageCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=1, max_length=220, pattern=SLUG_PATTERN)

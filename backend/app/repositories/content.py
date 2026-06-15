@@ -20,6 +20,20 @@ class ContentRepository:
         )
         return result.scalars().all()
 
+    async def list_public_posts(self, *, limit: int, offset: int) -> Sequence[Post]:
+        result = await self.session.execute(
+            select(Post)
+            .where(
+                Post.deleted_at.is_(None),
+                Post.status == "published",
+                Post.visibility == "public",
+            )
+            .order_by(Post.published_at.desc(), Post.id.desc())
+            .limit(limit)
+            .offset(offset),
+        )
+        return result.scalars().all()
+
     async def get_post(self, post_id: int) -> Post | None:
         result = await self.session.execute(
             select(Post).where(Post.id == post_id, Post.deleted_at.is_(None)),
@@ -29,6 +43,17 @@ class ContentRepository:
     async def get_post_by_slug(self, slug: str) -> Post | None:
         result = await self.session.execute(
             select(Post).where(Post.slug == slug, Post.deleted_at.is_(None)),
+        )
+        return result.scalar_one_or_none()
+
+    async def get_public_post_by_slug(self, slug: str) -> Post | None:
+        result = await self.session.execute(
+            select(Post).where(
+                Post.slug == slug,
+                Post.deleted_at.is_(None),
+                Post.status == "published",
+                Post.visibility == "public",
+            ),
         )
         return result.scalar_one_or_none()
 
