@@ -22,19 +22,24 @@
 - 按最新协作要求补充开发环境为 Windows 11，生产部署环境为 Linux Debian。
 - 补充分支与提交节奏：日常开发使用 `dev` 分支，一个完整功能完成后再合并到 `main`，实现过程按可验证小步 commit 并 push。
 - 已创建并切换到本地 `dev` 分支，后续开发在 `dev` 上推进。
+- 初始化 `backend` 后端工程，使用 `uv` 管理 FastAPI 依赖和开发工具。
+- 创建后端 `app` 分层结构：`api`、`core`、`models`、`schemas`、`services`、`repositories`、`providers`、`tasks`。
+- 实现 FastAPI 应用工厂、Trusted Host、CORS、安全配置校验、结构化日志、数据库连接和 `/healthz`、`/readyz` 健康检查。
+- 按计划书拆分用户权限、文章页面、文件、友链、导航站点、系统设置和日志相关 SQLAlchemy 模型。
+- 初始化 Alembic 目录，并将迁移环境接入应用配置与 SQLAlchemy metadata。
 
 ### 进行中
 
-- 正在初始化后端、前端与部署脚手架。
+- 正在初始化前端与部署脚手架。
 
 ### 阻塞与风险
 
 - 待确认真实域名、服务器环境、证书申请方式和对象存储选择。
+- 初始 Alembic 迁移文件尚未创建，后续需要在数据库服务配置完成后补齐并验证迁移。
 
 ### 下一步
 
-- 初始化 `backend` 与 `frontend` 目录。
-- 使用 `uv` 创建 FastAPI 后端工程。
+- 初始化 `frontend` 目录并替换 Vite 默认页面。
 - 使用 `npm` 创建 React + Vite 前端工程。
 - 创建生产化 Docker Compose、Nginx 和 MySQL 内网部署配置。
 
@@ -44,3 +49,5 @@
 - 已验证 GitHub CLI 可通过 `C:\Program Files\GitHub CLI\gh.exe` 执行。
 - 已检查 `.gitignore` 规则，确认 `uv.lock` 和 `package-lock.json` 不被忽略。
 - 已验证 `.env`、`uploads/`、`backups/` 会被 `.gitignore` 忽略。
+- 已运行 `uv run ruff check .`，通过。
+- 已运行 `uv run pytest`，2 个健康检查测试通过；存在 FastAPI TestClient 依赖的上游弃用警告。
