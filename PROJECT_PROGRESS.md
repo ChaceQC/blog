@@ -29,12 +29,15 @@
 - 实现 FastAPI 应用工厂、Trusted Host、CORS、安全配置校验、结构化日志、数据库连接和 `/healthz`、`/readyz` 健康检查。
 - 按计划书拆分用户权限、文章页面、文件、友链、导航站点、系统设置和日志相关 SQLAlchemy 模型。
 - 初始化 Alembic 目录，并将迁移环境接入应用配置与 SQLAlchemy metadata。
+- 初始化 `frontend` 前端工程，使用 React + TypeScript + Vite + npm。
+- 创建前台路由骨架：首页、文章列表、友链、站点导航。
+- 创建后台路由骨架：后台布局、侧边栏、内容状态、最近文章和文件队列预览。
+- 清理 Vite 默认示例页面和默认素材，替换为中文 README、中文界面文案和项目 favicon。
+- 前端文件示例已按规则拆分为英文 `objectKey` 和中文 `displayName`。
 
 ### 进行中
 
-- 正在初始化前端与部署脚手架。
-- 正在将前端界面文案从模板英文改为中文。
-- 正在调整前端文件示例，确保英文存储路径与中文展示名分离。
+- 正在初始化部署脚手架。
 
 ### 阻塞与风险
 
@@ -43,9 +46,8 @@
 
 ### 下一步
 
-- 初始化 `frontend` 目录并替换 Vite 默认页面。
-- 使用 `npm` 创建 React + Vite 前端工程。
 - 创建生产化 Docker Compose、Nginx 和 MySQL 内网部署配置。
+- 补充初始 Alembic 迁移文件并验证迁移生成。
 
 ### 验证
 
@@ -55,3 +57,6 @@
 - 已验证 `.env`、`uploads/`、`backups/` 会被 `.gitignore` 忽略。
 - 已运行 `uv run ruff check .`，通过。
 - 已运行 `uv run pytest`，2 个健康检查测试通过；存在 FastAPI TestClient 依赖的上游弃用警告。
+- 已运行 `npm run lint`，通过。
+- 已运行 `npm run build`，通过。
+- 已通过浏览器检查 `http://127.0.0.1:5173/admin`，确认中文界面、`zh-CN` 页面语言、中文展示名和英文文件路径展示正常。
