@@ -52,7 +52,7 @@ export function AdminLoginPage() {
     <main className="login-shell">
       <section className="login-panel">
         <div className="admin-heading">
-          <span>后台登录</span>
+          <span>ADMIN</span>
           <h1>进入管理台</h1>
         </div>
 

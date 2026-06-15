@@ -4,6 +4,12 @@
 
 ### 已完成
 
+- 前台 UI 按 Innei/Yohaku 风格重做，新增 `@yohaku/design-system` 设计契约依赖，并在 `frontend/src/index.css` 中镜像 Yohaku token。
+- 重做公开首页 `/`：纸面背景、雨线氛围、头像身份区、引文统计、圆形社交入口、Recent Writing 时间线、碎念/来信双栏和底部浮动导航。
+- 重做公开内页 `/posts`、`/links`、`/sites`：统一大留白标题区、serif 中文标题、低对比说明文字、细分隔线列表和 Yohaku 状态标签。
+- 同步调整 `/admin/login` 和后台工作台视觉：使用同一套中性色、梅色 accent、细边框、轻玻璃和 serif 标题层级。
+- 将 `AuthProvider` 从全站根节点移动到后台路由分支，避免公开页面在后端未启动时请求后台加密会话接口。
+- 更新 `frontend/index.html` 页面标题为“静默书房”。
 - 创建 `PROJECT_PLAN.md`，完成个人博客系统项目计划书。
 - 将架构升级为公网部署优先设计，补充 HTTPS、Nginx、内网隔离、备份、监控和安全基线。
 - 补充面向对象、设计模式、解耦、单文件体量和重构要求。
@@ -163,3 +169,6 @@
 - 加密会话改为数据库存储并移除旧响应形态后已运行 `npm.cmd run lint`，通过。
 - 加密会话改为数据库存储并移除旧响应形态后已运行 `npm.cmd run build`，通过。
 - 加密会话改为数据库存储并移除旧响应形态后已运行 `git diff --check`，未发现空白或行尾问题。
+- Yohaku UI 重做后已运行 `npm.cmd run lint`，通过。
+- Yohaku UI 重做后已运行 `npm.cmd run build`，通过。
+- 已使用 Playwright CLI + Microsoft Edge 对 `http://127.0.0.1:15173/`、`/posts`、`/links`、`/sites`、`/admin/login` 截图检查，截图保存到已忽略的 `output/playwright`。

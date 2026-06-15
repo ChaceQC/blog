@@ -16,7 +16,7 @@ export function SiteGrid({ sites }: SiteGridProps) {
             <small>{site.group}</small>
           </span>
           <p>{site.description}</p>
-          <ArrowUpRight size={18} strokeWidth={1.8} aria-hidden="true" />
+          <ArrowUpRight size={17} strokeWidth={1.8} aria-hidden="true" />
         </a>
       ))}
     </div>

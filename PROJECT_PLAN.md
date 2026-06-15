@@ -145,7 +145,7 @@ frontend/
 - 路由：React Router。
 - 请求缓存：TanStack Query。
 - 表单：React Hook Form + Zod。
-- UI：后台可用 Ant Design 或 shadcn/ui；前台保持自定义轻量样式。
+- UI：前台以 Innei/Yohaku 设计系统为视觉基线，使用 `@yohaku/design-system` 的 token 契约并在当前 Vite CSS 中镜像运行时变量；后台沿用同一套中性色、细边框和低对比层级，后续如需密集表单可再评估 Ant Design 或 shadcn/ui。
 - Markdown 编辑器：`@uiw/react-md-editor` 或 `md-editor-rt`。
 - Markdown/LaTeX 渲染：文章正文支持行内公式 `$...$` 和块级公式 `$$...$$`，可选 `remark-math` + `rehype-katex` 或同类可替换实现。
 

@@ -1,5 +1,6 @@
-import { createBrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, Outlet } from 'react-router-dom'
 
+import { AuthProvider } from '../features/auth/AuthContext.tsx'
 import { AdminDashboardPage } from '../routes/admin/AdminDashboardPage.tsx'
 import { AdminLayout } from '../routes/admin/AdminLayout.tsx'
 import { AdminLoginPage } from '../routes/admin/AdminLoginPage.tsx'
@@ -24,40 +25,49 @@ export const router = createBrowserRouter([
     ],
   },
   {
-    path: '/admin/login',
-    element: <AdminLoginPage />,
-  },
-  {
-    element: <RequireAdminAuth />,
+    element: (
+      <AuthProvider>
+        <Outlet />
+      </AuthProvider>
+    ),
     children: [
       {
-        path: '/admin',
-        element: <AdminLayout />,
+        path: '/admin/login',
+        element: <AdminLoginPage />,
+      },
+      {
+        element: <RequireAdminAuth />,
         children: [
-          { index: true, element: <AdminDashboardPage /> },
           {
-            path: 'files',
-            element: (
-              <RequireAdminPermission permissions={adminAccess.files}>
-                <AdminDashboardPage />
-              </RequireAdminPermission>
-            ),
-          },
-          {
-            path: 'links',
-            element: (
-              <RequireAdminPermission permissions={adminAccess.links}>
-                <AdminDashboardPage />
-              </RequireAdminPermission>
-            ),
-          },
-          {
-            path: 'settings',
-            element: (
-              <RequireAdminPermission permissions={adminAccess.settings}>
-                <AdminDashboardPage />
-              </RequireAdminPermission>
-            ),
+            path: '/admin',
+            element: <AdminLayout />,
+            children: [
+              { index: true, element: <AdminDashboardPage /> },
+              {
+                path: 'files',
+                element: (
+                  <RequireAdminPermission permissions={adminAccess.files}>
+                    <AdminDashboardPage />
+                  </RequireAdminPermission>
+                ),
+              },
+              {
+                path: 'links',
+                element: (
+                  <RequireAdminPermission permissions={adminAccess.links}>
+                    <AdminDashboardPage />
+                  </RequireAdminPermission>
+                ),
+              },
+              {
+                path: 'settings',
+                element: (
+                  <RequireAdminPermission permissions={adminAccess.settings}>
+                    <AdminDashboardPage />
+                  </RequireAdminPermission>
+                ),
+              },
+            ],
           },
         ],
       },

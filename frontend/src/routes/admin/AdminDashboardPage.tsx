@@ -19,7 +19,7 @@ export function AdminDashboardPage() {
   return (
     <div className="admin-flow">
       <section className="admin-heading">
-        <span>后台工作台</span>
+        <span>DASHBOARD</span>
         <h1>内容状态</h1>
       </section>
 

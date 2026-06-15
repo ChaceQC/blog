@@ -9,7 +9,7 @@
 ## 技术栈
 
 - 后端：Python 3.12、FastAPI、SQLAlchemy 2、Alembic、uv。
-- 前端：React、TypeScript、Vite、npm。
+- 前端：React、TypeScript、Vite、npm、Yohaku 设计系统 token。
 - 数据库：MySQL 8。
 - 缓存：Redis，可选启用。
 - 部署：Linux Debian、Docker Compose、Nginx、Let's Encrypt。
@@ -51,6 +51,8 @@ cd frontend
 npm install
 npm run dev
 ```
+
+前台 UI 以 Innei/Yohaku 的个人站视觉语言为基线：纸面背景、Pure 中性色、梅色 accent、底部浮动导航、serif 标题、细分隔线列表和低对比内容模块。`@yohaku/design-system` 作为设计契约依赖，运行时样式在 `frontend/src/index.css` 中镜像 Yohaku token，避免当前非 Tailwind 构建链直接处理 `@theme` 规则产生警告。
 
 ## 验证命令
 

@@ -1,4 +1,5 @@
 import { Clock3 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 import { StatusBadge } from '../../components/StatusBadge.tsx'
 import type { PostSummary } from './samplePosts.ts'
@@ -15,15 +16,19 @@ type PostListProps = {
 export function PostList({ posts }: PostListProps) {
   return (
     <div className="post-list">
-      {posts.map((post) => (
+      {posts.map((post, index) => (
         <article className="post-row" key={post.id}>
-          <img className="post-row__image" src={post.coverUrl} alt="" />
+          <span className="post-row__index">
+            {String(index + 1).padStart(2, '0')}
+          </span>
           <div className="post-row__body">
             <div className="post-row__meta">
               <StatusBadge tone={post.status}>{statusLabels[post.status]}</StatusBadge>
               <span>{post.category}</span>
             </div>
-            <h2>{post.title}</h2>
+            <h2>
+              <Link to="/posts">{post.title}</Link>
+            </h2>
             <p>{post.summary}</p>
             <div className="post-row__footer">
               <span>{post.publishedAt}</span>
