@@ -9,23 +9,23 @@ export type SiteItem = {
 export const sampleSites: SiteItem[] = [
   {
     id: 1,
-    title: '状态页',
-    url: 'https://status.example.com',
-    description: '服务健康状态和可用性检查。',
+    title: '后端健康检查',
+    url: 'http://127.0.0.1:18080/healthz',
+    description: '本地开发时检查 API 进程是否可用。',
     group: '自托管',
   },
   {
     id: 2,
-    title: '文档站',
-    url: 'https://docs.example.com',
-    description: '部署记录、恢复流程和运维手册。',
-    group: '自托管',
+    title: 'GitHub 仓库',
+    url: 'https://github.com/ChaceQC/blog',
+    description: '源码、提交记录和后续发布入口。',
+    group: '项目',
   },
   {
     id: 3,
-    title: '写作队列',
-    url: 'https://notes.example.com',
-    description: '等待整理和发布的文章想法。',
+    title: '后台文章',
+    url: '/admin/posts',
+    description: '进入文章草稿、发布和预览工作台。',
     group: '工作流',
   },
 ]

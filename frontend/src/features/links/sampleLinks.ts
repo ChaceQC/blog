@@ -10,18 +10,18 @@ export type FriendLink = {
 export const sampleLinks: FriendLink[] = [
   {
     id: 1,
-    name: '设计札记',
-    url: 'https://example.com',
-    description: '界面写作、系统思考和克制的软件实践。',
-    group: '朋友',
+    name: 'ChaceQC',
+    url: 'https://github.com/ChaceQC',
+    description: '项目源码、自动化实验和长期维护记录。',
+    group: '作者',
     status: 'healthy',
   },
   {
     id: 2,
-    name: '实验日志',
-    url: 'https://example.org',
-    description: '围绕工具、部署和自动化的小型实验记录。',
-    group: '项目',
+    name: '静默书房 RSS',
+    url: '/feed',
+    description: '等待 RSS 接口接入后的公开订阅入口。',
+    group: '站点',
     status: 'pending',
   },
 ]

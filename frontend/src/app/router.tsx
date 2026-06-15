@@ -2,10 +2,13 @@ import { createBrowserRouter, Outlet } from 'react-router-dom'
 
 import { AuthProvider } from '../features/auth/AuthContext.tsx'
 import { AdminDashboardPage } from '../routes/admin/AdminDashboardPage.tsx'
+import { AdminFilesPage } from '../routes/admin/AdminFilesPage.tsx'
 import { AdminLayout } from '../routes/admin/AdminLayout.tsx'
+import { AdminLinksPage } from '../routes/admin/AdminLinksPage.tsx'
 import { AdminLoginPage } from '../routes/admin/AdminLoginPage.tsx'
 import { AdminPagesPage } from '../routes/admin/AdminPagesPage.tsx'
 import { AdminPostsPage } from '../routes/admin/AdminPostsPage.tsx'
+import { AdminSettingsPage } from '../routes/admin/AdminSettingsPage.tsx'
 import { adminAccess } from '../routes/admin/adminAccess.ts'
 import { RequireAdminAuth } from '../routes/admin/RequireAdminAuth.tsx'
 import { RequireAdminPermission } from '../routes/admin/RequireAdminPermission.tsx'
@@ -67,7 +70,7 @@ export const router = createBrowserRouter([
                 path: 'files',
                 element: (
                   <RequireAdminPermission permissions={adminAccess.files}>
-                    <AdminDashboardPage />
+                    <AdminFilesPage />
                   </RequireAdminPermission>
                 ),
               },
@@ -75,7 +78,7 @@ export const router = createBrowserRouter([
                 path: 'links',
                 element: (
                   <RequireAdminPermission permissions={adminAccess.links}>
-                    <AdminDashboardPage />
+                    <AdminLinksPage />
                   </RequireAdminPermission>
                 ),
               },
@@ -83,7 +86,7 @@ export const router = createBrowserRouter([
                 path: 'settings',
                 element: (
                   <RequireAdminPermission permissions={adminAccess.settings}>
-                    <AdminDashboardPage />
+                    <AdminSettingsPage />
                   </RequireAdminPermission>
                 ),
               },

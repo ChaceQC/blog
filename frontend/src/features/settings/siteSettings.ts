@@ -12,6 +12,6 @@ export const siteSettings = {
   socialLinks: [
     { label: 'GitHub', url: 'https://github.com/ChaceQC' },
     { label: 'RSS', url: '/feed' },
-    { label: 'Email', url: 'mailto:hello@example.com' },
+    { label: 'Email', url: 'mailto:ChaceQC@users.noreply.github.com' },
   ],
 }

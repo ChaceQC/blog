@@ -1,21 +1,6 @@
 import { FileImage, UploadCloud } from 'lucide-react'
 
-const pendingFiles = [
-  {
-    id: 1,
-    displayName: '封面书桌.jpg',
-    objectKey: 'uploads/public/2026/06/cover-desk.jpg',
-    type: 'image/jpeg',
-    size: '420 KB',
-  },
-  {
-    id: 2,
-    displayName: '发布记录.pdf',
-    objectKey: 'uploads/private/2026/06/launch-notes.pdf',
-    type: 'application/pdf',
-    size: '1.2 MB',
-  },
-]
+import { sampleFiles } from './sampleFiles.ts'
 
 export function FileQueuePreview() {
   return (
@@ -30,13 +15,13 @@ export function FileQueuePreview() {
         </button>
       </div>
       <div className="file-list">
-        {pendingFiles.map((file) => (
+        {sampleFiles.map((file) => (
           <div className="file-row" key={file.id}>
             <FileImage size={18} strokeWidth={1.8} aria-hidden="true" />
             <span>
               <strong>{file.displayName}</strong>
               <small>
-                {file.type} · {file.size}
+                {file.mimeType} · {file.size}
               </small>
               <small>{file.objectKey}</small>
             </span>
