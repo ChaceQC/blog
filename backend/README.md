@@ -18,6 +18,16 @@ uv run alembic upgrade head --sql
 
 本地端口、数据库连接、CORS 和上传目录都来自 `.env`，不要写死在代码里。
 
+## 后台认证
+
+后台认证接口位于 `/api/admin/auth`：
+
+- `POST /login`：校验用户名和密码，签发短期 Access Token 与 Refresh Token。
+- `POST /refresh`：校验并轮换 Refresh Token，重新签发令牌。
+- `POST /logout`：吊销当前 Refresh Token。
+
+密码使用 Argon2id 校验，Refresh Token 只存储 SHA-256 哈希。Token 有效期通过 `BLOG_ACCESS_TOKEN_EXPIRE_MINUTES` 和 `BLOG_REFRESH_TOKEN_EXPIRE_DAYS` 配置。当前阶段尚未提供初始管理员创建命令，需要在接入真实数据库后补齐。
+
 ## 数据库迁移
 
 迁移文件位于 `migrations/versions`，通过 Alembic 管理。连接真实 MySQL 后，使用以下命令执行迁移：

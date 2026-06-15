@@ -49,20 +49,30 @@
 - 新增初始 Alembic 迁移 `20260615_0001_initial_schema.py`，覆盖用户权限、文章页面、文件管理、友链、站点导航、系统设置和日志相关数据表。
 - 初始迁移已处理 `users.avatar_file_id` 与 `files.uploader_id` 的循环外键，建表后再补加用户头像外键。
 - 更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，标记 M0 脚手架与初始迁移完成，并将下一步调整为 M1 认证与后台框架。
+- 已将初始迁移作为第二个小步提交并推送到 `dev`，确认 `main` 可安全快进后，已用 `--ff-only` 将 `main` 快进到 `dev` 并推送。
+- 新增后端后台认证接口：`POST /api/admin/auth/login`、`POST /api/admin/auth/refresh`、`POST /api/admin/auth/logout`。
+- 新增认证核心工具，支持 Argon2id 密码校验、短期 Access Token 签发、Refresh Token 生成和哈希。
+- 新增认证 Repository、Service 和 Policy 边界，登录成功记录登录日志，Refresh Token 支持存库、轮换和吊销。
+- 新增认证请求/响应 schema，并将后台认证路由接入 `/api/admin`。
+- 新增认证服务测试，覆盖登录成功、密码错误、刷新令牌轮换和退出吊销。
+- 更新 `backend/.env.example` 和 `deploy/env/backend.env.example`，补充 Access Token 与 Refresh Token 有效期配置。
 
 ### 进行中
 
-- M1 认证与后台框架设计准备开始。
+- M1 认证与后台框架正在推进，后端认证接口第一小步已完成。
 
 ### 阻塞与风险
 
 - 待确认真实域名、服务器环境、证书申请方式和对象存储选择。
 - 初始 Alembic 迁移已完成离线 SQL 验证；真实 MySQL 的 `upgrade head` 和回滚验证需要在本地或生产数据库服务启动后执行。
+- 当前尚未提供初始管理员创建命令或种子数据，真实数据库接入后还需要补齐管理员初始化流程。
+- 后台认证接口已完成服务层测试，尚未在真实 MySQL 环境执行端到端登录、刷新和退出验证。
 
 ### 下一步
 
-- 按规则将完成并验证后的 `dev` 分支合并回 `main`。
-- 开始 M1 认证与后台框架设计。
+- 补充初始管理员创建方式。
+- 接入前端后台登录页、登录态保存和权限路由保护。
+- 继续补充认证审计日志查询、基础限流和真实 MySQL 端到端验证。
 
 ### 验证
 
@@ -85,3 +95,7 @@
 - 初始迁移新增后已重新运行 `uv run ruff check .`，通过。
 - 初始迁移新增后已重新运行 `uv run pytest`，2 个健康检查测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 已运行 `git diff --check`，未发现空白或行尾问题。
+- 已确认 `main...dev` 与 `origin/main...origin/dev` 均为 `0 9`，`main` 可安全快进到 `dev`。
+- 已运行 `git merge --ff-only dev`，`main` 快进成功并推送到 `origin/main`。
+- 后端认证第一小步已运行 `uv run ruff check .`，通过。
+- 后端认证第一小步已运行 `uv run pytest`，认证服务和健康检查共 7 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。

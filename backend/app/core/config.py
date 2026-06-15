@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     public_base_url: str
     database_url: str
     secret_key: str
+    access_token_expire_minutes: int = Field(default=15, ge=1, le=1440)
+    refresh_token_expire_days: int = Field(default=14, ge=1, le=90)
 
     allowed_hosts: list[str]
     cors_origins: list[str]

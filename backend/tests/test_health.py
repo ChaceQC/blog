@@ -19,3 +19,11 @@ def test_public_status_endpoint_is_mounted() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "public-api-ready"}
+
+
+def test_admin_auth_login_endpoint_is_mounted() -> None:
+    client = TestClient(app)
+
+    response = client.post("/api/admin/auth/login", json={})
+
+    assert response.status_code == 422
