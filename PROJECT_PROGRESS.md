@@ -34,10 +34,14 @@
 - 创建后台路由骨架：后台布局、侧边栏、内容状态、最近文章和文件队列预览。
 - 清理 Vite 默认示例页面和默认素材，替换为中文 README、中文界面文案和项目 favicon。
 - 前端文件示例已按规则拆分为英文 `objectKey` 和中文 `displayName`。
+- 新增部署骨架：`deploy/docker-compose.yml`、`deploy/docker-compose.prod.yml`、Nginx 镜像模板、环境变量示例和部署说明。
+- 新增 MySQL 备份、恢复和 Let's Encrypt 证书申请/续期脚本。
+- 新增 `.gitattributes`，强制 shell、Compose、Dockerfile 等工程文件使用 LF 行尾，适配 Debian 部署。
+- 修正 `.gitignore`，确保 `deploy/env/*.env` 被忽略但 `deploy/env/*.env.example` 可提交。
 
 ### 进行中
 
-- 正在初始化部署脚手架。
+- M0 脚手架基础已完成，待补充初始 Alembic 迁移文件。
 
 ### 阻塞与风险
 
@@ -46,8 +50,8 @@
 
 ### 下一步
 
-- 创建生产化 Docker Compose、Nginx 和 MySQL 内网部署配置。
 - 补充初始 Alembic 迁移文件并验证迁移生成。
+- 开始 M1 认证与后台框架设计。
 
 ### 验证
 
@@ -60,3 +64,5 @@
 - 已运行 `npm run lint`，通过。
 - 已运行 `npm run build`，通过。
 - 已通过浏览器检查 `http://127.0.0.1:5173/admin`，确认中文界面、`zh-CN` 页面语言、中文展示名和英文文件路径展示正常。
+- 已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config`，配置可展开；确认公网端口只映射到 Nginx。
+- 已使用 `C:\Program Files\Git\bin\bash.exe -n` 检查部署脚本语法，通过。

@@ -1,0 +1,32 @@
+# 部署说明
+
+本目录用于 Linux Debian 生产部署。开发机默认为 Windows 11，生产环境只通过 Nginx 暴露 `80/443`，后端、MySQL、Redis 均保留在 Docker 私有网络内。
+
+## 文件结构
+
+- `docker-compose.yml`：基础服务编排。
+- `docker-compose.prod.yml`：生产端口、重启策略和资源限制覆盖。
+- `nginx/`：Nginx 镜像、主配置和站点模板。
+- `env/*.env.example`：环境变量模板，复制为同名 `.env` 后再修改。
+- `scripts/`：MySQL 备份、恢复和证书续期脚本。
+
+## 首次部署
+
+```bash
+cp deploy/env/backend.env.example deploy/env/backend.env
+cp deploy/env/mysql.env.example deploy/env/mysql.env
+cp deploy/env/nginx.env.example deploy/env/nginx.env
+```
+
+修改真实域名、数据库密码和 `BLOG_SECRET_KEY` 后启动：
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build
+```
+
+## 安全边界
+
+- 公网只开放 Nginx 的 `80/443`。
+- MySQL `3306`、Redis `6379` 和后端 `8000` 不映射到宿主机公网端口。
+- 上传文件真实路径和对象 key 使用英文，中文文件名作为展示字段单独保存。
+- `deploy/env/*.env`、证书和备份文件不得提交到 Git。

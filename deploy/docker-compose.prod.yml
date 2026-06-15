@@ -1,0 +1,15 @@
+services:
+  nginx:
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+
+  backend:
+    restart: unless-stopped
+
+  mysql:
+    restart: unless-stopped
+
+  redis:
+    restart: unless-stopped
