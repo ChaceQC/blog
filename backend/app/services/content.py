@@ -4,7 +4,7 @@ from typing import Any, Protocol
 
 from app.core.auth import utc_now
 from app.models.content import Page, Post
-from app.providers.markdown import SafePlainMarkdownRenderer, count_words
+from app.providers.markdown import MarkdownRenderer, count_words
 
 
 class ContentNotFoundError(Exception):
@@ -91,10 +91,10 @@ class ContentService:
         self,
         *,
         repository: ContentRepositoryProtocol,
-        renderer: SafePlainMarkdownRenderer | None = None,
+        renderer: MarkdownRenderer | None = None,
     ) -> None:
         self.repository = repository
-        self.renderer = renderer or SafePlainMarkdownRenderer()
+        self.renderer = renderer or MarkdownRenderer()
 
     async def list_posts(self, *, limit: int, offset: int) -> Sequence[Post]:
         return await self.repository.list_posts(limit=limit, offset=offset)

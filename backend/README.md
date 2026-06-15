@@ -54,7 +54,7 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 - `POST /api/admin/posts/{id}/publish`：发布文章，需要 `post:publish` 权限和 `X-CSRF-Token`。
 - `GET /api/admin/pages`、`GET /api/admin/pages/{id}`、`POST /api/admin/pages`、`PATCH /api/admin/pages/{id}`：后台页面管理，需要 `page:write` 权限，写操作需要 `X-CSRF-Token`。
 
-创建和更新请求体必须是 `content-v1` 加密信封，解密后再进行 Pydantic 字段校验。`content_html` 由临时安全渲染器生成，只做 HTML 转义和段落包裹；完整 Markdown、LaTeX 和 HTML sanitize 策略仍需在后续文章编辑闭环中替换为正式渲染策略。
+创建和更新请求体必须是 `content-v1` 加密信封，解密后再进行 Pydantic 字段校验。`content_html` 由 `markdown-it-py` 渲染 Markdown，`mdit-py-plugins` 保留行内与块级 LaTeX 公式节点，再由 `bleach` 统一执行 HTML sanitize。当前后端只生成安全 HTML 与公式占位节点，前端展示公式时还需要接入 KaTeX 等渲染样式。
 
 ## 初始管理员
 

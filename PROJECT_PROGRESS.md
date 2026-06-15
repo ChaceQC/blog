@@ -19,6 +19,9 @@
 - 补充内容服务测试和后台内容 API 加密响应测试。
 - 新增 `EncryptedApiRequest`、后端加密请求解密流程和前端请求体加密能力，后台文章与页面创建/更新请求已改为 `content-v1` 加密信封。
 - 补充后台文章创建接口测试，覆盖 CSRF、`content-v1` 请求解密和响应加密路径。
+- 将内容 HTML 生成从临时安全渲染器替换为 `markdown-it-py` + `mdit-py-plugins` + `bleach`：支持 Markdown、行内公式 `$...$`、块级公式 `$$...$$`，并统一执行 HTML sanitize。
+- 新增 `bleach`、`markdown-it-py`、`mdit-py-plugins` 后端运行依赖，并更新 `uv.lock`。
+- 补充 Markdown 渲染 Provider 测试，覆盖基础 Markdown、LaTeX 公式节点、危险 HTML 和危险链接清洗。
 
 ### 进行中
 
@@ -29,19 +32,19 @@
 - 待确认真实域名、服务器环境、证书申请方式和对象存储选择。
 - 当前限流器为单进程内存实现，适合 M1 单进程验证；生产多进程、多实例或横向扩展前，需要替换为 Redis 等共享存储适配器。
 - 应用层加密协商已改为数据库保存短期会话密钥；仍需补充过期会话定时清理和更多审计记录。
-- 当前 `content_html` 使用临时安全渲染器，只做 HTML 转义和段落包裹；尚未完成正式 Markdown/LaTeX 渲染和 sanitize 策略。
+- 当前后端会为 LaTeX 生成安全公式节点，但前台和后台预览尚未接入 KaTeX 等公式展示样式。
 
 ### 下一步
 
 - 完善后台文章和页面前端管理页，调用 `content-v1` 加密请求与响应。
-- 替换临时安全渲染器，接入正式 Markdown/LaTeX 渲染与 HTML sanitize 策略。
+- 为前台和后台预览接入 KaTeX 等公式样式。
 - 继续实现文件和后台设置的最小 CRUD。
 - 补充加密会话过期清理任务，并评估 Redis 限流适配器。
 
 ### 验证
 
 - 已运行 `uv run ruff check .`，通过。
-- 已运行 `uv run pytest`，35 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 已运行 `uv run pytest`，38 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 已运行 `uv run alembic upgrade head --sql`，迁移升级 SQL 可生成。
 - 已运行 `npm.cmd run lint`，通过。
 - 已运行 `npm.cmd run build`，通过。
