@@ -34,6 +34,9 @@ class FakeContentService:
                 word_count=1,
                 seo_title=None,
                 seo_description=None,
+                seo_keywords=None,
+                category_names=[],
+                tag_names=[],
                 published_at=None,
                 created_at=datetime(2026, 6, 16, tzinfo=UTC),
                 updated_at=datetime(2026, 6, 16, tzinfo=UTC),
@@ -55,6 +58,9 @@ class FakeContentService:
             word_count=1,
             seo_title=command.seo_title,
             seo_description=command.seo_description,
+            seo_keywords=command.seo_keywords,
+            category_names=list(command.category_names),
+            tag_names=list(command.tag_names),
             published_at=None,
             created_at=datetime(2026, 6, 16, tzinfo=UTC),
             updated_at=datetime(2026, 6, 16, tzinfo=UTC),
@@ -163,6 +169,9 @@ def test_create_admin_post_decrypts_content_request() -> None:
             "content_md": "正文",
             "status": "draft",
             "visibility": "public",
+            "seo_keywords": "博客,发布",
+            "category_names": ["技术"],
+            "tag_names": ["FastAPI", "React"],
         },
     )
     app.dependency_overrides[get_current_admin_user] = lambda: AuthenticatedUser(
@@ -197,6 +206,9 @@ def test_create_admin_post_decrypts_content_request() -> None:
     assert manager.request_payload is not None
     assert manager.payload is not None
     assert manager.payload["slug"] == "second-post"
+    assert manager.payload["seo_keywords"] == "博客,发布"
+    assert manager.payload["category_names"] == ["技术"]
+    assert manager.payload["tag_names"] == ["FastAPI", "React"]
 
 
 def test_preview_admin_post_renders_current_markdown() -> None:

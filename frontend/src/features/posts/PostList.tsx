@@ -32,12 +32,19 @@ export function PostList({ posts, startIndex = 0 }: PostListProps) {
           <div className="post-row__body">
             <div className="post-row__meta">
               <StatusBadge tone="published">已发布</StatusBadge>
-              <span>文章</span>
+              <span>{post.category_names[0] ?? '文章'}</span>
             </div>
             <h2>
               <Link to={`/posts/${post.slug}`}>{post.title}</Link>
             </h2>
             <p>{post.summary ?? post.seo_description ?? '这篇文章暂时没有摘要。'}</p>
+            {post.tag_names.length > 0 ? (
+              <div className="post-taxonomy">
+                {post.tag_names.slice(0, 4).map((tag) => (
+                  <span key={tag}>{tag}</span>
+                ))}
+              </div>
+            ) : null}
             <div className="post-row__footer">
               <span>{formatPostDate(post.published_at)}</span>
               <span>

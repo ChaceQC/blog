@@ -8,6 +8,9 @@ export type PublicPostItem = {
   word_count: number
   seo_title: string | null
   seo_description: string | null
+  seo_keywords: string | null
+  category_names: string[]
+  tag_names: string[]
   published_at: string | null
   updated_at: string | null
 }

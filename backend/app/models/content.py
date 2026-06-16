@@ -49,6 +49,7 @@ class Post(TimestampMixin, SoftDeleteMixin, Base):
     word_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     seo_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     seo_description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    seo_keywords: Mapped[str | None] = mapped_column(String(500), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DATETIME_6, nullable=True)
 
 

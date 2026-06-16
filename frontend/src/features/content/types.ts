@@ -16,6 +16,9 @@ export type AdminPostItem = {
   word_count: number
   seo_title: string | null
   seo_description: string | null
+  seo_keywords: string | null
+  category_names: string[]
+  tag_names: string[]
   published_at: string | null
   created_at: string | null
   updated_at: string | null
@@ -63,6 +66,10 @@ export type PostFormPayload = {
   cover_file_id: number | null
   seo_title: string | null
   seo_description: string | null
+  seo_keywords: string | null
+  category_names: string[]
+  tag_names: string[]
+  published_at: string | null
 }
 
 export type PostWritePayload = Omit<PostFormPayload, 'cover_file_id'> & {

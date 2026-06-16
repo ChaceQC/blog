@@ -10,6 +10,10 @@ export const emptyPostForm: PostFormPayload = {
   cover_file_id: null,
   seo_title: '',
   seo_description: '',
+  seo_keywords: '',
+  category_names: [],
+  tag_names: [],
+  published_at: null,
 }
 
 export const slugPattern = /^[a-z0-9][a-z0-9_-]*$/
@@ -32,6 +36,10 @@ export function postToForm(post: AdminPostItem): PostFormPayload {
     cover_file_id: post.cover_file_id,
     seo_title: post.seo_title ?? '',
     seo_description: post.seo_description ?? '',
+    seo_keywords: post.seo_keywords ?? '',
+    category_names: post.category_names ?? [],
+    tag_names: post.tag_names ?? [],
+    published_at: toLocalDateTimeInput(post.published_at),
   }
 }
 
@@ -49,6 +57,10 @@ export function normalizePostForm(form: PostFormPayload): PostWritePayload {
     summary: nullableText(form.summary),
     seo_title: nullableText(form.seo_title),
     seo_description: nullableText(form.seo_description),
+    seo_keywords: nullableText(form.seo_keywords),
+    category_names: normalizeLabels(form.category_names),
+    tag_names: normalizeLabels(form.tag_names),
+    published_at: normalizePublishedAt(form.published_at),
   }
   if (coverFileId !== null) {
     payload.cover_file_id = coverFileId
@@ -75,6 +87,50 @@ export function formatPostSaveError(error: unknown): string {
 function nullableText(value: string | null): string | null {
   const trimmed = value?.trim() ?? ''
   return trimmed === '' ? null : trimmed
+}
+
+export function labelsToInput(labels: string[]): string {
+  return labels.join('，')
+}
+
+export function inputToLabels(value: string): string[] {
+  return normalizeLabels(value.split(/[,，、\n]/))
+}
+
+function normalizeLabels(labels: string[]): string[] {
+  const seen = new Set<string>()
+  const normalized: string[] = []
+  for (const label of labels) {
+    const value = label.trim()
+    const key = value.toLocaleLowerCase()
+    if (!value || seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    normalized.push(value.slice(0, 64))
+  }
+  return normalized
+}
+
+function normalizePublishedAt(value: string | null): string | null {
+  const trimmed = value?.trim() ?? ''
+  if (!trimmed) {
+    return null
+  }
+  const date = new Date(trimmed)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+function toLocalDateTimeInput(value: string | null): string | null {
+  if (!value) {
+    return null
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return offsetDate.toISOString().slice(0, 16)
 }
 
 function nextPostSlug(posts: AdminPostItem[]): string {

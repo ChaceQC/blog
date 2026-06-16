@@ -85,6 +85,9 @@ class FakePublicContentService:
                 word_count=1,
                 seo_title=None,
                 seo_description="SEO 摘要",
+                seo_keywords="博客,验证",
+                category_names=["技术"],
+                tag_names=["FastAPI", "React"],
                 published_at=datetime(2026, 6, 16, tzinfo=UTC),
                 updated_at=datetime(2026, 6, 16, tzinfo=UTC),
             ),
@@ -107,6 +110,9 @@ class FakePublicContentService:
             word_count=1,
             seo_title=None,
             seo_description="SEO 摘要",
+            seo_keywords="博客,验证",
+            category_names=["技术"],
+            tag_names=["FastAPI", "React"],
             published_at=datetime(2026, 6, 16, tzinfo=UTC),
             updated_at=datetime(2026, 6, 16, tzinfo=UTC),
         )
@@ -224,6 +230,9 @@ def test_public_posts_returns_published_post_list() -> None:
     assert manager.payload["items"][0]["slug"] == "public-post"
     assert "content_html" not in manager.payload["items"][0]
     assert manager.payload["items"][0]["word_count"] == 8
+    assert manager.payload["items"][0]["seo_keywords"] == "博客,验证"
+    assert manager.payload["items"][0]["category_names"] == ["技术"]
+    assert manager.payload["items"][0]["tag_names"] == ["FastAPI", "React"]
     assert (
         "/api/public/posts/public-post/files/1/thumbnail?expires="
         in str(manager.payload["items"][0]["cover_image_url"])
@@ -261,6 +270,9 @@ def test_public_post_detail_returns_html_content() -> None:
         "/api/public/posts/public-post/files/1/thumbnail?expires="
         in str(manager.payload["cover_image_url"])
     )
+    assert manager.payload["seo_keywords"] == "博客,验证"
+    assert manager.payload["category_names"] == ["技术"]
+    assert manager.payload["tag_names"] == ["FastAPI", "React"]
     assert "token=" in str(manager.payload["content_html"])
     assert logs.items[0]["access_type"] == "public_post_detail"
     assert logs.items[0]["entity_id"] == 1

@@ -7,6 +7,7 @@ import re
 import secrets
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from typing import Any, Literal
 
@@ -304,6 +305,11 @@ def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
                 "status": "draft",
                 "visibility": "public",
                 "cover_file_id": file_id,
+                "seo_title": "运行库闭环验证 SEO 标题",
+                "seo_description": "验证文章发布链路中的 SEO 描述。",
+                "seo_keywords": "运行库,文章发布,闭环验证",
+                "category_names": ["验证"],
+                "tag_names": ["发布", "图片", "SEO"],
             },
         )
         post_id = int(post["id"])
@@ -314,6 +320,30 @@ def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
         )
         if published["status"] != "published":
             raise RuntimeVerifyError("文章发布后状态不是 published")
+
+        scheduled_slug = f"{args.slug_prefix}-scheduled-{secrets.token_hex(4)}"
+        scheduled = api.encrypted_post(
+            "/api/admin/posts",
+            session=admin_session,
+            csrf_token=csrf_token,
+            payload={
+                "title": "运行库定时发布验证文章",
+                "slug": scheduled_slug,
+                "summary": "用于验证未来发布时间不会提前公开。",
+                "content_md": "这篇文章应该等到未来时间才公开。",
+                "status": "scheduled",
+                "visibility": "public",
+                "published_at": (
+                    datetime.now(UTC) + timedelta(days=1)
+                ).isoformat(),
+                "seo_title": "运行库定时发布 SEO 标题",
+                "seo_description": "验证定时发布不会提前公开。",
+                "seo_keywords": "定时发布,验证",
+                "category_names": ["验证"],
+                "tag_names": ["定时发布"],
+            },
+        )
+        scheduled_post_id = int(scheduled["id"])
 
         public_session = api.create_session("public")
         public_list = api.encrypted_get(
@@ -326,6 +356,14 @@ def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
         ]
         if not matching_posts:
             raise RuntimeVerifyError("公开文章列表没有返回刚发布的验证文章")
+        if any(item.get("slug") == scheduled_slug for item in public_list["items"]):
+            raise RuntimeVerifyError("未来定时文章提前出现在公开文章列表")
+        scheduled_response = api.client.get(
+            f"/api/public/posts/{scheduled_slug}",
+            headers={"X-Encryption-Session": public_session.id},
+        )
+        if scheduled_response.status_code != 404:
+            raise RuntimeVerifyError("未来定时文章详情提前公开")
         cover_url = str(matching_posts[0].get("cover_image_url") or "")
         _assert_contains(cover_url, "/thumbnail?expires=", "公开列表缺少封面缩略图")
         cover_response = api.get_binary(cover_url)
@@ -336,6 +374,12 @@ def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
             session=public_session,
             profile="content-v1",
         )
+        if detail.get("seo_keywords") != "运行库,文章发布,闭环验证":
+            raise RuntimeVerifyError("公开文章详情没有返回 SEO 关键词")
+        if detail.get("category_names") != ["验证"]:
+            raise RuntimeVerifyError("公开文章详情没有返回分类")
+        if set(detail.get("tag_names", [])) != {"发布", "图片", "SEO"}:
+            raise RuntimeVerifyError("公开文章详情没有返回标签")
         _assert_contains(
             detail["content_html"],
             "/render?expires=",
@@ -385,6 +429,12 @@ def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
         if args.archive_after_verify:
             api.encrypted_patch(
                 f"/api/admin/posts/{post_id}",
+                session=admin_session,
+                csrf_token=csrf_token,
+                payload={"status": "archived"},
+            )
+            api.encrypted_patch(
+                f"/api/admin/posts/{scheduled_post_id}",
                 session=admin_session,
                 csrf_token=csrf_token,
                 payload={"status": "archived"},

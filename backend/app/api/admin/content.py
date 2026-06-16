@@ -105,6 +105,10 @@ async def create_post(
                 cover_file_id=post_payload.cover_file_id,
                 seo_title=post_payload.seo_title,
                 seo_description=post_payload.seo_description,
+                seo_keywords=post_payload.seo_keywords,
+                category_names=post_payload.category_names,
+                tag_names=post_payload.tag_names,
+                published_at=post_payload.published_at,
             ),
         )
     except ContentSlugExistsError as exc:

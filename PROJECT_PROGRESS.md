@@ -73,10 +73,17 @@
 - 使用真实运行库 `blog_codex_runtime` 跑通闭环验证，结果为 `post_id=9`、`post_slug=runtime-flow-verify-50d3b1ca`、`file_id=10`，并确认访问日志包含 `admin_file_download`、`post_image_render`、`post_image_thumbnail`、`public_file_download`、`public_file_temporary_url`、`public_post_detail` 和 `public_posts_list`。
 - 本次为真实运行库验证创建了临时后台账号 `codex_verify_20260617`；验证后因测试文章作者外键引用不能直接删除用户，已撤销刷新令牌、移除角色、禁用账号并重置为随机密码，避免留下可用后台入口。
 - 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，记录真实运行库闭环验证脚本，并按用户纠偏将下一步拉回“真实前端写作发布闭环”这一核心目标。
+- 补齐文章发布核心元数据：新增 `posts.seo_keywords` Alembic 迁移，后台文章表单可填写定时发布时间、分类、标签、SEO 标题、SEO 描述和 SEO 关键词。
+- 后端文章创建/更新会自动创建缺失的分类和标签，并维护 `post_categories`、`post_tags` 关联；后台和公开文章响应都会返回 `category_names`、`tag_names` 与 `seo_keywords`。
+- 定时发布语义已落地：`status=scheduled` 且 `published_at` 晚于当前时间的文章不会出现在公开列表和详情；到点后公开查询可见。
+- 前台文章列表和详情开始展示分类与标签；文章详情会使用 SEO 标题、描述和关键词更新浏览器标题、`description` 与 `keywords` meta。
+- 真实运行库验证脚本扩展为覆盖分类、标签、SEO 信息和未来定时文章不提前公开；使用真实运行库再次跑通，结果为 `post_id=12`、`post_slug=runtime-flow-verify-7b7986d2`、`file_id=10`。
+- 本次真实运行库验证创建了临时后台账号 `codex_verify_article_20260617`；验证后已归档 `runtime-flow-verify%` 验证文章、撤销刷新令牌、移除角色、禁用账号并重置随机密码。
+- 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，标记文章定时发布、分类、标签和 SEO 信息已完成，并将下一步调整为用户指定的友链管理。
 
 ### 进行中
 
-- M1 内容管理继续推进，文章封面选择、前台展示、文件下载和真实运行库文章发布链路已形成 HTTP 级第一版闭环；下一步紧贴核心目标，改用真实前端页面验证并修复“登录后台，上传图片，写文章，前台看到文章”的人工可用闭环。
+- M1 内容管理继续推进，文章发布核心目标已覆盖 Markdown/LaTeX、草稿、发布、定时发布、分类、标签、封面和 SEO 信息；下一步切到友链管理核心目标。
 
 ### 阻塞与风险
 
@@ -89,10 +96,11 @@
 - systemd timer 示例默认 `WorkingDirectory=/opt/blog`，如果实际部署目录不同，安装前必须修改 `deploy/systemd/*.service`；孤儿文件 timer 只 dry-run，不自动执行 `--delete`。
 - Docker Desktop daemon 当前不可用，`wsl --update` 返回 403；本次已用临时 Windows Redis 完成真实 Redis 联调，后续若要验证 Docker Compose 私有 Redis，需要先修复 Docker/WSL 环境。
 - 真实运行库闭环验证会创建一篇测试文章和一个公开上传文件；脚本默认会把测试文章归档，但上传文件与访问日志会保留，后续如需清理应先确认是否仍被 `file_usages` 引用。
+- 本次运行库验证中复用了同一张验证图片文件 `file_id=10`；验证文章已归档，但验证图片和访问日志保留，后续文件清理前需要确认引用状态。
 
 ### 下一步
 
-- 启动真实后端和前端，用浏览器从后台登录开始完成上传图片、选择文章封面、插入正文图片、实时预览、发布文章，并在前台首页、文章列表和文章详情确认文章、封面和正文图片可见；若任一环节不能顺畅完成，优先修复该核心链路问题。
+- 友链管理：友链申请、审核、排序、头像、描述、状态检查。
 
 ### 验证
 
@@ -126,6 +134,16 @@
 - 已清理本次真实运行库验证使用的临时后台账号权限：撤销刷新令牌、移除角色、禁用账号并重置随机密码。
 - 已运行 `uv run pytest tests\test_admin_content_api.py tests\test_admin_files_api.py tests\test_public_content_api.py tests\test_admin_logs_api.py`，28 个测试通过；仍存在 FastAPI TestClient 与 Starlette TestClient cookies 的上游弃用警告。
 - 已运行 `git diff --check`，未发现空白或行尾问题。
+- 文章元数据接入后已运行 `uv run ruff check .`，通过。
+- 文章元数据接入后已运行 `uv run pytest tests\test_content_service.py tests\test_admin_content_api.py tests\test_public_content_api.py`，18 个测试通过；仍存在 FastAPI TestClient 上游弃用警告。
+- 文章元数据接入后已运行后端全量 `uv run pytest`，88 个测试通过、2 个 Redis 集成测试因未配置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI TestClient 与 Starlette TestClient cookies 的上游弃用警告。
+- 已运行 `uv run alembic upgrade head --sql`，迁移升级 SQL 可生成并包含 `posts.seo_keywords`。
+- 已运行 `uv run alembic downgrade 20260617_0005:20260616_0004 --sql`，迁移回滚 SQL 可生成。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；仍存在 KaTeX 主 chunk 超过 500KB 的既有提示。
+- 已在真实运行库执行 `uv run alembic upgrade head`，从 `20260616_0004` 升级到 `20260617_0005`。
+- 已启动本地后端 `uv run python main.py` 并运行增强后的 `uv run python scripts/verify_runtime_publish_flow.py`，验证分类、标签、SEO 信息、未来定时文章不提前公开、公开文章详情和文件访问链路均通过。
+- 真实运行库文章元数据验证结束后已关闭本次启动的后端服务，并确认 `18080`、`15173`、`14173` 均无监听。
 - 后台维护任务入口和加密会话清理 CLI 接入后已运行 `uv run ruff check .`，通过。
 - 后台维护任务入口和加密会话清理 CLI 接入后已运行 `uv run pytest tests\test_admin_encryption_api.py tests\test_encryption.py`，8 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 已运行 `uv run python -m app.cli --help`，确认 `cleanup-encryption-sessions` 子命令已注册。

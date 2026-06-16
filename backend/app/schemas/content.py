@@ -18,6 +18,10 @@ class PostCreateRequest(BaseModel):
     cover_file_id: int | None = Field(default=None, ge=1)
     seo_title: str | None = Field(default=None, max_length=255)
     seo_description: str | None = Field(default=None, max_length=500)
+    seo_keywords: str | None = Field(default=None, max_length=500)
+    category_names: list[str] = Field(default_factory=list, max_length=8)
+    tag_names: list[str] = Field(default_factory=list, max_length=20)
+    published_at: datetime | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -37,6 +41,10 @@ class PostUpdateRequest(BaseModel):
     cover_file_id: int | None = Field(default=None, ge=1)
     seo_title: str | None = Field(default=None, max_length=255)
     seo_description: str | None = Field(default=None, max_length=500)
+    seo_keywords: str | None = Field(default=None, max_length=500)
+    category_names: list[str] | None = Field(default=None, max_length=8)
+    tag_names: list[str] | None = Field(default=None, max_length=20)
+    published_at: datetime | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -68,6 +76,9 @@ class AdminPostItem(BaseModel):
     word_count: int
     seo_title: str | None
     seo_description: str | None
+    seo_keywords: str | None = None
+    category_names: list[str] = Field(default_factory=list)
+    tag_names: list[str] = Field(default_factory=list)
     published_at: datetime | None
     created_at: datetime | None
     updated_at: datetime | None
@@ -91,6 +102,9 @@ class PublicPostItem(BaseModel):
     word_count: int
     seo_title: str | None
     seo_description: str | None
+    seo_keywords: str | None = None
+    category_names: list[str] = Field(default_factory=list)
+    tag_names: list[str] = Field(default_factory=list)
     published_at: datetime | None
     updated_at: datetime | None
 

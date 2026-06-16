@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -30,6 +31,9 @@ class FakePost:
     word_count: int
     seo_title: str | None
     seo_description: str | None
+    seo_keywords: str | None = None
+    category_names: list[str] = field(default_factory=list)
+    tag_names: list[str] = field(default_factory=list)
     published_at: object | None = None
 
 
@@ -53,6 +57,8 @@ class FakeContentRepository:
         self.pages: list[FakePage] = []
         self.file_ids: set[int] = set()
         self.file_usages: dict[tuple[str, int], list[tuple[int, str]]] = {}
+        self.post_categories: dict[int, list[str]] = {}
+        self.post_tags: dict[int, list[str]] = {}
         self.commit_count = 0
 
     async def list_posts(self, *, limit: int, offset: int) -> list[FakePost]:
@@ -99,6 +105,28 @@ class FakeContentRepository:
         usages: list[tuple[int, str]],
     ) -> None:
         self.file_usages[(entity_type, entity_id)] = list(usages)
+
+    async def replace_post_categories(
+        self,
+        *,
+        post_id: int,
+        category_names: list[str],
+    ) -> None:
+        self.post_categories[post_id] = list(category_names)
+        post = await self.get_post(post_id)
+        if post is not None:
+            post.category_names = list(category_names)
+
+    async def replace_post_tags(
+        self,
+        *,
+        post_id: int,
+        tag_names: list[str],
+    ) -> None:
+        self.post_tags[post_id] = list(tag_names)
+        post = await self.get_post(post_id)
+        if post is not None:
+            post.tag_names = list(tag_names)
 
     async def list_pages(self, *, limit: int, offset: int) -> list[FakePage]:
         return self.pages[offset : offset + limit]
@@ -259,6 +287,39 @@ async def test_create_post_records_cover_and_body_file_usages() -> None:
         (3, "cover"),
         (5, "post_body"),
     ]
+
+
+@pytest.mark.anyio
+async def test_create_post_records_taxonomy_and_scheduled_time() -> None:
+    repository = FakeContentRepository()
+    service = ContentService(repository=repository)
+    scheduled_at = datetime.now(UTC) + timedelta(days=1)
+
+    post = await service.create_post(
+        CreatePostCommand(
+            title="定时文章",
+            slug="scheduled-post",
+            summary=None,
+            content_md="正文",
+            author_id=1,
+            status="scheduled",
+            visibility="public",
+            cover_file_id=None,
+            seo_title="SEO 标题",
+            seo_description="SEO 描述",
+            seo_keywords="博客,定时",
+            category_names=["技术", "技术", " 随笔 "],
+            tag_names=["FastAPI", "React"],
+            published_at=scheduled_at,
+        ),
+    )
+
+    assert post.published_at == scheduled_at
+    assert post.seo_keywords == "博客,定时"
+    assert post.category_names == ["技术", "随笔"]
+    assert post.tag_names == ["FastAPI", "React"]
+    assert repository.post_categories[post.id] == ["技术", "随笔"]
+    assert repository.post_tags[post.id] == ["FastAPI", "React"]
 
 
 @pytest.mark.anyio

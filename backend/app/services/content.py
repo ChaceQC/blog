@@ -1,6 +1,7 @@
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Protocol
 
 from app.core.auth import utc_now
@@ -46,7 +47,23 @@ class ContentRepositoryProtocol(Protocol):
         word_count: int,
         seo_title: str | None,
         seo_description: str | None,
+        seo_keywords: str | None,
+        published_at: datetime | None,
     ) -> Post: ...
+
+    async def replace_post_categories(
+        self,
+        *,
+        post_id: int,
+        category_names: Sequence[str],
+    ) -> None: ...
+
+    async def replace_post_tags(
+        self,
+        *,
+        post_id: int,
+        tag_names: Sequence[str],
+    ) -> None: ...
 
     async def file_exists(self, file_id: int) -> bool: ...
 
@@ -95,6 +112,10 @@ class CreatePostCommand:
     cover_file_id: int | None
     seo_title: str | None
     seo_description: str | None
+    seo_keywords: str | None = None
+    category_names: Sequence[str] = ()
+    tag_names: Sequence[str] = ()
+    published_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -152,9 +173,17 @@ class ContentService:
             word_count=count_words(command.content_md),
             seo_title=command.seo_title,
             seo_description=command.seo_description,
+            seo_keywords=command.seo_keywords,
+            published_at=_published_at_for_status(
+                status=command.status,
+                requested_at=command.published_at,
+            ),
         )
-        if command.status == "published":
-            post.published_at = utc_now()
+        await self._sync_post_taxonomy(
+            post=post,
+            category_names=command.category_names,
+            tag_names=command.tag_names,
+        )
         await self._sync_post_file_usages(post)
         await self.repository.commit()
         await self.repository.refresh(post)
@@ -178,17 +207,37 @@ class ContentService:
             "cover_file_id",
             "seo_title",
             "seo_description",
+            "seo_keywords",
         ):
             if field in changes:
                 setattr(post, field, changes[field])
+        if "category_names" in changes:
+            category_names = changes["category_names"] or []
+            await self.repository.replace_post_categories(
+                post_id=post.id,
+                category_names=category_names,
+            )
+            post.category_names = _normalize_labels(category_names)
+        if "tag_names" in changes:
+            tag_names = changes["tag_names"] or []
+            await self.repository.replace_post_tags(
+                post_id=post.id,
+                tag_names=tag_names,
+            )
+            post.tag_names = _normalize_labels(tag_names)
+        if "published_at" in changes:
+            post.published_at = changes["published_at"]
 
         if "content_md" in changes:
             post.content_md = changes["content_md"]
             post.content_html = self.renderer.render(post.content_md)
             post.word_count = count_words(post.content_md)
 
-        if post.status == "published" and post.published_at is None:
-            post.published_at = utc_now()
+        if "status" in changes and "published_at" not in changes:
+            post.published_at = _published_at_for_status(
+                status=post.status,
+                requested_at=post.published_at,
+            )
         await self._sync_post_file_usages(post)
         await self.repository.commit()
         await self.repository.refresh(post)
@@ -286,6 +335,26 @@ class ContentService:
             usages=usages,
         )
 
+    async def _sync_post_taxonomy(
+        self,
+        *,
+        post: Post,
+        category_names: Sequence[str],
+        tag_names: Sequence[str],
+    ) -> None:
+        normalized_categories = _normalize_labels(category_names)
+        normalized_tags = _normalize_labels(tag_names)
+        await self.repository.replace_post_categories(
+            post_id=post.id,
+            category_names=normalized_categories,
+        )
+        await self.repository.replace_post_tags(
+            post_id=post.id,
+            tag_names=normalized_tags,
+        )
+        post.category_names = normalized_categories
+        post.tag_names = normalized_tags
+
 
 def _build_post_file_usages(
     *,
@@ -313,3 +382,28 @@ def _extract_post_body_file_ids(content_md: str) -> list[int]:
         r"/?api/public/posts/[a-z0-9][a-z0-9_-]*/files/(?P<file_id>\d+)/render",
     )
     return [int(match.group("file_id")) for match in pattern.finditer(content_md)]
+
+
+def _published_at_for_status(
+    *,
+    status: str,
+    requested_at: datetime | None,
+) -> datetime | None:
+    if status == "published":
+        return requested_at or utc_now()
+    if status == "scheduled":
+        return requested_at
+    return None
+
+
+def _normalize_labels(labels: Sequence[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for label in labels:
+        value = label.strip()
+        key = value.casefold()
+        if not value or key in seen:
+            continue
+        seen.add(key)
+        normalized.append(value[:64])
+    return normalized

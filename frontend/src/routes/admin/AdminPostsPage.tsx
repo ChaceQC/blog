@@ -19,6 +19,8 @@ import { PostCoverPicker } from '../../features/content/PostCoverPicker.tsx'
 import {
   createEmptyPostForm,
   formatPostSaveError,
+  inputToLabels,
+  labelsToInput,
   normalizePostForm,
   postToForm,
   postToPreviewInput,
@@ -284,6 +286,38 @@ export function AdminPostsPage() {
                 />
               </label>
             </div>
+            <div className="form-grid form-grid--three">
+              <label>
+                定时发布时间
+                <input
+                  type="datetime-local"
+                  value={currentForm.published_at ?? ''}
+                  onChange={(event) =>
+                    updateForm('published_at', event.target.value || null)
+                  }
+                />
+              </label>
+              <label>
+                分类
+                <input
+                  placeholder="随笔，技术"
+                  value={labelsToInput(currentForm.category_names)}
+                  onChange={(event) =>
+                    updateForm('category_names', inputToLabels(event.target.value))
+                  }
+                />
+              </label>
+              <label>
+                标签
+                <input
+                  placeholder="React，FastAPI，生活"
+                  value={labelsToInput(currentForm.tag_names)}
+                  onChange={(event) =>
+                    updateForm('tag_names', inputToLabels(event.target.value))
+                  }
+                />
+              </label>
+            </div>
             <PostCoverPicker
               disabled={!canWrite}
               value={currentForm.cover_file_id}
@@ -332,6 +366,14 @@ export function AdminPostsPage() {
                 value={currentForm.seo_description ?? ''}
                 onChange={(event) => updateForm('seo_description', event.target.value)}
                 rows={2}
+              />
+            </label>
+            <label>
+              SEO 关键词
+              <input
+                value={currentForm.seo_keywords ?? ''}
+                onChange={(event) => updateForm('seo_keywords', event.target.value)}
+                placeholder="多个关键词用逗号分隔"
               />
             </label>
             <div className="form-actions">
