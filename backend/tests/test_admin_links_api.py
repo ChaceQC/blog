@@ -12,7 +12,7 @@ from app.core.encryption import EncryptionProfile
 from app.main import app
 from app.schemas.encryption import EncryptedApiRequest, EncryptedApiResponse
 from app.services.auth import AuthenticatedUser
-from app.services.links import CreateFriendLinkCommand
+from app.services.links import CreateFriendLinkCommand, CreateSiteNavItemCommand
 
 
 class FakeLinkService:
@@ -125,6 +125,53 @@ class FakeLinkService:
                 updated_at=datetime(2026, 6, 16, tzinfo=UTC),
             ),
         ]
+
+    async def create_site_nav_item(self, command: CreateSiteNavItemCommand) -> object:
+        assert command.title == "新导航"
+        assert command.url == "https://nav.example.test"
+        return SimpleNamespace(
+            id=2,
+            group_id=command.group_id,
+            group_name=None,
+            group_slug=None,
+            title=command.title,
+            url=command.url,
+            icon_url=command.icon_url,
+            description=command.description,
+            tags_json=command.tags_json,
+            open_target=command.open_target,
+            visibility=command.visibility,
+            click_count=0,
+            sort_order=command.sort_order,
+            created_at=datetime(2026, 6, 16, tzinfo=UTC),
+            updated_at=datetime(2026, 6, 16, tzinfo=UTC),
+        )
+
+    async def update_site_nav_item(
+        self,
+        *,
+        item_id: int,
+        changes: dict[str, object],
+    ) -> object:
+        assert item_id == 1
+        assert changes["title"] == "更新后的导航"
+        return SimpleNamespace(
+            id=1,
+            group_id=1,
+            group_name=None,
+            group_slug=None,
+            title=changes["title"],
+            url=changes.get("url", "https://github.com/ChaceQC/blog"),
+            icon_url=None,
+            description=changes.get("description"),
+            tags_json=None,
+            open_target=changes.get("open_target", "blank"),
+            visibility=changes.get("visibility", "public"),
+            click_count=0,
+            sort_order=0,
+            created_at=datetime(2026, 6, 16, tzinfo=UTC),
+            updated_at=datetime(2026, 6, 16, tzinfo=UTC),
+        )
 
 
 class FakeEncryptionSessionManager:
@@ -330,3 +377,86 @@ def test_admin_site_items_use_content_encryption_profile() -> None:
     assert response.json()["profile"] == "content-v1"
     assert manager.payload is not None
     assert manager.payload["items"][0]["title"] == "博客源码"
+
+
+def test_create_admin_site_item_decrypts_content_request() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    manager = FakeEncryptionSessionManager(
+        decrypted_payload={
+            "title": "新导航",
+            "url": "https://nav.example.test",
+            "description": "新的导航入口",
+            "open_target": "blank",
+            "visibility": "public",
+            "sort_order": 0,
+        },
+    )
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_link_service] = lambda: FakeLinkService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+
+    try:
+        response = client.post(
+            "/api/admin/site-items",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "content-session",
+            },
+            json={
+                "encrypted": True,
+                "session_id": "content-session",
+                "profile": "content-v1",
+                "algorithm": "AES-256-GCM-HKDF-SHA256",
+                "nonce": "test-nonce",
+                "ciphertext": "test-ciphertext",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.request_payload is not None
+    assert manager.payload is not None
+    assert manager.payload["title"] == "新导航"
+
+
+def test_update_admin_site_item_decrypts_content_request() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    manager = FakeEncryptionSessionManager(
+        decrypted_payload={
+            "title": "更新后的导航",
+            "description": "更新后的导航描述",
+            "visibility": "hidden",
+        },
+    )
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_link_service] = lambda: FakeLinkService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+
+    try:
+        response = client.patch(
+            "/api/admin/site-items/1",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "content-session",
+            },
+            json={
+                "encrypted": True,
+                "session_id": "content-session",
+                "profile": "content-v1",
+                "algorithm": "AES-256-GCM-HKDF-SHA256",
+                "nonce": "test-nonce",
+                "ciphertext": "test-ciphertext",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.request_payload is not None
+    assert manager.payload is not None
+    assert manager.payload["title"] == "更新后的导航"

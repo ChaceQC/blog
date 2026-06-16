@@ -8,6 +8,8 @@ from app.models.site import SiteNavItem
 
 FriendLinkStatus = str
 ALLOWED_FRIEND_LINK_STATUSES = {"pending", "healthy", "rejected"}
+ALLOWED_SITE_NAV_OPEN_TARGETS = {"blank", "self"}
+ALLOWED_SITE_NAV_VISIBILITIES = {"public", "hidden", "private"}
 
 
 class LinkNotFoundError(Exception):
@@ -15,6 +17,14 @@ class LinkNotFoundError(Exception):
 
 
 class InvalidFriendLinkStatusError(Exception):
+    pass
+
+
+class SiteNavItemNotFoundError(Exception):
+    pass
+
+
+class InvalidSiteNavItemValueError(Exception):
     pass
 
 
@@ -47,6 +57,22 @@ class LinkRepositoryProtocol(Protocol):
         limit: int,
         offset: int,
     ) -> Sequence[tuple[SiteNavItem, str | None, str | None]]: ...
+
+    async def get_site_nav_item(self, item_id: int) -> SiteNavItem | None: ...
+
+    async def create_site_nav_item(
+        self,
+        *,
+        group_id: int | None,
+        title: str,
+        url: str,
+        icon_url: str | None,
+        description: str | None,
+        tags_json: dict[str, Any] | None,
+        open_target: str,
+        visibility: str,
+        sort_order: int,
+    ) -> SiteNavItem: ...
 
     async def commit(self) -> None: ...
 
@@ -99,6 +125,19 @@ class CreateFriendLinkCommand:
     description: str | None
     rss_url: str | None
     status: str
+    sort_order: int
+
+
+@dataclass(frozen=True)
+class CreateSiteNavItemCommand:
+    group_id: int | None
+    title: str
+    url: str
+    icon_url: str | None
+    description: str | None
+    tags_json: dict[str, Any] | None
+    open_target: str
+    visibility: str
     sort_order: int
 
 
@@ -202,6 +241,64 @@ class LinkService:
             for item, group_name, group_slug in rows
         ]
 
+    async def create_site_nav_item(
+        self,
+        command: CreateSiteNavItemCommand,
+    ) -> AdminSiteNavItemRecord:
+        self._ensure_valid_site_nav_values(
+            open_target=command.open_target,
+            visibility=command.visibility,
+        )
+        item = await self.repository.create_site_nav_item(
+            group_id=command.group_id,
+            title=command.title,
+            url=command.url,
+            icon_url=command.icon_url,
+            description=command.description,
+            tags_json=command.tags_json,
+            open_target=command.open_target,
+            visibility=command.visibility,
+            sort_order=command.sort_order,
+        )
+        await self.repository.commit()
+        await self.repository.refresh(item)
+        return self._site_nav_item_record(item=item, group_name=None, group_slug=None)
+
+    async def update_site_nav_item(
+        self,
+        *,
+        item_id: int,
+        changes: dict[str, Any],
+    ) -> AdminSiteNavItemRecord:
+        open_target = changes.get("open_target")
+        visibility = changes.get("visibility")
+        self._ensure_valid_site_nav_values(
+            open_target=open_target if isinstance(open_target, str) else None,
+            visibility=visibility if isinstance(visibility, str) else None,
+        )
+
+        item = await self.repository.get_site_nav_item(item_id)
+        if item is None:
+            raise SiteNavItemNotFoundError("site nav item not found")
+
+        for field in (
+            "group_id",
+            "title",
+            "url",
+            "icon_url",
+            "description",
+            "tags_json",
+            "open_target",
+            "visibility",
+            "sort_order",
+        ):
+            if field in changes:
+                setattr(item, field, changes[field])
+
+        await self.repository.commit()
+        await self.repository.refresh(item)
+        return self._site_nav_item_record(item=item, group_name=None, group_slug=None)
+
     def _friend_link_record(
         self,
         *,
@@ -228,6 +325,17 @@ class LinkService:
     def _ensure_valid_status(self, status: str) -> None:
         if status not in ALLOWED_FRIEND_LINK_STATUSES:
             raise InvalidFriendLinkStatusError("invalid friend link status")
+
+    def _ensure_valid_site_nav_values(
+        self,
+        *,
+        open_target: str | None,
+        visibility: str | None,
+    ) -> None:
+        if open_target is not None and open_target not in ALLOWED_SITE_NAV_OPEN_TARGETS:
+            raise InvalidSiteNavItemValueError("invalid site nav open target")
+        if visibility is not None and visibility not in ALLOWED_SITE_NAV_VISIBILITIES:
+            raise InvalidSiteNavItemValueError("invalid site nav visibility")
 
     def _site_nav_item_record(
         self,

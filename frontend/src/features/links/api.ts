@@ -7,9 +7,11 @@ import {
 import type {
   AdminFriendLink,
   AdminFriendLinkListResponse,
+  AdminSiteNavItem,
   AdminSiteNavItemListResponse,
   FriendLinkReviewPayload,
   FriendLinkWritePayload,
+  SiteNavItemWritePayload,
 } from './types.ts'
 
 export function listAdminFriendLinks(): Promise<AdminFriendLinkListResponse> {
@@ -61,5 +63,30 @@ export function listAdminSiteNavItems(): Promise<AdminSiteNavItemListResponse> {
   return apiGetEncrypted<AdminSiteNavItemListResponse>(
     '/admin/site-items?limit=50',
     'content-v1',
+  )
+}
+
+export function createAdminSiteNavItem(
+  payload: SiteNavItemWritePayload,
+  csrfToken: string,
+): Promise<AdminSiteNavItem> {
+  return apiPostEncrypted<SiteNavItemWritePayload, AdminSiteNavItem>(
+    '/admin/site-items',
+    payload,
+    'content-v1',
+    { csrfToken, encryptRequest: true },
+  )
+}
+
+export function updateAdminSiteNavItem(
+  itemId: number,
+  payload: SiteNavItemWritePayload,
+  csrfToken: string,
+): Promise<AdminSiteNavItem> {
+  return apiPatchEncrypted<SiteNavItemWritePayload, AdminSiteNavItem>(
+    `/admin/site-items/${itemId}`,
+    payload,
+    'content-v1',
+    { csrfToken, encryptRequest: true },
   )
 }

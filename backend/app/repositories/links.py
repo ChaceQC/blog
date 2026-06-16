@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -72,6 +73,40 @@ class LinkRepository:
             .offset(offset),
         )
         return result.all()
+
+    async def get_site_nav_item(self, item_id: int) -> SiteNavItem | None:
+        result = await self.session.execute(
+            select(SiteNavItem).where(SiteNavItem.id == item_id),
+        )
+        return result.scalar_one_or_none()
+
+    async def create_site_nav_item(
+        self,
+        *,
+        group_id: int | None,
+        title: str,
+        url: str,
+        icon_url: str | None,
+        description: str | None,
+        tags_json: dict[str, Any] | None,
+        open_target: str,
+        visibility: str,
+        sort_order: int,
+    ) -> SiteNavItem:
+        item = SiteNavItem(
+            group_id=group_id,
+            title=title,
+            url=url,
+            icon_url=icon_url,
+            description=description,
+            tags_json=tags_json,
+            open_target=open_target,
+            visibility=visibility,
+            sort_order=sort_order,
+        )
+        self.session.add(item)
+        await self.session.flush()
+        return item
 
     async def commit(self) -> None:
         await self.session.commit()

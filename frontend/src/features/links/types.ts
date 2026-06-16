@@ -1,4 +1,6 @@
 export type AdminFriendLinkStatus = 'pending' | 'healthy' | 'rejected'
+export type AdminSiteNavOpenTarget = 'blank' | 'self'
+export type AdminSiteNavVisibility = 'public' | 'hidden' | 'private'
 
 export type AdminFriendLink = {
   id: number
@@ -46,8 +48,8 @@ export type AdminSiteNavItem = {
   icon_url: string | null
   description: string | null
   tags_json: Record<string, unknown> | null
-  open_target: string
-  visibility: string
+  open_target: AdminSiteNavOpenTarget
+  visibility: AdminSiteNavVisibility
   click_count: number
   sort_order: number
   created_at: string | null
@@ -56,4 +58,16 @@ export type AdminSiteNavItem = {
 
 export type AdminSiteNavItemListResponse = {
   items: AdminSiteNavItem[]
+}
+
+export type SiteNavItemWritePayload = {
+  group_id: number | null
+  title: string
+  url: string
+  icon_url: string | null
+  description: string | null
+  tags_json: Record<string, unknown> | null
+  open_target: AdminSiteNavOpenTarget
+  visibility: AdminSiteNavVisibility
+  sort_order: number
 }

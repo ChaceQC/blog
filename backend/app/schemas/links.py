@@ -4,6 +4,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 FriendLinkStatus = Literal["pending", "healthy", "rejected"]
+SiteNavOpenTarget = Literal["blank", "self"]
+SiteNavVisibility = Literal["public", "hidden", "private"]
 
 
 class AdminFriendLinkItem(BaseModel):
@@ -85,5 +87,33 @@ class AdminSiteNavItem(BaseModel):
 
 class AdminSiteNavItemListResponse(BaseModel):
     items: list[AdminSiteNavItem]
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SiteNavItemCreateRequest(BaseModel):
+    group_id: int | None = Field(default=None, ge=1)
+    title: str = Field(min_length=1, max_length=100)
+    url: str = Field(min_length=1, max_length=1000)
+    icon_url: str | None = Field(default=None, max_length=1000)
+    description: str | None = Field(default=None, max_length=255)
+    tags_json: dict[str, Any] | None = None
+    open_target: SiteNavOpenTarget = "blank"
+    visibility: SiteNavVisibility = "public"
+    sort_order: int = Field(default=0, ge=0, le=10000)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SiteNavItemUpdateRequest(BaseModel):
+    group_id: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, min_length=1, max_length=100)
+    url: str | None = Field(default=None, min_length=1, max_length=1000)
+    icon_url: str | None = Field(default=None, max_length=1000)
+    description: str | None = Field(default=None, max_length=255)
+    tags_json: dict[str, Any] | None = None
+    open_target: SiteNavOpenTarget | None = None
+    visibility: SiteNavVisibility | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=10000)
 
     model_config = ConfigDict(extra="forbid")

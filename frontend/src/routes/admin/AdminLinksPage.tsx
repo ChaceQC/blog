@@ -3,17 +3,16 @@ import {
   CheckCircle2,
   ExternalLink,
   Link2,
-  Navigation,
   Save,
   XCircle,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { StatusBadge } from '../../components/StatusBadge.tsx'
+import { AdminSiteNavPanel } from '../../features/links/AdminSiteNavPanel.tsx'
 import {
   createAdminFriendLink,
   listAdminFriendLinks,
-  listAdminSiteNavItems,
   reviewAdminFriendLink,
   updateAdminFriendLink,
 } from '../../features/links/api.ts'
@@ -61,12 +60,7 @@ export function AdminLinksPage() {
     queryKey: ['admin-friend-links'],
     queryFn: listAdminFriendLinks,
   })
-  const sitesQuery = useQuery({
-    queryKey: ['admin-site-nav-items'],
-    queryFn: listAdminSiteNavItems,
-  })
   const links = useMemo(() => linksQuery.data?.items ?? [], [linksQuery.data])
-  const sites = useMemo(() => sitesQuery.data?.items ?? [], [sitesQuery.data])
   const selectedLink = useMemo(
     () =>
       links.find((link) => link.id === selectedLinkId) ?? links[0] ?? null,
@@ -131,7 +125,7 @@ export function AdminLinksPage() {
           type="button"
         >
           <Link2 size={17} strokeWidth={1.8} aria-hidden="true" />
-          新建条目
+          新建友链
         </button>
       </section>
 
@@ -293,30 +287,7 @@ export function AdminLinksPage() {
           )}
         </section>
 
-        <section className="admin-panel admin-panel--preview">
-          <div className="section-heading">
-            <span>导航条目</span>
-            <small>
-              <Navigation size={14} strokeWidth={1.8} aria-hidden="true" />
-              {sitesQuery.isLoading ? '加载中' : `${sites.length} 个`}
-            </small>
-          </div>
-          {sitesQuery.isError ? <p className="form-error">导航条目加载失败</p> : null}
-          <div className="admin-stack-list">
-            {sites.map((site) => (
-              <a href={site.url} key={site.id}>
-                <span>
-                  <strong>{site.title}</strong>
-                  <small>{site.description ?? '暂无描述'}</small>
-                </span>
-                <small>{site.group_name ?? '未分组'}</small>
-              </a>
-            ))}
-          </div>
-          {!sitesQuery.isLoading && sites.length === 0 ? (
-            <p className="empty-state">还没有导航条目。</p>
-          ) : null}
-        </section>
+        <AdminSiteNavPanel />
       </div>
     </div>
   )
@@ -327,6 +298,7 @@ export function AdminLinksPage() {
   ) {
     setDraftForm((current) => ({ ...(current ?? form), [key]: value }))
   }
+
 }
 
 function linkToForm(link: AdminFriendLink): FriendLinkForm {

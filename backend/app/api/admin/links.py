@@ -23,13 +23,18 @@ from app.schemas.links import (
     FriendLinkCreateRequest,
     FriendLinkReviewRequest,
     FriendLinkUpdateRequest,
+    SiteNavItemCreateRequest,
+    SiteNavItemUpdateRequest,
 )
 from app.services.auth import AuthenticatedUser
 from app.services.encryption import EncryptionSessionManager
 from app.services.links import (
     CreateFriendLinkCommand,
+    CreateSiteNavItemCommand,
     InvalidFriendLinkStatusError,
+    InvalidSiteNavItemValueError,
     LinkNotFoundError,
+    SiteNavItemNotFoundError,
 )
 
 router = APIRouter(tags=["admin-links"])
@@ -197,10 +202,91 @@ async def list_site_nav_items(
     )
 
 
+@router.post("/site-items", response_model=EncryptedApiResponse)
+async def create_site_nav_item(
+    payload: EncryptedApiRequest,
+    _: AdminCsrfDependency,
+    __: SiteNavWriterDependency,
+    request: Request,
+    service: LinkServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+) -> EncryptedApiResponse:
+    decrypted_payload = await decrypt_encrypted_request(
+        payload,
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+    item_payload = _validate_decrypted_payload(
+        SiteNavItemCreateRequest,
+        decrypted_payload,
+    )
+    try:
+        item = await service.create_site_nav_item(
+            CreateSiteNavItemCommand(
+                group_id=item_payload.group_id,
+                title=item_payload.title,
+                url=item_payload.url,
+                icon_url=item_payload.icon_url,
+                description=item_payload.description,
+                tags_json=item_payload.tags_json,
+                open_target=item_payload.open_target,
+                visibility=item_payload.visibility,
+                sort_order=item_payload.sort_order,
+            ),
+        )
+    except InvalidSiteNavItemValueError as exc:
+        raise _invalid_site_item_value() from exc
+
+    return await _links_response(
+        AdminSiteNavItem.model_validate(item),
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+
+
+@router.patch("/site-items/{item_id}", response_model=EncryptedApiResponse)
+async def update_site_nav_item(
+    item_id: int,
+    payload: EncryptedApiRequest,
+    _: AdminCsrfDependency,
+    __: SiteNavWriterDependency,
+    request: Request,
+    service: LinkServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+) -> EncryptedApiResponse:
+    decrypted_payload = await decrypt_encrypted_request(
+        payload,
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+    item_payload = _validate_decrypted_payload(
+        SiteNavItemUpdateRequest,
+        decrypted_payload,
+    )
+    try:
+        item = await service.update_site_nav_item(
+            item_id=item_id,
+            changes=item_payload.model_dump(exclude_unset=True),
+        )
+    except SiteNavItemNotFoundError as exc:
+        raise _site_item_not_found() from exc
+    except InvalidSiteNavItemValueError as exc:
+        raise _invalid_site_item_value() from exc
+
+    return await _links_response(
+        AdminSiteNavItem.model_validate(item),
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+
+
 async def _links_response(
     payload: (
         AdminFriendLinkItem
         | AdminFriendLinkListResponse
+        | AdminSiteNavItem
         | AdminSiteNavItemListResponse
     ),
     *,
@@ -239,4 +325,18 @@ def _invalid_status() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         detail="invalid friend link status",
+    )
+
+
+def _site_item_not_found() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="site nav item not found",
+    )
+
+
+def _invalid_site_item_value() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail="invalid site nav item value",
     )

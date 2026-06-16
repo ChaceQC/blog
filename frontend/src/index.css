@@ -1307,17 +1307,32 @@ img {
   line-height: 1.7;
 }
 
-.admin-stack-list a {
+.admin-stack-list a,
+.admin-stack-list button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   padding: 11px 0;
   border-top: 1px solid var(--color-border);
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  width: 100%;
+  background: transparent;
   color: var(--color-neutral-8);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
 }
 
-.admin-stack-list a:first-child {
+.admin-stack-list a:first-child,
+.admin-stack-list button:first-child {
   border-top: 0;
+}
+
+.admin-stack-list button:hover,
+.admin-stack-list button.active {
+  color: var(--color-neutral-10);
 }
 
 .admin-stack-list span {
