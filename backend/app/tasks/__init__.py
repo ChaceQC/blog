@@ -1,1 +1,1 @@
-"""Background task package."""
+"""后台维护任务包。"""

@@ -9,6 +9,7 @@ from app.services.admin_bootstrap import (
     InitialAdminCommand,
     InitialAdminExistsError,
 )
+from app.tasks.encryption import cleanup_expired_encryption_sessions
 
 
 def main() -> None:
@@ -17,6 +18,9 @@ def main() -> None:
 
     if args.command == "create-admin":
         asyncio.run(_create_admin(args))
+        return
+    if args.command == "cleanup-encryption-sessions":
+        asyncio.run(_cleanup_encryption_sessions())
         return
 
     parser.print_help()
@@ -36,6 +40,10 @@ def _build_parser() -> argparse.ArgumentParser:
     create_admin.add_argument(
         "--password",
         help="管理员密码；省略时使用交互式输入",
+    )
+    subparsers.add_parser(
+        "cleanup-encryption-sessions",
+        help="清理已过期的应用层加密会话",
     )
     return parser
 
@@ -57,6 +65,11 @@ async def _create_admin(args: argparse.Namespace) -> None:
             raise SystemExit(f"创建失败：{exc}") from exc
 
     print(f"已创建初始管理员：{user.username} <{user.email}>")
+
+
+async def _cleanup_encryption_sessions() -> None:
+    deleted_count = await cleanup_expired_encryption_sessions()
+    print(f"已清理过期加密会话：{deleted_count} 条")
 
 
 def _prompt_password() -> str:

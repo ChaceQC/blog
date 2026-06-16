@@ -17,6 +17,7 @@ $env:PYTHONUTF8='1'
 uv run alembic upgrade head --sql
 uv run alembic downgrade 20260615_0002:20260615_0001 --sql
 uv run python -m app.cli --help
+uv run python -m app.cli cleanup-encryption-sessions
 ```
 
 本地端口、数据库连接、CORS 和上传目录都来自 `.env`，不要写死在代码里。
@@ -44,6 +45,17 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 - `GET /api/admin/security-events`：安全事件日志，需要 `audit_log:read` 权限和 `sensitive-v1` 加密会话。
 
 登录入口和加密协商入口已接入可配置限流，命中后返回 `429` 并写入 `security_events`。阈值通过 `BLOG_ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_MAX_ATTEMPTS` 和 `BLOG_ENCRYPTION_SESSION_RATE_LIMIT_WINDOW_SECONDS` 配置。当前实现为单进程内存限流器，适合 M1 单进程闭环验证；生产多实例或多进程部署前需要替换为 Redis 等共享存储适配器。
+
+## 后台维护任务
+
+后台维护任务放在 `app/tasks`，供 CLI、cron 或 systemd timer 调用，不通过公开 HTTP 入口触发。当前已提供过期应用层加密会话清理任务：
+
+```powershell
+$env:PYTHONUTF8='1'
+uv run python -m app.cli cleanup-encryption-sessions
+```
+
+该命令会删除 `encryption_sessions` 中已过期的会话记录，并输出清理数量。后续文件物理清理、孤儿文件清理、友链健康检查和 sitemap 刷新也应沿用同一类维护任务入口。
 
 ## 后台内容管理
 

@@ -99,6 +99,13 @@ class EncryptionSessionManager:
             expires_at=expires_at,
         )
 
+    async def cleanup_expired_sessions(self, *, now: datetime | None = None) -> int:
+        now = now or datetime.now(UTC)
+        deleted_count = await self._repository.delete_expired_sessions(now=now)
+        if deleted_count > 0:
+            await self._repository.commit()
+        return deleted_count
+
     async def encrypt_response(
         self,
         *,

@@ -1,5 +1,6 @@
-﻿from base64 import urlsafe_b64decode, urlsafe_b64encode
-from datetime import datetime
+﻿import asyncio
+from base64 import urlsafe_b64decode, urlsafe_b64encode
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -196,6 +197,52 @@ def test_login_rejects_missing_encryption_session_header() -> None:
 
     assert response.status_code == 400
     assert response.json()["detail"] == "missing encryption session"
+
+
+def test_cleanup_expired_encryption_sessions_deletes_only_expired() -> None:
+    now = datetime(2026, 6, 17, 12, 0, tzinfo=UTC)
+    repository = FakeEncryptionSessionRepository()
+    repository.sessions["expired"] = SimpleNamespace(
+        session_id="expired",
+        key_material=b"expired-key",
+        expires_at=now - timedelta(seconds=1),
+    )
+    repository.sessions["active"] = SimpleNamespace(
+        session_id="active",
+        key_material=b"active-key",
+        expires_at=now + timedelta(seconds=1),
+    )
+    manager = EncryptionSessionManager(
+        repository=repository,
+        settings=get_settings(),
+    )
+
+    deleted_count = asyncio.run(manager.cleanup_expired_sessions(now=now))
+
+    assert deleted_count == 1
+    assert "expired" not in repository.sessions
+    assert "active" in repository.sessions
+    assert repository.commit_count == 1
+
+
+def test_cleanup_expired_encryption_sessions_skips_empty_commit() -> None:
+    now = datetime(2026, 6, 17, 12, 0, tzinfo=UTC)
+    repository = FakeEncryptionSessionRepository()
+    repository.sessions["active"] = SimpleNamespace(
+        session_id="active",
+        key_material=b"active-key",
+        expires_at=now + timedelta(seconds=1),
+    )
+    manager = EncryptionSessionManager(
+        repository=repository,
+        settings=get_settings(),
+    )
+
+    deleted_count = asyncio.run(manager.cleanup_expired_sessions(now=now))
+
+    assert deleted_count == 0
+    assert "active" in repository.sessions
+    assert repository.commit_count == 0
 
 
 def _export_public_key(public_key: ec.EllipticCurvePublicKey) -> dict[str, str]:
