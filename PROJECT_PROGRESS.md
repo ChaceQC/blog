@@ -57,10 +57,15 @@
 - 使用本机真实 MySQL 临时库 `blog_codex_cleanup_verify` 和临时上传目录 `backend/var/codex-cleanup-verify` 验证服务层文件清理闭环：Alembic 迁移到 head、上传公开图片、软删除并清理物理文件、制造孤儿文件、dry-run 不删除、显式删除孤儿文件。
 - 使用本机真实 MySQL 临时库 `blog_codex_cleanup_cli_verify` 和临时上传目录 `backend/var/codex-cleanup-cli-verify` 验证 CLI 文件清理闭环：`cleanup-deleted-files` 删除 1 条软删记录和 1 个物理文件，`cleanup-orphan-files` dry-run 只汇总 1 个孤儿文件，`cleanup-orphan-files --delete` 删除 1 个孤儿文件。
 - 两轮真实库验证结束后均删除临时数据库和临时上传目录；已确认 `blog_codex_cleanup_cli_verify` 不存在，`backend/var/codex-cleanup-cli-verify` 不存在。
+- 新增 Redis 共享限流适配器：`RateLimitService` 改为接收后端协议，保留 `InMemoryRateLimiter`，新增 `RedisRateLimiter`，使用 Redis sorted set 与 Lua 脚本完成原子滑动窗口检查。
+- 新增限流配置 `BLOG_RATE_LIMIT_BACKEND`、`BLOG_REDIS_URL`、`BLOG_REDIS_KEY_PREFIX`；本地默认 `memory`，生产环境示例默认 `redis://redis:6379/0`，继续只在 Docker 私有网络访问 Redis。
+- Redis 适配器在连接异常时会按同一限流 key 回落到进程内限流器，避免 Redis 短暂不可用导致后台登录或加密协商入口完全失去保护。
+- 补充 Redis 限流单元测试，覆盖共享窗口拦截和 Redis 异常时的内存降级。
+- 同步更新根目录 `README.md`、后端 `README.md`、`PROJECT_PLAN.md` 和环境变量示例，标记 Redis 共享限流适配器已接入。
 
 ### 进行中
 
-- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；软删除文件物理清理、孤儿文件清理和真实 MySQL 临时库闭环验证已完成，下一步切到 Redis 共享限流适配器评估与实现。
+- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；软删除文件物理清理、孤儿文件清理、真实 MySQL 临时库闭环验证和 Redis 共享限流适配器已完成，下一步补充维护任务定时调度建议与真实 Redis 限流联调。
 
 ### 阻塞与风险
 
@@ -70,11 +75,12 @@
 - 实际执行 `cleanup-deleted-files` 会删除当前配置数据库中的软删记录和本地物理文件；本次只跑服务层单元测试和 CLI 可见性检查，未在未确认目标库与上传目录的情况下直接运行清理命令。
 - `cleanup-orphan-files` 默认 dry-run 不删除文件；显式加 `--delete` 会删除当前配置上传目录中的孤儿文件，本次未在未确认目标库与上传目录的情况下执行真实删除。
 - 本次真实清理验证仅使用 `blog_codex_cleanup_verify`、`blog_codex_cleanup_cli_verify` 和对应临时上传目录，未触碰当前运行库 `blog_codex_runtime`；MySQL 对重复 `DROP DATABASE IF EXISTS` 输出过一次“database doesn't exist”提示，但最终复查临时库和临时目录均不存在。
+- Redis 共享限流已通过单元测试覆盖；本次未启动真实 Redis 服务做 HTTP 入口联调，下一步需要用 Docker Compose 私有 Redis 或本机 Redis 验证后台登录和加密协商入口真实 429、`Retry-After` 与安全事件记录。
 
 ### 下一步
 
-- 评估并实现 Redis 共享限流适配器，替换或扩展当前单进程内存限流器，优先覆盖后台登录和加密协商入口。
-- Redis 限流适配器完成后，补充配置示例、单元测试和无 Redis 时的本地降级策略验证。
+- 补充维护任务定时调度配置建议，明确 `cleanup-encryption-sessions`、`cleanup-deleted-files`、`cleanup-orphan-files` 的 cron 或 systemd timer 示例和执行频率。
+- 使用真实 Redis 或 Docker Compose 私有 Redis 验证后台登录和加密协商入口限流在共享后端下的 429、`Retry-After` 与安全事件记录。
 - 使用真实 MySQL 运行库验证上传图片、选择封面、发布文章、前台封面展示、正文图片渲染、公开文件栏下载和后台访问日志查询。
 
 ### 验证
@@ -121,6 +127,11 @@
 - 已使用本机真实 MySQL 临时库 `blog_codex_cleanup_verify` 运行 Alembic 迁移和服务层文件清理闭环，确认软删除清理扫描 1 条、删除记录 1 条、删除物理文件 1 个；孤儿 dry-run 扫描 2 个、孤儿 1 个、删除 0 个；孤儿显式删除扫描 2 个、孤儿 1 个、删除 1 个。
 - 已使用本机真实 MySQL 临时库 `blog_codex_cleanup_cli_verify` 运行 Alembic 迁移和 CLI 文件清理闭环，确认 `cleanup-deleted-files`、`cleanup-orphan-files` dry-run、`cleanup-orphan-files --delete` 均按预期输出和修改临时上传目录。
 - 已确认 CLI 验证结束后 `blog_codex_cleanup_cli_verify` 临时库不存在，`backend/var/codex-cleanup-cli-verify` 临时上传目录不存在。
+- Redis 限流适配器接入后已运行 `uv run ruff check .`，通过。
+- Redis 限流适配器接入后已运行 `uv run pytest tests\test_rate_limit.py tests\test_admin_security.py tests\test_admin_encryption_api.py`，15 个测试通过；仍存在 FastAPI TestClient 上游弃用警告。
+- Redis 限流适配器接入后已重新运行后端全量 `uv run pytest`，87 个测试通过；仍存在 FastAPI TestClient 与 per-request cookies 的上游弃用警告。
+- Redis 限流适配器接入后已运行 `docker compose -f deploy\docker-compose.yml -f deploy\docker-compose.prod.yml config --quiet`，配置可展开。
+- Redis 限流适配器接入后已运行 `git diff --check`，未发现空白或行尾问题。
 
 ## 2026-06-16
 

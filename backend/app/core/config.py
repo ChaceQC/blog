@@ -26,6 +26,9 @@ class Settings(BaseSettings):
         ge=10,
         le=3600,
     )
+    rate_limit_backend: Literal["memory", "redis"] = "memory"
+    redis_url: str | None = None
+    redis_key_prefix: str = "blog:rate-limit"
     admin_cookie_secure: bool = False
     admin_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
 

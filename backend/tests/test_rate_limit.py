@@ -6,9 +6,11 @@ from starlette.requests import Request
 
 from app.api.admin.limits import enforce_rate_limit
 from app.services.rate_limit import (
+    InMemoryRateLimiter,
     RateLimitExceeded,
     RateLimitRule,
     RateLimitService,
+    RedisRateLimiter,
 )
 
 
@@ -53,6 +55,53 @@ def test_rate_limit_allows_after_window_moves_forward() -> None:
         rule=rule,
         now=now + timedelta(seconds=60),
     )
+
+
+def test_redis_rate_limit_blocks_with_shared_window() -> None:
+    service = RateLimitService(
+        RedisRateLimiter(
+            redis_client=FakeRedis(),
+            key_prefix="test:rate-limit",
+        ),
+    )
+    rule = RateLimitRule(max_attempts=2, window_seconds=60)
+    now = datetime(2026, 6, 16, tzinfo=UTC)
+
+    service.check(key="admin-login:127.0.0.1:admin", rule=rule, now=now)
+    service.check(
+        key="admin-login:127.0.0.1:admin",
+        rule=rule,
+        now=now + timedelta(seconds=1),
+    )
+
+    with pytest.raises(RateLimitExceeded) as exc_info:
+        service.check(
+            key="admin-login:127.0.0.1:admin",
+            rule=rule,
+            now=now + timedelta(seconds=2),
+        )
+
+    assert exc_info.value.retry_after_seconds == 58
+
+
+def test_redis_rate_limit_falls_back_to_memory_when_redis_fails() -> None:
+    service = RateLimitService(
+        RedisRateLimiter(
+            redis_client=FailingRedis(),
+            key_prefix="test:rate-limit",
+            fallback=InMemoryRateLimiter(),
+        ),
+    )
+    rule = RateLimitRule(max_attempts=1, window_seconds=60)
+    now = datetime(2026, 6, 16, tzinfo=UTC)
+
+    service.check(key="encryption-session:127.0.0.1", rule=rule, now=now)
+    with pytest.raises(RateLimitExceeded):
+        service.check(
+            key="encryption-session:127.0.0.1",
+            rule=rule,
+            now=now + timedelta(seconds=1),
+        )
 
 
 @pytest.mark.anyio
@@ -104,3 +153,38 @@ async def test_enforce_rate_limit_records_security_event() -> None:
             "detail_json": {"username": "admin"},
         },
     ]
+
+
+class FakeRedis:
+    def __init__(self) -> None:
+        self._hits: dict[str, list[int]] = {}
+
+    def eval(
+        self,
+        _: str,
+        __: int,
+        key: str,
+        now: int,
+        window: int,
+        max_attempts: int,
+        member: str,
+        ___: int,
+    ) -> list[int]:
+        hits = [
+            score
+            for score in self._hits.get(key, [])
+            if now - score < window
+        ]
+        self._hits[key] = hits
+        if len(hits) >= max_attempts:
+            retry_after = window - (now - hits[0])
+            return [0, max(1, retry_after)]
+        self._hits.setdefault(key, []).append(now + len(member) * 0)
+        return [1, 0]
+
+
+class FailingRedis:
+    def eval(self, *_: object) -> list[int]:
+        from redis.exceptions import RedisError
+
+        raise RedisError("redis is unavailable")

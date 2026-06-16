@@ -27,7 +27,7 @@ from app.services.encryption import EncryptionSessionManager
 from app.services.files import FileService
 from app.services.links import LinkService
 from app.services.logs import LogService
-from app.services.rate_limit import RateLimitService
+from app.services.rate_limit import RateLimitService, create_rate_limit_service
 from app.services.settings import SettingService
 
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
@@ -108,10 +108,20 @@ def get_setting_service(session: SessionDependency) -> SettingService:
 SettingServiceDependency = Annotated[SettingService, Depends(get_setting_service)]
 
 
-_rate_limit_service = RateLimitService()
+_rate_limit_service: RateLimitService | None = None
+_rate_limit_signature: tuple[str, str | None, str] | None = None
 
 
-def get_rate_limit_service() -> RateLimitService:
+def get_rate_limit_service(settings: SettingsDependency) -> RateLimitService:
+    global _rate_limit_service, _rate_limit_signature
+    signature = (
+        settings.rate_limit_backend,
+        settings.redis_url,
+        settings.redis_key_prefix,
+    )
+    if _rate_limit_service is None or _rate_limit_signature != signature:
+        _rate_limit_service = create_rate_limit_service(settings)
+        _rate_limit_signature = signature
     return _rate_limit_service
 
 
