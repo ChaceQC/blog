@@ -25,6 +25,7 @@ from app.schemas.encryption import (
     CreateEncryptionSessionResponse,
     EncryptedApiRequest,
     EncryptedApiResponse,
+    EncryptionSessionScope,
     JsonObject,
 )
 
@@ -68,6 +69,7 @@ class EncryptionSessionManager:
         self,
         *,
         client_public_key: BrowserPublicKey,
+        scope: EncryptionSessionScope = "admin",
     ) -> CreateEncryptionSessionResponse:
         now = datetime.now(UTC)
         await self._repository.delete_expired_sessions(now=now)
@@ -89,10 +91,11 @@ class EncryptionSessionManager:
 
         return CreateEncryptionSessionResponse(
             session_id=session_id,
+            scope=scope,
             server_public_key=_export_browser_public_key(
                 server_private_key.public_key(),
             ),
-            profiles=[EncryptionProfile.SENSITIVE, EncryptionProfile.CONTENT],
+            profiles=_profiles_for_scope(scope),
             expires_at=expires_at,
         )
 
@@ -116,7 +119,6 @@ class EncryptionSessionManager:
         return EncryptedApiResponse(
             session_id=session.session_id,
             profile=envelope.profile,
-            algorithm=envelope.algorithm,
             nonce=envelope.nonce,
             ciphertext=envelope.ciphertext,
         )
@@ -135,7 +137,6 @@ class EncryptionSessionManager:
             return decrypt_json_payload_with_key_material(
                 EncryptedEnvelope(
                     profile=payload.profile,
-                    algorithm=payload.algorithm,
                     nonce=payload.nonce,
                     ciphertext=payload.ciphertext,
                 ),
@@ -191,6 +192,12 @@ def _export_browser_public_key(
 
 def _random_token() -> str:
     return _base64url_encode(urandom(32))
+
+
+def _profiles_for_scope(scope: EncryptionSessionScope) -> list[EncryptionProfile]:
+    if scope == "public":
+        return [EncryptionProfile.CONTENT]
+    return [EncryptionProfile.SENSITIVE, EncryptionProfile.CONTENT]
 
 
 def _base64url_encode(value: bytes) -> str:

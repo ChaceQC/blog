@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Index, Integer, String, func
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import (
@@ -41,6 +41,11 @@ class BlogFile(TimestampMixin, SoftDeleteMixin, Base):
     visibility: Mapped[str] = mapped_column(
         String(32),
         default="public",
+        nullable=False,
+    )
+    public_listed: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
         nullable=False,
     )
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)

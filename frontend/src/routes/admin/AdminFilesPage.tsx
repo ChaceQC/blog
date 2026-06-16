@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Copy,
+  ExternalLink,
   FileArchive,
   FileImage,
   LockKeyhole,
@@ -12,6 +13,7 @@ import { useMemo, useState, type ChangeEvent } from 'react'
 
 import {
   deleteAdminFile,
+  getAdminFileTemporaryUrl,
   listAdminFiles,
   uploadAdminFile,
 } from '../../features/files/api.ts'
@@ -19,6 +21,7 @@ import { useAuth } from '../../features/auth/useAuth.ts'
 
 import type {
   AdminFileItem,
+  AdminFileTemporaryUrlResponse,
   FileVisibility,
 } from '../../features/files/types.ts'
 
@@ -34,8 +37,12 @@ export function AdminFilesPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [visibility, setVisibility] = useState<FileVisibility>('public')
+  const [publicListed, setPublicListed] = useState(false)
   const [altText, setAltText] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
+  const [temporaryUrls, setTemporaryUrls] = useState<
+    Record<number, AdminFileTemporaryUrlResponse>
+  >({})
 
   const filesQuery = useQuery({
     queryKey: ['admin-files'],
@@ -73,6 +80,7 @@ export function AdminFilesPage() {
         uploadFile,
         visibility,
         altText,
+        publicListed,
         session.csrfToken,
       )
     },
@@ -81,6 +89,7 @@ export function AdminFilesPage() {
       setSelectedId(file.id)
       setUploadFile(null)
       setAltText('')
+      setPublicListed(false)
       setNotice('文件已上传')
     },
     onError: (error) => {
@@ -104,6 +113,32 @@ export function AdminFilesPage() {
       setNotice(error instanceof Error ? error.message : '删除失败')
     },
   })
+
+  const temporaryUrlMutation = useMutation({
+    mutationFn: getAdminFileTemporaryUrl,
+    onSuccess: (link, fileId) => {
+      setTemporaryUrls((current) => ({ ...current, [fileId]: link }))
+      setNotice('访问链接已生成')
+    },
+    onError: (error) => {
+      setNotice(error instanceof Error ? error.message : '访问链接生成失败')
+    },
+  })
+
+  async function getTemporaryUrl(file: AdminFileItem): Promise<string | null> {
+    if (file.visibility !== 'public') {
+      setNotice('私有文件只在后台可见')
+      return null
+    }
+
+    const cached = temporaryUrls[file.id]
+    if (cached && new Date(cached.expires_at).getTime() > Date.now() + 5000) {
+      return cached.url
+    }
+
+    const link = await temporaryUrlMutation.mutateAsync(file.id)
+    return link.url
+  }
 
   return (
     <div className="admin-flow">
@@ -148,7 +183,13 @@ export function AdminFilesPage() {
               >
                 <span>
                   <strong>{file.original_name}</strong>
-                  <small>{file.object_key}</small>
+                  <small>
+                    {file.visibility === 'public'
+                      ? file.public_listed
+                        ? '公开文件栏'
+                        : '文章可引用'
+                      : '仅后台可见'}
+                  </small>
                 </span>
                 <small>{visibilityLabels[file.visibility]}</small>
               </button>
@@ -168,8 +209,14 @@ export function AdminFilesPage() {
             <FileDetail
               file={selectedFile}
               isDeleting={deleteMutation.isPending}
-              onCopy={() => copyFileLink(selectedFile, setNotice)}
+              isLinkLoading={
+                temporaryUrlMutation.isPending &&
+                temporaryUrlMutation.variables === selectedFile.id
+              }
+              onCopy={() => void copyFileLink(selectedFile, getTemporaryUrl, setNotice)}
               onDelete={() => deleteMutation.mutate()}
+              onOpen={() => void openFileLink(selectedFile, getTemporaryUrl, setNotice)}
+              temporaryUrl={temporaryUrls[selectedFile.id] ?? null}
             />
           ) : (
             <p className="empty-state">请选择或上传一份素材。</p>
@@ -197,14 +244,27 @@ export function AdminFilesPage() {
               <label>
                 可见性
                 <select
-                  onChange={(event) =>
-                    setVisibility(event.target.value as FileVisibility)
-                  }
+                  onChange={(event) => {
+                    const nextVisibility = event.target.value as FileVisibility
+                    setVisibility(nextVisibility)
+                    if (nextVisibility === 'private') {
+                      setPublicListed(false)
+                    }
+                  }}
                   value={visibility}
                 >
                   <option value="public">公开</option>
                   <option value="private">私有</option>
                 </select>
+              </label>
+              <label className="checkbox-field">
+                <input
+                  checked={publicListed}
+                  disabled={visibility !== 'public'}
+                  onChange={(event) => setPublicListed(event.target.checked)}
+                  type="checkbox"
+                />
+                展示在公开文件栏
               </label>
               <label>
                 替代文本
@@ -218,7 +278,7 @@ export function AdminFilesPage() {
           </form>
           <div className="admin-note-list">
             <p>可以上传 JPEG、PNG、GIF、WebP 和 PDF。</p>
-            <p>公开素材会得到一个可复制的链接，私有素材只留在后台。</p>
+            <p>文章图片使用渲染接口，公开文件栏下载才生成短时链接。</p>
             <p>删除后会先从列表移走，后面再统一清理原文件。</p>
           </div>
         </section>
@@ -230,11 +290,24 @@ export function AdminFilesPage() {
 type FileDetailProps = {
   file: AdminFileItem
   isDeleting: boolean
+  isLinkLoading: boolean
   onCopy: () => void
   onDelete: () => void
+  onOpen: () => void
+  temporaryUrl: AdminFileTemporaryUrlResponse | null
 }
 
-function FileDetail({ file, isDeleting, onCopy, onDelete }: FileDetailProps) {
+function FileDetail({
+  file,
+  isDeleting,
+  isLinkLoading,
+  onCopy,
+  onDelete,
+  onOpen,
+  temporaryUrl,
+}: FileDetailProps) {
+  const isPublic = file.visibility === 'public'
+
   return (
     <div className="admin-detail">
       <div className="file-inspector">
@@ -256,8 +329,22 @@ function FileDetail({ file, isDeleting, onCopy, onDelete }: FileDetailProps) {
           <dd>{file.object_key}</dd>
         </div>
         <div>
-          <dt>公开链接</dt>
-          <dd>{file.public_url ?? '私有文件不公开'}</dd>
+          <dt>{isPublic ? '访问链接' : '访问范围'}</dt>
+          <dd>
+            {isPublic && temporaryUrl ? (
+              <a href={temporaryUrl.url} target="_blank" rel="noreferrer">
+                {temporaryUrl.url}
+              </a>
+            ) : isPublic ? (
+              '按需生成，短时间内有效'
+            ) : (
+              '仅后台可见'
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>公开文件栏</dt>
+          <dd>{file.public_listed ? '展示' : '不展示'}</dd>
         </div>
         <div>
           <dt>尺寸</dt>
@@ -271,17 +358,34 @@ function FileDetail({ file, isDeleting, onCopy, onDelete }: FileDetailProps) {
           <dt>更新时间</dt>
           <dd>{formatDate(file.updated_at)}</dd>
         </div>
+        {temporaryUrl ? (
+          <div>
+            <dt>链接有效期</dt>
+            <dd>{formatDate(temporaryUrl.expires_at)}</dd>
+          </div>
+        ) : null}
       </dl>
       <div className="form-actions">
         <button
           className="text-button"
-          disabled={!file.public_url}
+          disabled={!isPublic || isLinkLoading}
           onClick={onCopy}
           type="button"
         >
           <Copy size={17} strokeWidth={1.8} aria-hidden="true" />
-          复制链接
+          {isLinkLoading ? '生成中' : '复制链接'}
         </button>
+        {isPublic ? (
+          <button
+            className="text-button"
+            disabled={isLinkLoading}
+            onClick={onOpen}
+            type="button"
+          >
+            <ExternalLink size={17} strokeWidth={1.8} aria-hidden="true" />
+            打开
+          </button>
+        ) : null}
         <button
           className="text-button text-button--muted"
           disabled={isDeleting}
@@ -323,16 +427,43 @@ function formatDate(value: string | null): string {
   }).format(new Date(value))
 }
 
-function copyFileLink(
+async function copyFileLink(
   file: AdminFileItem,
+  getTemporaryUrl: (file: AdminFileItem) => Promise<string | null>,
   setNotice: (notice: string | null) => void,
 ) {
-  if (!file.public_url) {
-    setNotice('私有文件没有公开链接')
+  let publicFileUrl: string | null
+  try {
+    publicFileUrl = await getTemporaryUrl(file)
+  } catch {
+    return
+  }
+  if (!publicFileUrl) {
     return
   }
   navigator.clipboard
-    .writeText(file.public_url)
+    .writeText(publicFileUrl)
     .then(() => setNotice('链接已复制'))
     .catch(() => setNotice('复制失败，请手动选择链接'))
+}
+
+async function openFileLink(
+  file: AdminFileItem,
+  getTemporaryUrl: (file: AdminFileItem) => Promise<string | null>,
+  setNotice: (notice: string | null) => void,
+) {
+  let publicFileUrl: string | null
+  try {
+    publicFileUrl = await getTemporaryUrl(file)
+  } catch {
+    return
+  }
+  if (!publicFileUrl) {
+    return
+  }
+
+  const opened = window.open(publicFileUrl, '_blank', 'noopener,noreferrer')
+  if (!opened) {
+    setNotice('浏览器拦截了新窗口，请复制链接后打开')
+  }
 }

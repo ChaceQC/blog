@@ -1,4 +1,4 @@
-from base64 import urlsafe_b64decode, urlsafe_b64encode
+﻿from base64 import urlsafe_b64decode, urlsafe_b64encode
 
 import pytest
 
@@ -57,7 +57,6 @@ def test_encryption_rejects_tampered_ciphertext() -> None:
     ciphertext_bytes[-1] ^= 1
     tampered = EncryptedEnvelope(
         profile=envelope.profile,
-        algorithm=envelope.algorithm,
         nonce=envelope.nonce,
         ciphertext=_base64url_encode(bytes(ciphertext_bytes)),
     )

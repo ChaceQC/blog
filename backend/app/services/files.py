@@ -1,8 +1,13 @@
 import hashlib
+import hmac
+import json
 import struct
 import tempfile
+from base64 import urlsafe_b64decode, urlsafe_b64encode
+from binascii import Error as BinasciiError
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
@@ -41,12 +46,21 @@ class ManagedFileNotFoundError(Exception):
     pass
 
 
+class FileAccessDeniedError(Exception):
+    pass
+
+
+class InvalidFileAccessTokenError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class UploadFileCommand:
     original_name: str
     content_type: str | None
     data: bytes
     visibility: str
+    public_listed: bool
     uploader_id: int | None
     alt_text: str | None
     max_size_bytes: int
@@ -61,6 +75,20 @@ class FileWithUsage:
         return getattr(self.file, name)
 
 
+@dataclass(frozen=True)
+class TemporaryFileAccess:
+    file: BlogFile
+    token: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True)
+class FileDownload:
+    path: Path
+    media_type: str
+    filename: str
+
+
 class FileRepositoryProtocol(Protocol):
     async def list_files(
         self,
@@ -68,6 +96,13 @@ class FileRepositoryProtocol(Protocol):
         limit: int,
         offset: int,
     ) -> Sequence[tuple[BlogFile, int]]: ...
+
+    async def list_public_listed_files(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> Sequence[BlogFile]: ...
 
     async def get_file(self, file_id: int) -> BlogFile | None: ...
 
@@ -90,6 +125,7 @@ class FileRepositoryProtocol(Protocol):
         alt_text: str | None,
         uploader_id: int | None,
         visibility: str,
+        public_listed: bool,
     ) -> BlogFile: ...
 
     async def commit(self) -> None: ...
@@ -110,6 +146,14 @@ class FileService:
     async def list_files(self, *, limit: int, offset: int) -> list[FileWithUsage]:
         files = await self.repository.list_files(limit=limit, offset=offset)
         return [FileWithUsage(file=file, usage_count=count) for file, count in files]
+
+    async def list_public_files(self, *, limit: int, offset: int) -> list[BlogFile]:
+        return list(
+            await self.repository.list_public_listed_files(
+                limit=limit,
+                offset=offset,
+            ),
+        )
 
     async def upload_file(self, command: UploadFileCommand) -> FileWithUsage:
         self._validate_size(command.data, command.max_size_bytes)
@@ -154,6 +198,9 @@ class FileService:
             alt_text=command.alt_text,
             uploader_id=command.uploader_id,
             visibility=command.visibility,
+            public_listed=(
+                command.public_listed and command.visibility == "public"
+            ),
         )
         await self.repository.commit()
         await self.repository.refresh(file)
@@ -169,6 +216,111 @@ class FileService:
         await self.repository.commit()
         await self.repository.refresh(file)
         return FileWithUsage(file=file, usage_count=0)
+
+    async def create_temporary_access(
+        self,
+        *,
+        file_id: int,
+        secret_key: str,
+        expires_seconds: int,
+    ) -> TemporaryFileAccess:
+        file = await self.repository.get_file(file_id)
+        if file is None:
+            raise ManagedFileNotFoundError("file not found")
+        if file.visibility != "public" or file.status != "active":
+            raise FileAccessDeniedError("file is not public")
+
+        expires_at = utc_now() + timedelta(seconds=expires_seconds)
+        token = _sign_file_token(
+            file_id=file.id,
+            sha256=file.sha256,
+            expires_at=expires_at,
+            secret_key=secret_key,
+        )
+        return TemporaryFileAccess(file=file, token=token, expires_at=expires_at)
+
+    async def create_public_temporary_access(
+        self,
+        *,
+        file_id: int,
+        secret_key: str,
+        expires_seconds: int,
+    ) -> TemporaryFileAccess:
+        access = await self.create_temporary_access(
+            file_id=file_id,
+            secret_key=secret_key,
+            expires_seconds=expires_seconds,
+        )
+        if not access.file.public_listed:
+            raise FileAccessDeniedError("file is not listed public")
+        return access
+
+    async def prepare_public_download(
+        self,
+        *,
+        file_id: int,
+        token: str,
+        secret_key: str,
+        upload_root: Path,
+    ) -> FileDownload:
+        file = await self.repository.get_file(file_id)
+        if file is None:
+            raise ManagedFileNotFoundError("file not found")
+        if file.visibility != "public" or file.status != "active":
+            raise FileAccessDeniedError("file is not public")
+        if not _verify_file_token(
+            token,
+            file_id=file.id,
+            sha256=file.sha256,
+            secret_key=secret_key,
+        ):
+            raise InvalidFileAccessTokenError("invalid temporary file token")
+
+        path = _resolve_storage_path(upload_root, file.object_key)
+        if path is None or not path.is_file():
+            raise ManagedFileNotFoundError("stored file not found")
+
+        return FileDownload(
+            path=path,
+            media_type=file.mime_type,
+            filename=file.original_name,
+        )
+
+    async def prepare_article_render(
+        self,
+        *,
+        file_id: int,
+        post_slug: str,
+        post_content_md: str,
+        post_content_html: str,
+        upload_root: Path,
+    ) -> FileDownload:
+        file = await self.repository.get_file(file_id)
+        if file is None:
+            raise ManagedFileNotFoundError("file not found")
+        if (
+            file.visibility != "public"
+            or file.status != "active"
+            or not file.mime_type.startswith("image/")
+        ):
+            raise FileAccessDeniedError("file is not renderable")
+        if not _article_render_reference_exists(
+            post_slug=post_slug,
+            file_id=file.id,
+            content_md=post_content_md,
+            content_html=post_content_html,
+        ):
+            raise FileAccessDeniedError("file is not referenced by post")
+
+        path = _resolve_storage_path(upload_root, file.object_key)
+        if path is None or not path.is_file():
+            raise ManagedFileNotFoundError("stored file not found")
+
+        return FileDownload(
+            path=path,
+            media_type=file.mime_type,
+            filename=file.original_name,
+        )
 
     def _validate_size(self, data: bytes, max_size_bytes: int) -> None:
         if not data:
@@ -285,3 +437,99 @@ def _read_jpeg_size(data: bytes) -> tuple[int | None, int | None]:
             return width, height
         index += length
     return None, None
+
+
+def _sign_file_token(
+    *,
+    file_id: int,
+    sha256: str,
+    expires_at: datetime,
+    secret_key: str,
+) -> str:
+    payload = {
+        "exp": int(expires_at.timestamp()),
+        "file_id": file_id,
+        "sha256": sha256,
+    }
+    payload_bytes = json.dumps(
+        payload,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    payload_part = _base64url_encode(payload_bytes)
+    signature = hmac.new(
+        secret_key.encode("utf-8"),
+        payload_part.encode("ascii"),
+        hashlib.sha256,
+    ).digest()
+    return f"{payload_part}.{_base64url_encode(signature)}"
+
+
+def _verify_file_token(
+    token: str,
+    *,
+    file_id: int,
+    sha256: str,
+    secret_key: str,
+) -> bool:
+    try:
+        payload_part, signature_part = token.split(".", maxsplit=1)
+        expected_signature = hmac.new(
+            secret_key.encode("utf-8"),
+            payload_part.encode("ascii"),
+            hashlib.sha256,
+        ).digest()
+        if not hmac.compare_digest(
+            signature_part,
+            _base64url_encode(expected_signature),
+        ):
+            return False
+        payload = json.loads(_base64url_decode(payload_part))
+    except (BinasciiError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
+        return False
+
+    return (
+        payload.get("file_id") == file_id
+        and payload.get("sha256") == sha256
+        and isinstance(payload.get("exp"), int)
+        and payload["exp"] > int(utc_now().timestamp())
+    )
+
+
+def _resolve_storage_path(upload_root: Path, object_key: str) -> Path | None:
+    if not object_key.startswith("public/"):
+        return None
+
+    root = upload_root.resolve()
+    path = (upload_root / object_key).resolve()
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return None
+    return path
+
+
+def _article_render_reference_exists(
+    *,
+    post_slug: str,
+    file_id: int,
+    content_md: str,
+    content_html: str,
+) -> bool:
+    references = (
+        f"/api/public/posts/{post_slug}/files/{file_id}/render",
+        f"api/public/posts/{post_slug}/files/{file_id}/render",
+    )
+    return any(
+        reference in content_md or reference in content_html
+        for reference in references
+    )
+
+
+def _base64url_encode(value: bytes) -> str:
+    return urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _base64url_decode(value: str) -> str:
+    padding = "=" * (-len(value) % 4)
+    return urlsafe_b64decode(f"{value}{padding}").decode("utf-8")

@@ -71,3 +71,23 @@ class SecurityEvent(Base):
         server_default=func.now(),
         nullable=False,
     )
+
+
+class AccessLog(Base):
+    __tablename__ = "access_logs"
+
+    id: Mapped[int] = pk_column()
+    access_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    method: Mapped[str] = mapped_column(String(16), nullable=False)
+    path: Mapped[str] = mapped_column(String(500), nullable=False)
+    status_code: Mapped[int] = mapped_column(nullable=False)
+    entity_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entity_id: Mapped[int | None] = mapped_column(BIGINT_UNSIGNED, nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    detail_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DATETIME_6,
+        server_default=func.now(),
+        nullable=False,
+    )

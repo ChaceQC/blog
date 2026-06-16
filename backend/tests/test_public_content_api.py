@@ -3,9 +3,67 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from app.api.public.router import get_public_content_service
+from app.api.admin.dependencies import get_encryption_session_manager, get_log_service
+from app.api.public.router import get_public_content_service, get_public_link_service
+from app.core.encryption import EncryptionProfile
 from app.main import app
+from app.schemas.encryption import (
+    BrowserPublicKey,
+    CreateEncryptionSessionResponse,
+    EncryptedApiResponse,
+)
 from app.services.content import ContentNotFoundError
+
+
+class FakeEncryptionSessionManager:
+    def __init__(self) -> None:
+        self.payload: dict[str, object] | None = None
+
+    async def encrypt_response(
+        self,
+        *,
+        session_id: str,
+        profile: EncryptionProfile,
+        payload: dict[str, object],
+    ) -> EncryptedApiResponse:
+        assert session_id == "public-session"
+        assert profile == EncryptionProfile.CONTENT
+        self.payload = payload
+        return EncryptedApiResponse(
+            session_id=session_id,
+            profile=profile,
+            nonce="test-nonce",
+            ciphertext="test-ciphertext",
+        )
+
+    async def create_session(
+        self,
+        *,
+        client_public_key: BrowserPublicKey,
+        scope: str = "admin",
+    ) -> CreateEncryptionSessionResponse:
+        assert client_public_key.kty == "EC"
+        assert scope == "public"
+        return CreateEncryptionSessionResponse(
+            session_id="public-session",
+            scope="public",
+            server_public_key=BrowserPublicKey(
+                kty="EC",
+                crv="P-256",
+                x="server-x",
+                y="server-y",
+            ),
+            profiles=[EncryptionProfile.CONTENT],
+            expires_at=datetime(2026, 6, 16, tzinfo=UTC),
+        )
+
+
+class FakeLogService:
+    def __init__(self) -> None:
+        self.items: list[dict[str, object]] = []
+
+    async def record_access_log(self, **kwargs: object) -> None:
+        self.items.append(dict(kwargs))
 
 
 class FakePublicContentService:
@@ -43,42 +101,135 @@ class FakePublicContentService:
         )
 
 
-def test_public_posts_returns_published_post_list() -> None:
+class FakePublicLinkService:
+    async def list_public_friend_links(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[object]:
+        assert limit == 1
+        assert offset == 0
+        return [
+            SimpleNamespace(
+                id=1,
+                group_name="朋友",
+                name="ChaceQC",
+                url="https://github.com/ChaceQC",
+                avatar_url=None,
+                description="项目记录",
+                sort_order=0,
+            ),
+        ]
+
+    async def list_public_site_nav_items(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[object]:
+        assert limit == 1
+        assert offset == 0
+        return [
+            SimpleNamespace(
+                id=1,
+                group_name="项目",
+                group_slug="projects",
+                title="GitHub 仓库",
+                url="https://github.com/ChaceQC/blog",
+                icon_url=None,
+                description="源码与提交记录",
+                tags_json={"tags": ["blog"]},
+                open_target="blank",
+                sort_order=0,
+            ),
+        ]
+
+
+def test_public_encryption_session_uses_public_scope() -> None:
     client = TestClient(app)
-    app.dependency_overrides[get_public_content_service] = (
-        lambda: FakePublicContentService()
+    app.dependency_overrides[get_encryption_session_manager] = (
+        lambda: FakeEncryptionSessionManager()
     )
 
     try:
-        response = client.get("/api/public/posts?limit=1")
+        response = client.post(
+            "/api/public/encryption/sessions",
+            json={
+                "client_public_key": {
+                    "kty": "EC",
+                    "crv": "P-256",
+                    "x": "client-x",
+                    "y": "client-y",
+                },
+            },
+        )
     finally:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.json()["items"][0]["slug"] == "public-post"
-    assert "content_html" not in response.json()["items"][0]
+    assert response.json()["scope"] == "public"
+
+
+def test_public_posts_returns_published_post_list() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_content_service] = (
+        lambda: FakePublicContentService()
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get(
+            "/api/public/posts?limit=1",
+            headers={"X-Encryption-Session": "public-session"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload is not None
+    assert manager.payload["items"][0]["slug"] == "public-post"
+    assert "content_html" not in manager.payload["items"][0]
+    assert logs.items[0]["access_type"] == "public_posts_list"
 
 
 def test_public_post_detail_returns_html_content() -> None:
     client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    logs = FakeLogService()
     app.dependency_overrides[get_public_content_service] = (
         lambda: FakePublicContentService()
     )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
 
     try:
-        response = client.get("/api/public/posts/public-post")
+        response = client.get(
+            "/api/public/posts/public-post",
+            headers={"X-Encryption-Session": "public-session"},
+        )
     finally:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.json()["content_html"] == "<p>正文</p>"
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload is not None
+    assert manager.payload["content_html"] == "<p>正文</p>"
+    assert logs.items[0]["access_type"] == "public_post_detail"
+    assert logs.items[0]["entity_id"] == 1
 
 
 def test_public_post_detail_returns_404_for_missing_post() -> None:
     client = TestClient(app)
+    logs = FakeLogService()
     app.dependency_overrides[get_public_content_service] = (
         lambda: FakePublicContentService()
     )
+    app.dependency_overrides[get_log_service] = lambda: logs
 
     try:
         response = client.get("/api/public/posts/missing-post")
@@ -87,3 +238,50 @@ def test_public_post_detail_returns_404_for_missing_post() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "post not found"
+    assert logs.items[0]["status_code"] == 404
+
+
+def test_public_friend_links_return_encrypted_list() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_link_service] = lambda: FakePublicLinkService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get(
+            "/api/public/friend-links?limit=1",
+            headers={"X-Encryption-Session": "public-session"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload is not None
+    assert manager.payload["items"][0]["name"] == "ChaceQC"
+    assert logs.items[0]["access_type"] == "public_friend_links_list"
+
+
+def test_public_site_items_return_encrypted_list() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_link_service] = lambda: FakePublicLinkService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get(
+            "/api/public/site-items?limit=1",
+            headers={"X-Encryption-Session": "public-session"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload is not None
+    assert manager.payload["items"][0]["title"] == "GitHub 仓库"
+    assert logs.items[0]["access_type"] == "public_site_items_list"

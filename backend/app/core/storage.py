@@ -29,17 +29,10 @@ class LocalStorageProvider:
 
         return StoredObject(
             object_key=object_key,
-            public_url=_public_url_for(object_key),
+            public_url=None,
             size_bytes=target.stat().st_size,
             sha256=_sha256_file(target),
         )
-
-
-def _public_url_for(object_key: str) -> str | None:
-    public_prefix = "public/"
-    if not object_key.startswith(public_prefix):
-        return None
-    return f"/uploads/{object_key.removeprefix(public_prefix)}"
 
 
 def _sha256_file(path: Path) -> str:

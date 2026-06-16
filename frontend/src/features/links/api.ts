@@ -11,8 +11,14 @@ import type {
   AdminSiteNavItemListResponse,
   FriendLinkReviewPayload,
   FriendLinkWritePayload,
+  PublicFriendLinkListResponse,
   SiteNavItemWritePayload,
 } from './types.ts'
+
+type PublicLinkListOptions = {
+  limit?: number
+  offset?: number
+}
 
 export function listAdminFriendLinks(): Promise<AdminFriendLinkListResponse> {
   return apiGetEncrypted<AdminFriendLinkListResponse>(
@@ -89,4 +95,27 @@ export function updateAdminSiteNavItem(
     'content-v1',
     { csrfToken, encryptRequest: true },
   )
+}
+
+export function listPublicFriendLinks(
+  options: PublicLinkListOptions = {},
+): Promise<PublicFriendLinkListResponse> {
+  const query = buildPublicListQuery(options)
+  return apiGetEncrypted<PublicFriendLinkListResponse>(
+    `/public/friend-links${query}`,
+    'content-v1',
+    { encryptionScope: 'public' },
+  )
+}
+
+function buildPublicListQuery(options: PublicLinkListOptions): string {
+  const params = new URLSearchParams()
+  if (options.limit !== undefined) {
+    params.set('limit', String(options.limit))
+  }
+  if (options.offset !== undefined) {
+    params.set('offset', String(options.offset))
+  }
+  const query = params.toString()
+  return query ? `?${query}` : ''
 }

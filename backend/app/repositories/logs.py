@@ -4,7 +4,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.log import AuditLog, LoginLog, SecurityEvent
+from app.models.log import AccessLog, AuditLog, LoginLog, SecurityEvent
 
 
 class LogRepository:
@@ -15,6 +15,20 @@ class LogRepository:
         result = await self.session.execute(
             select(AuditLog)
             .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .limit(limit)
+            .offset(offset),
+        )
+        return result.scalars().all()
+
+    async def list_access_logs(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> Sequence[AccessLog]:
+        result = await self.session.execute(
+            select(AccessLog)
+            .order_by(AccessLog.created_at.desc(), AccessLog.id.desc())
             .limit(limit)
             .offset(offset),
         )
@@ -62,6 +76,33 @@ class LogRepository:
                 ip=ip,
                 user_agent=user_agent,
                 path=path,
+                detail_json=detail_json,
+            ),
+        )
+
+    async def record_access_log(
+        self,
+        *,
+        access_type: str,
+        method: str,
+        path: str,
+        status_code: int,
+        entity_type: str | None,
+        entity_id: int | None,
+        ip: str | None,
+        user_agent: str | None,
+        detail_json: dict[str, Any] | None,
+    ) -> None:
+        self.session.add(
+            AccessLog(
+                access_type=access_type,
+                method=method,
+                path=path,
+                status_code=status_code,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                ip=ip,
+                user_agent=user_agent,
                 detail_json=detail_json,
             ),
         )

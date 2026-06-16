@@ -1,4 +1,4 @@
-import { apiGet } from '../../api/client.ts'
+import { apiGetEncrypted } from '../../api/client.ts'
 
 import type { PublicPostDetail, PublicPostListResponse } from './types.ts'
 
@@ -9,9 +9,17 @@ export function listPublicPosts(
   query.set('limit', String(params.limit ?? 20))
   query.set('offset', String(params.offset ?? 0))
 
-  return apiGet<PublicPostListResponse>(`/public/posts?${query.toString()}`)
+  return apiGetEncrypted<PublicPostListResponse>(
+    `/public/posts?${query.toString()}`,
+    'content-v1',
+    { encryptionScope: 'public' },
+  )
 }
 
 export function getPublicPost(slug: string): Promise<PublicPostDetail> {
-  return apiGet<PublicPostDetail>(`/public/posts/${encodeURIComponent(slug)}`)
+  return apiGetEncrypted<PublicPostDetail>(
+    `/public/posts/${encodeURIComponent(slug)}`,
+    'content-v1',
+    { encryptionScope: 'public' },
+  )
 }

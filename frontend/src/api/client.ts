@@ -6,6 +6,7 @@ import {
 } from './encryption.ts'
 
 import type {
+  EncryptionScope,
   EncryptionProfile,
   EncryptionSession,
   EncryptedApiResponse,
@@ -14,6 +15,7 @@ import type {
 type ApiRequestOptions = {
   csrfToken?: string
   encryptRequest?: boolean
+  encryptionScope?: EncryptionScope
 }
 
 export class ApiError extends Error {
@@ -51,7 +53,10 @@ export async function apiGetEncrypted<T>(
   profile: EncryptionProfile,
   options: ApiRequestOptions = {},
 ): Promise<T> {
-  const session = await getEncryptionSession(profile)
+  const session = await getEncryptionSession(
+    profile,
+    options.encryptionScope ?? 'admin',
+  )
   return requestJson<T>(path, {
     headers: jsonHeaders(options, { encryptionSessionId: session.id }),
     encryption: { profile, session },
@@ -64,7 +69,10 @@ export async function apiPostEncrypted<TBody, TResponse>(
   profile: EncryptionProfile,
   options: ApiRequestOptions = {},
 ): Promise<TResponse> {
-  const session = await getEncryptionSession(profile)
+  const session = await getEncryptionSession(
+    profile,
+    options.encryptionScope ?? 'admin',
+  )
   const requestBody = options.encryptRequest
     ? await encryptRequestPayload(body, profile, session)
     : body
@@ -85,7 +93,10 @@ export async function apiPostFormEncrypted<TResponse>(
   profile: EncryptionProfile,
   options: ApiRequestOptions = {},
 ): Promise<TResponse> {
-  const session = await getEncryptionSession(profile)
+  const session = await getEncryptionSession(
+    profile,
+    options.encryptionScope ?? 'admin',
+  )
   return requestJson<TResponse>(path, {
     method: 'POST',
     headers: jsonHeaders(options, {
@@ -102,7 +113,10 @@ export async function apiPatchEncrypted<TBody, TResponse>(
   profile: EncryptionProfile,
   options: ApiRequestOptions = {},
 ): Promise<TResponse> {
-  const session = await getEncryptionSession(profile)
+  const session = await getEncryptionSession(
+    profile,
+    options.encryptionScope ?? 'admin',
+  )
   const requestBody = options.encryptRequest
     ? await encryptRequestPayload(body, profile, session)
     : body
@@ -122,7 +136,10 @@ export async function apiDeleteEncrypted<TResponse>(
   profile: EncryptionProfile,
   options: ApiRequestOptions = {},
 ): Promise<TResponse> {
-  const session = await getEncryptionSession(profile)
+  const session = await getEncryptionSession(
+    profile,
+    options.encryptionScope ?? 'admin',
+  )
   return requestJson<TResponse>(path, {
     method: 'DELETE',
     headers: jsonHeaders(options, {
@@ -185,7 +202,9 @@ function isEncryptedApiResponse(value: unknown): value is EncryptedApiResponse {
   return (
     typeof value === 'object' &&
     value !== null &&
-    'encrypted' in value &&
-    (value as { encrypted: unknown }).encrypted === true
+    'session_id' in value &&
+    'profile' in value &&
+    'nonce' in value &&
+    'ciphertext' in value
   )
 }

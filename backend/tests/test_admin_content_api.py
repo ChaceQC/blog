@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+﻿from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -76,7 +76,6 @@ class FakeEncryptionSessionManager:
         return EncryptedApiResponse(
             session_id=session_id,
             profile=profile,
-            algorithm="AES-256-GCM-HKDF-SHA256",
             nonce="test-nonce",
             ciphertext="test-ciphertext",
         )
@@ -175,10 +174,8 @@ def test_create_admin_post_decrypts_content_request() -> None:
                 "X-Encryption-Session": "content-session",
             },
             json={
-                "encrypted": True,
                 "session_id": "content-session",
                 "profile": "content-v1",
-                "algorithm": "AES-256-GCM-HKDF-SHA256",
                 "nonce": "test-nonce",
                 "ciphertext": "test-ciphertext",
             },

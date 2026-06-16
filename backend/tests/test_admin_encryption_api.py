@@ -1,4 +1,4 @@
-from base64 import urlsafe_b64decode, urlsafe_b64encode
+﻿from base64 import urlsafe_b64decode, urlsafe_b64encode
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -159,12 +159,10 @@ def test_login_response_can_use_sensitive_encryption_session() -> None:
 
     assert login_response.status_code == 200
     envelope_payload = login_response.json()
-    assert envelope_payload["encrypted"] is True
     assert envelope_payload["profile"] == EncryptionProfile.SENSITIVE
     decrypted = decrypt_json_payload_with_key_material(
         EncryptedEnvelope(
             profile=EncryptionProfile(envelope_payload["profile"]),
-            algorithm=envelope_payload["algorithm"],
             nonce=envelope_payload["nonce"],
             ciphertext=envelope_payload["ciphertext"],
         ),

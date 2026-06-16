@@ -36,6 +36,13 @@ class LinkRepositoryProtocol(Protocol):
         offset: int,
     ) -> Sequence[tuple[FriendLink, str | None]]: ...
 
+    async def list_public_friend_links(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> Sequence[tuple[FriendLink, str | None]]: ...
+
     async def get_friend_link(self, link_id: int) -> FriendLink | None: ...
 
     async def create_friend_link(
@@ -52,6 +59,13 @@ class LinkRepositoryProtocol(Protocol):
     ) -> FriendLink: ...
 
     async def list_site_nav_items(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> Sequence[tuple[SiteNavItem, str | None, str | None]]: ...
+
+    async def list_public_site_nav_items(
         self,
         *,
         limit: int,
@@ -157,6 +171,21 @@ class LinkService:
             for link, group_name in rows
         ]
 
+    async def list_public_friend_links(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[AdminFriendLinkRecord]:
+        rows = await self.repository.list_public_friend_links(
+            limit=limit,
+            offset=offset,
+        )
+        return [
+            self._friend_link_record(link=link, group_name=group_name)
+            for link, group_name in rows
+        ]
+
     async def review_friend_link(
         self,
         *,
@@ -232,6 +261,25 @@ class LinkService:
         offset: int,
     ) -> list[AdminSiteNavItemRecord]:
         rows = await self.repository.list_site_nav_items(limit=limit, offset=offset)
+        return [
+            self._site_nav_item_record(
+                item=item,
+                group_name=group_name,
+                group_slug=group_slug,
+            )
+            for item, group_name, group_slug in rows
+        ]
+
+    async def list_public_site_nav_items(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[AdminSiteNavItemRecord]:
+        rows = await self.repository.list_public_site_nav_items(
+            limit=limit,
+            offset=offset,
+        )
         return [
             self._site_nav_item_record(
                 item=item,

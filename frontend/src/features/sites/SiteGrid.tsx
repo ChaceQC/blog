@@ -1,6 +1,6 @@
 import { ArrowUpRight } from 'lucide-react'
 
-import type { SiteItem } from './sampleSites.ts'
+import type { SiteItem } from './types.ts'
 
 type SiteGridProps = {
   sites: SiteItem[]
@@ -13,9 +13,9 @@ export function SiteGrid({ sites }: SiteGridProps) {
         <a className="site-tile" href={site.url} key={site.id}>
           <span>
             <strong>{site.title}</strong>
-            <small>{site.group}</small>
+            <small>{site.group_name ?? site.group_slug ?? '入口'}</small>
           </span>
-          <p>{site.description}</p>
+          <p>{site.description ?? '常用站点入口'}</p>
           <ArrowUpRight size={17} strokeWidth={1.8} aria-hidden="true" />
         </a>
       ))}

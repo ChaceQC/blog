@@ -1,12 +1,6 @@
 import { ExternalLink } from 'lucide-react'
 
-import { StatusBadge } from '../../components/StatusBadge.tsx'
-import type { FriendLink } from './sampleLinks.ts'
-
-const statusLabels = {
-  healthy: '正常',
-  pending: '待审核',
-} satisfies Record<FriendLink['status'], string>
+import type { FriendLink } from './types.ts'
 
 type FriendLinkListProps = {
   links: FriendLink[]
@@ -19,10 +13,10 @@ export function FriendLinkList({ links }: FriendLinkListProps) {
         <a className="compact-row" href={link.url} key={link.id}>
           <span>
             <strong>{link.name}</strong>
-            <small>{link.description}</small>
+            <small>{link.description ?? link.group_name ?? '常去看看'}</small>
           </span>
           <span className="compact-row__meta">
-            <StatusBadge tone={link.status}>{statusLabels[link.status]}</StatusBadge>
+            <small>{link.group_name ?? '友链'}</small>
             <ExternalLink size={16} strokeWidth={1.8} aria-hidden="true" />
           </span>
         </a>

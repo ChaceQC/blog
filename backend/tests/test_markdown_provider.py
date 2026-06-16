@@ -16,6 +16,15 @@ def test_markdown_renderer_keeps_latex_math_nodes() -> None:
     assert "\\int_0^1 x dx" in html
 
 
+def test_markdown_renderer_keeps_public_post_image_route() -> None:
+    html = MarkdownRenderer().render(
+        "![封面](/api/public/posts/public-post/files/1/render)",
+    )
+
+    assert 'src="/api/public/posts/public-post/files/1/render"' in html
+    assert 'alt="封面"' in html
+
+
 def test_markdown_renderer_sanitizes_dangerous_html_and_urls() -> None:
     html = MarkdownRenderer().render(
         "<script>alert(1)</script>\n\n"

@@ -37,9 +37,10 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 
 后台只读日志接口：
 
-- `GET /api/admin/audit-logs`：操作审计日志，需要 `audit_log:read` 权限。
-- `GET /api/admin/login-logs`：后台登录日志，需要 `audit_log:read` 权限。
-- `GET /api/admin/security-events`：安全事件日志，需要 `audit_log:read` 权限。
+- `GET /api/admin/audit-logs`：操作审计日志，需要 `audit_log:read` 权限和 `sensitive-v1` 加密会话。
+- `GET /api/admin/access-logs`：公开访问、文件下载和文章图片渲染日志，需要 `audit_log:read` 权限和 `sensitive-v1` 加密会话。
+- `GET /api/admin/login-logs`：后台登录日志，需要 `audit_log:read` 权限和 `sensitive-v1` 加密会话。
+- `GET /api/admin/security-events`：安全事件日志，需要 `audit_log:read` 权限和 `sensitive-v1` 加密会话。
 
 登录入口和加密协商入口已接入可配置限流，命中后返回 `429` 并写入 `security_events`。阈值通过 `BLOG_ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_MAX_ATTEMPTS` 和 `BLOG_ENCRYPTION_SESSION_RATE_LIMIT_WINDOW_SECONDS` 配置。当前实现为单进程内存限流器，适合 M1 单进程闭环验证；生产多实例或多进程部署前需要替换为 Redis 等共享存储适配器。
 
@@ -54,7 +55,7 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 - `POST /api/admin/posts/{id}/publish`：发布文章，需要 `post:publish` 权限和 `X-CSRF-Token`。
 - `GET /api/admin/pages`、`GET /api/admin/pages/{id}`、`POST /api/admin/pages`、`PATCH /api/admin/pages/{id}`：后台页面管理，需要 `page:write` 权限，写操作需要 `X-CSRF-Token`。
 
-创建和更新请求体必须是 `content-v1` 加密信封，解密后再进行 Pydantic 字段校验。`content_html` 由 `markdown-it-py` 渲染 Markdown，`mdit-py-plugins` 保留行内与块级 LaTeX 公式节点，再由 `bleach` 统一执行 HTML sanitize。当前后端只生成安全 HTML 与公式占位节点，前端展示公式时还需要接入 KaTeX 等渲染样式。
+创建和更新请求体必须是 `content-v1` 加密信封，解密后再进行 Pydantic 字段校验。`content_html` 由 `markdown-it-py` 渲染 Markdown，`mdit-py-plugins` 保留行内与块级 LaTeX 公式节点，再由 `bleach` 统一执行 HTML sanitize。文章 Markdown 内图片应使用 `/api/public/posts/{slug}/files/{file_id}/render`，该接口会校验文章公开状态、文件公开状态、图片 MIME 和文章内容引用关系后返回图片，避免依赖临时下载链接渲染正文图片。
 
 ## 后台文件管理
 
@@ -62,9 +63,10 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 
 - `GET /api/admin/files`：文件列表，需要 `file:upload` 权限。
 - `POST /api/admin/files`：multipart 上传，需要 `file:upload` 权限和 `X-CSRF-Token`。
+- `GET /api/admin/files/{id}/temporary-url`：为公开文件生成短时访问链接，需要 `file:upload` 权限。
 - `DELETE /api/admin/files/{id}`：软删除文件，需要 `file:delete` 权限和 `X-CSRF-Token`。
 
-当前本地存储驱动会将文件写入 `BLOG_UPLOAD_ROOT`，公开文件生成 `/uploads/...` 只读链接，私有文件不返回公开 URL。上传大小通过 `BLOG_UPLOAD_MAX_SIZE_BYTES` 配置，当前白名单支持 JPEG、PNG、GIF、WebP 和 PDF，并校验扩展名、MIME 与文件头；删除只标记为 `deleted`，后续由清理任务处理物理文件。
+当前本地存储驱动会将文件写入 `BLOG_UPLOAD_ROOT`，但不会挂载静态目录，也不会为新文件写入 `/uploads/...` 公开 URL。公开文件栏下载通过后台加密接口按需生成短时签名链接，再由 `/api/public/files/{id}/download?token=...` 校验后返回文件；文章正文图片渲染使用专门的 `/api/public/posts/{slug}/files/{file_id}/render`。私有文件不生成公开访问链接。上传大小通过 `BLOG_UPLOAD_MAX_SIZE_BYTES` 配置，当前白名单支持 JPEG、PNG、GIF、WebP 和 PDF，并校验扩展名、MIME 与文件头；删除只标记为 `deleted`，后续由清理任务处理物理文件。短时链接有效期通过 `BLOG_FILE_TEMPORARY_URL_EXPIRE_SECONDS` 配置。公开内容读取、公开文件下载、文章图片渲染和后台短时链接生成都会写入 `access_logs`。
 
 ## 初始管理员
 

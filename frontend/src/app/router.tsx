@@ -6,12 +6,14 @@ import { AdminFilesPage } from '../routes/admin/AdminFilesPage.tsx'
 import { AdminLayout } from '../routes/admin/AdminLayout.tsx'
 import { AdminLinksPage } from '../routes/admin/AdminLinksPage.tsx'
 import { AdminLoginPage } from '../routes/admin/AdminLoginPage.tsx'
+import { AdminLogsPage } from '../routes/admin/AdminLogsPage.tsx'
 import { AdminPagesPage } from '../routes/admin/AdminPagesPage.tsx'
 import { AdminPostsPage } from '../routes/admin/AdminPostsPage.tsx'
 import { AdminSettingsPage } from '../routes/admin/AdminSettingsPage.tsx'
 import { adminAccess } from '../routes/admin/adminAccess.ts'
 import { RequireAdminAuth } from '../routes/admin/RequireAdminAuth.tsx'
 import { RequireAdminPermission } from '../routes/admin/RequireAdminPermission.tsx'
+import { FilesPage } from '../routes/public/FilesPage.tsx'
 import { HomePage } from '../routes/public/HomePage.tsx'
 import { LinksPage } from '../routes/public/LinksPage.tsx'
 import { PostDetailPage } from '../routes/public/PostDetailPage.tsx'
@@ -28,6 +30,7 @@ export const router = createBrowserRouter([
       { path: 'posts', element: <PostListPage /> },
       { path: 'posts/:slug', element: <PostDetailPage /> },
       { path: 'links', element: <LinksPage /> },
+      { path: 'files', element: <FilesPage /> },
       { path: 'sites', element: <SitesPage /> },
     ],
   },
@@ -79,6 +82,14 @@ export const router = createBrowserRouter([
                 element: (
                   <RequireAdminPermission permissions={adminAccess.links}>
                     <AdminLinksPage />
+                  </RequireAdminPermission>
+                ),
+              },
+              {
+                path: 'logs',
+                element: (
+                  <RequireAdminPermission permissions={adminAccess.logs}>
+                    <AdminLogsPage />
                   </RequireAdminPermission>
                 ),
               },

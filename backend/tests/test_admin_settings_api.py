@@ -1,4 +1,4 @@
-from types import SimpleNamespace
+﻿from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -66,7 +66,6 @@ class FakeEncryptionSessionManager:
         return EncryptedApiResponse(
             session_id=session_id,
             profile=profile,
-            algorithm="AES-256-GCM-HKDF-SHA256",
             nonce="test-nonce",
             ciphertext="test-ciphertext",
         )
@@ -137,10 +136,8 @@ def test_update_admin_setting_decrypts_sensitive_request() -> None:
                 "X-Encryption-Session": "sensitive-session",
             },
             json={
-                "encrypted": True,
                 "session_id": "sensitive-session",
                 "profile": "sensitive-v1",
-                "algorithm": "AES-256-GCM-HKDF-SHA256",
                 "nonce": "test-nonce",
                 "ciphertext": "test-ciphertext",
             },

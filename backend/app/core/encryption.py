@@ -19,7 +19,6 @@ class EncryptionProfile(StrEnum):
 @dataclass(frozen=True)
 class EncryptedEnvelope:
     profile: EncryptionProfile
-    algorithm: str
     nonce: str
     ciphertext: str
 
@@ -61,7 +60,6 @@ def encrypt_json_payload_with_key_material(
     )
     return EncryptedEnvelope(
         profile=profile,
-        algorithm="AES-256-GCM-HKDF-SHA256",
         nonce=_base64url_encode(nonce),
         ciphertext=_base64url_encode(ciphertext),
     )
@@ -88,8 +86,6 @@ def decrypt_json_payload_with_key_material(
 ) -> dict[str, Any]:
     if envelope.profile != expected_profile:
         raise EncryptionError("unexpected encryption profile")
-    if envelope.algorithm != "AES-256-GCM-HKDF-SHA256":
-        raise EncryptionError("unsupported encryption algorithm")
 
     try:
         plaintext = AESGCM(_derive_profile_key(key_material, expected_profile)).decrypt(

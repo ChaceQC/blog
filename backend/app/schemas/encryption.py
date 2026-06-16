@@ -5,6 +5,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.encryption import EncryptionProfile
 
+EncryptionSessionScope = Literal["admin", "public"]
+
 
 class BrowserPublicKey(BaseModel):
     kty: Literal["EC"]
@@ -23,6 +25,7 @@ class CreateEncryptionSessionRequest(BaseModel):
 
 class CreateEncryptionSessionResponse(BaseModel):
     session_id: str
+    scope: EncryptionSessionScope
     server_public_key: BrowserPublicKey
     profiles: list[EncryptionProfile]
     expires_at: datetime
@@ -31,10 +34,8 @@ class CreateEncryptionSessionResponse(BaseModel):
 
 
 class EncryptedApiResponse(BaseModel):
-    encrypted: Literal[True] = True
     session_id: str
     profile: EncryptionProfile
-    algorithm: str
     nonce: str
     ciphertext: str
 
@@ -42,10 +43,8 @@ class EncryptedApiResponse(BaseModel):
 
 
 class EncryptedApiRequest(BaseModel):
-    encrypted: Literal[True] = True
     session_id: str
     profile: EncryptionProfile
-    algorithm: str
     nonce: str
     ciphertext: str
 

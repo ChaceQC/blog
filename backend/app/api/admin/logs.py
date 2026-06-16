@@ -1,9 +1,18 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
-from app.api.admin.dependencies import LogServiceDependency, require_admin_permission
+from app.api.admin.dependencies import (
+    EncryptionSessionManagerDependency,
+    LogServiceDependency,
+    require_admin_permission,
+)
+from app.api.admin.encrypted_response import encrypted_response
+from app.core.encryption import EncryptionProfile
+from app.schemas.encryption import EncryptedApiResponse
 from app.schemas.logs import (
+    AccessLogItem,
+    AccessLogListResponse,
     AuditLogItem,
     AuditLogListResponse,
     LoginLogItem,
@@ -12,6 +21,7 @@ from app.schemas.logs import (
     SecurityEventListResponse,
 )
 from app.services.auth import AuthenticatedUser
+from app.services.encryption import EncryptionSessionManager
 
 router = APIRouter(tags=["admin-logs"])
 AuditReaderDependency = Annotated[
@@ -20,40 +30,96 @@ AuditReaderDependency = Annotated[
 ]
 
 
-@router.get("/audit-logs", response_model=AuditLogListResponse)
+@router.get("/audit-logs", response_model=EncryptedApiResponse)
 async def list_audit_logs(
     _: AuditReaderDependency,
+    request: Request,
     service: LogServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-) -> AuditLogListResponse:
+) -> EncryptedApiResponse:
     logs = await service.list_audit_logs(limit=limit, offset=offset)
-    return AuditLogListResponse(
-        items=[AuditLogItem.model_validate(item) for item in logs],
+    return await _logs_response(
+        AuditLogListResponse(
+            items=[AuditLogItem.model_validate(item) for item in logs],
+        ),
+        request=request,
+        encryption_manager=encryption_manager,
     )
 
 
-@router.get("/login-logs", response_model=LoginLogListResponse)
+@router.get("/access-logs", response_model=EncryptedApiResponse)
+async def list_access_logs(
+    _: AuditReaderDependency,
+    request: Request,
+    service: LogServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> EncryptedApiResponse:
+    logs = await service.list_access_logs(limit=limit, offset=offset)
+    return await _logs_response(
+        AccessLogListResponse(
+            items=[AccessLogItem.model_validate(item) for item in logs],
+        ),
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+
+
+@router.get("/login-logs", response_model=EncryptedApiResponse)
 async def list_login_logs(
     _: AuditReaderDependency,
+    request: Request,
     service: LogServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-) -> LoginLogListResponse:
+) -> EncryptedApiResponse:
     logs = await service.list_login_logs(limit=limit, offset=offset)
-    return LoginLogListResponse(
-        items=[LoginLogItem.model_validate(item) for item in logs],
+    return await _logs_response(
+        LoginLogListResponse(
+            items=[LoginLogItem.model_validate(item) for item in logs],
+        ),
+        request=request,
+        encryption_manager=encryption_manager,
     )
 
 
-@router.get("/security-events", response_model=SecurityEventListResponse)
+@router.get("/security-events", response_model=EncryptedApiResponse)
 async def list_security_events(
     _: AuditReaderDependency,
+    request: Request,
     service: LogServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-) -> SecurityEventListResponse:
+) -> EncryptedApiResponse:
     events = await service.list_security_events(limit=limit, offset=offset)
-    return SecurityEventListResponse(
-        items=[SecurityEventItem.model_validate(item) for item in events],
+    return await _logs_response(
+        SecurityEventListResponse(
+            items=[SecurityEventItem.model_validate(item) for item in events],
+        ),
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+
+
+async def _logs_response(
+    payload: (
+        AccessLogListResponse
+        | AuditLogListResponse
+        | LoginLogListResponse
+        | SecurityEventListResponse
+    ),
+    *,
+    request: Request,
+    encryption_manager: EncryptionSessionManager,
+) -> EncryptedApiResponse:
+    return await encrypted_response(
+        payload,
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.SENSITIVE,
     )

@@ -3,14 +3,39 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from app.api.admin.dependencies import get_current_admin_user, get_log_service
+from app.api.admin.dependencies import (
+    get_current_admin_user,
+    get_encryption_session_manager,
+    get_log_service,
+)
+from app.core.encryption import EncryptionProfile
 from app.main import app
+from app.schemas.encryption import EncryptedApiResponse
 from app.services.auth import AuthenticatedUser
 
 
 class FakeLogService:
     async def list_audit_logs(self, *, limit: int, offset: int) -> list[object]:
         return []
+
+    async def list_access_logs(self, *, limit: int, offset: int) -> list[object]:
+        assert limit == 1
+        assert offset == 0
+        return [
+            SimpleNamespace(
+                id=1,
+                access_type="post_image_render",
+                method="GET",
+                path="/api/public/posts/public-post/files/1/render",
+                status_code=200,
+                entity_type="file",
+                entity_id=1,
+                ip="127.0.0.1",
+                user_agent="pytest",
+                detail_json={"slug": "public-post", "media_type": "image/png"},
+                created_at=datetime(2026, 6, 16, tzinfo=UTC),
+            ),
+        ]
 
     async def list_login_logs(self, *, limit: int, offset: int) -> list[object]:
         assert limit == 1
@@ -30,6 +55,28 @@ class FakeLogService:
 
     async def list_security_events(self, *, limit: int, offset: int) -> list[object]:
         return []
+
+
+class FakeEncryptionSessionManager:
+    def __init__(self) -> None:
+        self.payload: dict[str, object] | None = None
+
+    async def encrypt_response(
+        self,
+        *,
+        session_id: str,
+        profile: EncryptionProfile,
+        payload: dict[str, object],
+    ) -> EncryptedApiResponse:
+        assert session_id == "sensitive-session"
+        assert profile == EncryptionProfile.SENSITIVE
+        self.payload = payload
+        return EncryptedApiResponse(
+            session_id=session_id,
+            profile=profile,
+            nonce="test-nonce",
+            ciphertext="test-ciphertext",
+        )
 
 
 def test_login_logs_require_admin_permission() -> None:
@@ -53,6 +100,7 @@ def test_login_logs_require_admin_permission() -> None:
 
 def test_login_logs_return_items_for_audit_reader() -> None:
     client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
     app.dependency_overrides[get_current_admin_user] = lambda: AuthenticatedUser(
         id=1,
         username="admin",
@@ -61,14 +109,19 @@ def test_login_logs_return_items_for_audit_reader() -> None:
         permissions=["*"],
     )
     app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
 
     try:
-        response = client.get("/api/admin/login-logs?limit=1")
+        response = client.get(
+            "/api/admin/login-logs?limit=1",
+            headers={"X-Encryption-Session": "sensitive-session"},
+        )
     finally:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.json() == {
+    assert response.json()["profile"] == "sensitive-v1"
+    assert manager.payload == {
         "items": [
             {
                 "id": 1,
@@ -78,6 +131,51 @@ def test_login_logs_return_items_for_audit_reader() -> None:
                 "ip": "127.0.0.1",
                 "user_agent": "pytest",
                 "reason": "invalid_credentials",
+                "created_at": "2026-06-16T00:00:00Z",
+            },
+        ],
+    }
+
+
+def test_access_logs_return_detail_for_audit_reader() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    app.dependency_overrides[get_current_admin_user] = lambda: AuthenticatedUser(
+        id=1,
+        username="admin",
+        display_name="管理员",
+        roles=["super_admin"],
+        permissions=["*"],
+    )
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+
+    try:
+        response = client.get(
+            "/api/admin/access-logs?limit=1",
+            headers={"X-Encryption-Session": "sensitive-session"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "sensitive-v1"
+    assert manager.payload == {
+        "items": [
+            {
+                "id": 1,
+                "access_type": "post_image_render",
+                "method": "GET",
+                "path": "/api/public/posts/public-post/files/1/render",
+                "status_code": 200,
+                "entity_type": "file",
+                "entity_id": 1,
+                "ip": "127.0.0.1",
+                "user_agent": "pytest",
+                "detail_json": {
+                    "slug": "public-post",
+                    "media_type": "image/png",
+                },
                 "created_at": "2026-06-16T00:00:00Z",
             },
         ],

@@ -1,12 +1,11 @@
 import { API_BASE_URL } from './config.ts'
 
 export type EncryptionProfile = 'sensitive-v1' | 'content-v1'
+export type EncryptionScope = 'admin' | 'public'
 
 export type EncryptedApiResponse = {
-  encrypted: true
   session_id: string
   profile: EncryptionProfile
-  algorithm: 'AES-256-GCM-HKDF-SHA256'
   nonce: string
   ciphertext: string
 }
@@ -20,6 +19,7 @@ type BrowserPublicKey = {
 
 type EncryptionSessionResponse = {
   session_id: string
+  scope: EncryptionScope
   server_public_key: BrowserPublicKey
   profiles: EncryptionProfile[]
   expires_at: string
@@ -27,34 +27,43 @@ type EncryptionSessionResponse = {
 
 export type EncryptionSession = {
   id: string
+  scope: EncryptionScope
   sharedSecret: ArrayBuffer
   profiles: EncryptionProfile[]
   expiresAt: number
 }
 
-let activeSession: EncryptionSession | undefined
-let pendingSession: Promise<EncryptionSession> | undefined
+const activeSessions = new Map<EncryptionScope, EncryptionSession>()
+const pendingSessions = new Map<EncryptionScope, Promise<EncryptionSession>>()
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
 export async function getEncryptionSession(
   profile: EncryptionProfile,
+  scope: EncryptionScope = 'admin',
 ): Promise<EncryptionSession> {
   const now = Date.now()
+  const activeSession = activeSessions.get(scope)
   if (
     activeSession &&
     activeSession.expiresAt - now > 30_000 &&
+    activeSession.scope === scope &&
     activeSession.profiles.includes(profile)
   ) {
     return activeSession
   }
 
-  pendingSession ??= createEncryptionSession().finally(() => {
-    pendingSession = undefined
-  })
-  activeSession = await pendingSession
-  return activeSession
+  let pendingSession = pendingSessions.get(scope)
+  if (!pendingSession) {
+    pendingSession = createEncryptionSession(scope).finally(() => {
+      pendingSessions.delete(scope)
+    })
+    pendingSessions.set(scope, pendingSession)
+  }
+  const session = await pendingSession
+  activeSessions.set(scope, session)
+  return session
 }
 
 export async function decryptEncryptedResponse<T>(
@@ -136,10 +145,8 @@ export async function encryptRequestPayload<T>(
   )
 
   return {
-    encrypted: true,
     session_id: session.id,
     profile,
-    algorithm: 'AES-256-GCM-HKDF-SHA256',
     nonce: base64urlEncode(nonce),
     ciphertext: base64urlEncode(new Uint8Array(ciphertext)),
   }
@@ -149,7 +156,9 @@ function isBrowserPublicKey(value: JsonWebKey): value is BrowserPublicKey {
   return value.kty === 'EC' && value.crv === 'P-256' && !!value.x && !!value.y
 }
 
-async function createEncryptionSession(): Promise<EncryptionSession> {
+async function createEncryptionSession(
+  scope: EncryptionScope,
+): Promise<EncryptionSession> {
   const keyPair = await crypto.subtle.generateKey(
     { name: 'ECDH', namedCurve: 'P-256' },
     true,
@@ -160,7 +169,7 @@ async function createEncryptionSession(): Promise<EncryptionSession> {
     throw new Error('浏览器未能生成 P-256 公钥')
   }
 
-  const response = await fetch(`${API_BASE_URL}/admin/encryption/sessions`, {
+  const response = await fetch(`${API_BASE_URL}/${scope}/encryption/sessions`, {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -182,6 +191,9 @@ async function createEncryptionSession(): Promise<EncryptionSession> {
   }
 
   const sessionResponse = (await response.json()) as EncryptionSessionResponse
+  if (sessionResponse.scope !== scope) {
+    throw new Error('加密会话来源不匹配')
+  }
   const serverPublicKey = await crypto.subtle.importKey(
     'jwk',
     {
@@ -200,6 +212,7 @@ async function createEncryptionSession(): Promise<EncryptionSession> {
 
   return {
     id: sessionResponse.session_id,
+    scope: sessionResponse.scope,
     sharedSecret: sharedBits,
     profiles: sessionResponse.profiles,
     expiresAt: Date.parse(sessionResponse.expires_at),

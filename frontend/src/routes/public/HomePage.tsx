@@ -8,7 +8,7 @@ import {
   formatRelativePostDate,
 } from '../../features/posts/postMeta.ts'
 import { siteSettings } from '../../features/settings/siteSettings.ts'
-import { sampleSites } from '../../features/sites/sampleSites.ts'
+import { listPublicSiteItems } from '../../features/sites/api.ts'
 
 export function HomePage() {
   const {
@@ -19,8 +19,16 @@ export function HomePage() {
     queryKey: ['public-posts', 'home'],
     queryFn: () => listPublicPosts({ limit: 5 }),
   })
+  const {
+    data: sitesData,
+    isError: isSitesError,
+    isLoading: isSitesLoading,
+  } = useQuery({
+    queryKey: ['public-site-items', 'home'],
+    queryFn: () => listPublicSiteItems({ limit: 3 }),
+  })
   const featuredPosts = postsData?.items ?? []
-  const featuredSites = sampleSites.slice(0, 3)
+  const featuredSites = sitesData?.items ?? []
   const socialIconMap = {
     GitHub: GitBranch,
     RSS: Rss,
@@ -147,10 +155,19 @@ export function HomePage() {
               <Send size={15} strokeWidth={1.7} aria-hidden="true" />
               <span>
                 <strong>{site.title}</strong>
-                <small>{site.description}</small>
+                <small>{site.description ?? site.group_name ?? '常用入口'}</small>
               </span>
             </a>
           ))}
+          {isSitesLoading ? (
+            <p className="empty-state">正在整理常用入口。</p>
+          ) : null}
+          {isSitesError ? (
+            <p className="empty-state">站点目录暂时不可用。</p>
+          ) : null}
+          {!isSitesLoading && !isSitesError && featuredSites.length === 0 ? (
+            <p className="empty-state">还没有公开入口。</p>
+          ) : null}
         </div>
       </section>
 

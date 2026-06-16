@@ -19,6 +19,22 @@ class AuditLogItem(BaseModel):
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
 
+class AccessLogItem(BaseModel):
+    id: int
+    access_type: str
+    method: str
+    path: str
+    status_code: int
+    entity_type: str | None
+    entity_id: int | None
+    ip: str | None
+    user_agent: str | None
+    detail_json: dict[str, Any] | None
+    created_at: datetime
+
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+
 class LoginLogItem(BaseModel):
     id: int
     user_id: int | None
@@ -48,6 +64,12 @@ class SecurityEventItem(BaseModel):
 
 class AuditLogListResponse(BaseModel):
     items: list[AuditLogItem]
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AccessLogListResponse(BaseModel):
+    items: list[AccessLogItem]
 
     model_config = ConfigDict(extra="forbid")
 

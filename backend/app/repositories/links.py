@@ -27,6 +27,22 @@ class LinkRepository:
         )
         return result.all()
 
+    async def list_public_friend_links(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> Sequence[tuple[FriendLink, str | None]]:
+        result = await self.session.execute(
+            select(FriendLink, FriendLinkGroup.name)
+            .outerjoin(FriendLinkGroup, FriendLinkGroup.id == FriendLink.group_id)
+            .where(FriendLink.status == "healthy")
+            .order_by(FriendLink.sort_order.asc(), FriendLink.id.desc())
+            .limit(limit)
+            .offset(offset),
+        )
+        return result.all()
+
     async def get_friend_link(self, link_id: int) -> FriendLink | None:
         result = await self.session.execute(
             select(FriendLink).where(FriendLink.id == link_id),
@@ -68,6 +84,22 @@ class LinkRepository:
         result = await self.session.execute(
             select(SiteNavItem, SiteNavGroup.name, SiteNavGroup.slug)
             .outerjoin(SiteNavGroup, SiteNavGroup.id == SiteNavItem.group_id)
+            .order_by(SiteNavItem.sort_order.asc(), SiteNavItem.id.desc())
+            .limit(limit)
+            .offset(offset),
+        )
+        return result.all()
+
+    async def list_public_site_nav_items(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> Sequence[tuple[SiteNavItem, str | None, str | None]]:
+        result = await self.session.execute(
+            select(SiteNavItem, SiteNavGroup.name, SiteNavGroup.slug)
+            .outerjoin(SiteNavGroup, SiteNavGroup.id == SiteNavItem.group_id)
+            .where(SiteNavItem.visibility == "public")
             .order_by(SiteNavItem.sort_order.asc(), SiteNavItem.id.desc())
             .limit(limit)
             .offset(offset),

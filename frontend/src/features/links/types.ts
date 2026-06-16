@@ -71,3 +71,17 @@ export type SiteNavItemWritePayload = {
   visibility: AdminSiteNavVisibility
   sort_order: number
 }
+
+export type FriendLink = {
+  id: number
+  group_name: string | null
+  name: string
+  url: string
+  avatar_url: string | null
+  description: string | null
+  sort_order: number
+}
+
+export type PublicFriendLinkListResponse = {
+  items: FriendLink[]
+}

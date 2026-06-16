@@ -1,18 +1,36 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.admin.dependencies import (
+    EncryptionSessionManagerDependency,
+    LogServiceDependency,
+)
+from app.api.admin.encrypted_response import encrypted_response
+from app.api.public.encryption import router as public_encryption_router
+from app.api.public.files import router as public_files_router
 from app.core.database import get_session
+from app.core.encryption import EncryptionProfile
 from app.repositories.content import ContentRepository
+from app.repositories.links import LinkRepository
 from app.schemas.content import (
     PublicPostDetail,
     PublicPostItem,
     PublicPostListResponse,
 )
+from app.schemas.links import (
+    PublicFriendLinkItem,
+    PublicFriendLinkListResponse,
+    PublicSiteNavItem,
+    PublicSiteNavItemListResponse,
+)
 from app.services.content import ContentNotFoundError, ContentService
+from app.services.links import LinkService
 
 router = APIRouter(tags=["public"])
+router.include_router(public_encryption_router)
+router.include_router(public_files_router)
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
 
 
@@ -20,9 +38,17 @@ def get_public_content_service(session: SessionDependency) -> ContentService:
     return ContentService(repository=ContentRepository(session))
 
 
+def get_public_link_service(session: SessionDependency) -> LinkService:
+    return LinkService(repository=LinkRepository(session))
+
+
 PublicContentServiceDependency = Annotated[
     ContentService,
     Depends(get_public_content_service),
+]
+PublicLinkServiceDependency = Annotated[
+    LinkService,
+    Depends(get_public_link_service),
 ]
 
 
@@ -31,29 +57,153 @@ async def public_status() -> dict[str, str]:
     return {"status": "public-api-ready"}
 
 
-@router.get("/posts", response_model=PublicPostListResponse)
+@router.get("/posts")
 async def list_public_posts(
+    request: Request,
     service: PublicContentServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-) -> PublicPostListResponse:
+):
     posts = await service.list_public_posts(limit=limit, offset=offset)
-    return PublicPostListResponse(
-        items=[PublicPostItem.model_validate(post) for post in posts],
+    response = await encrypted_response(
+        PublicPostListResponse(
+            items=[PublicPostItem.model_validate(post) for post in posts],
+        ),
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
     )
+    await _record_public_access(
+        logs,
+        request=request,
+        access_type="public_posts_list",
+        status_code=status.HTTP_200_OK,
+        entity_type="post",
+        detail_json={"limit": limit, "offset": offset, "count": len(posts)},
+    )
+    return response
 
 
-@router.get("/posts/{slug}", response_model=PublicPostDetail)
+@router.get("/posts/{slug}")
 async def get_public_post(
     slug: str,
+    request: Request,
     service: PublicContentServiceDependency,
-) -> PublicPostDetail:
+    encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
+):
     try:
         post = await service.get_public_post_by_slug(slug)
     except ContentNotFoundError as exc:
+        await _record_public_access(
+            logs,
+            request=request,
+            access_type="public_post_detail",
+            status_code=status.HTTP_404_NOT_FOUND,
+            entity_type="post",
+            detail_json={"slug": slug},
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="post not found",
         ) from exc
 
-    return PublicPostDetail.model_validate(post)
+    response = await encrypted_response(
+        PublicPostDetail.model_validate(post),
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+    await _record_public_access(
+        logs,
+        request=request,
+        access_type="public_post_detail",
+        status_code=status.HTTP_200_OK,
+        entity_type="post",
+        entity_id=post.id,
+        detail_json={"slug": slug},
+    )
+    return response
+
+
+@router.get("/friend-links")
+async def list_public_friend_links(
+    request: Request,
+    service: PublicLinkServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    links = await service.list_public_friend_links(limit=limit, offset=offset)
+    response = await encrypted_response(
+        PublicFriendLinkListResponse(
+            items=[PublicFriendLinkItem.model_validate(link) for link in links],
+        ),
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+    await _record_public_access(
+        logs,
+        request=request,
+        access_type="public_friend_links_list",
+        status_code=status.HTTP_200_OK,
+        entity_type="friend_link",
+        detail_json={"limit": limit, "offset": offset, "count": len(links)},
+    )
+    return response
+
+
+@router.get("/site-items")
+async def list_public_site_items(
+    request: Request,
+    service: PublicLinkServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    items = await service.list_public_site_nav_items(limit=limit, offset=offset)
+    response = await encrypted_response(
+        PublicSiteNavItemListResponse(
+            items=[PublicSiteNavItem.model_validate(item) for item in items],
+        ),
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+    await _record_public_access(
+        logs,
+        request=request,
+        access_type="public_site_items_list",
+        status_code=status.HTTP_200_OK,
+        entity_type="site_nav_item",
+        detail_json={"limit": limit, "offset": offset, "count": len(items)},
+    )
+    return response
+
+
+async def _record_public_access(
+    logs: LogServiceDependency,
+    *,
+    request: Request,
+    access_type: str,
+    status_code: int,
+    entity_type: str | None,
+    entity_id: int | None = None,
+    detail_json: dict[str, object] | None = None,
+) -> None:
+    await logs.record_access_log(
+        access_type=access_type,
+        method=request.method,
+        path=str(request.url.path),
+        status_code=status_code,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        detail_json=detail_json,
+    )

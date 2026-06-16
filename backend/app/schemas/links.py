@@ -33,6 +33,24 @@ class AdminFriendLinkListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class PublicFriendLinkItem(BaseModel):
+    id: int
+    group_name: str | None
+    name: str
+    url: str
+    avatar_url: str | None
+    description: str | None
+    sort_order: int
+
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+
+class PublicFriendLinkListResponse(BaseModel):
+    items: list[PublicFriendLinkItem]
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class FriendLinkReviewRequest(BaseModel):
     status: FriendLinkStatus
 
@@ -87,6 +105,27 @@ class AdminSiteNavItem(BaseModel):
 
 class AdminSiteNavItemListResponse(BaseModel):
     items: list[AdminSiteNavItem]
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PublicSiteNavItem(BaseModel):
+    id: int
+    group_name: str | None
+    group_slug: str | None
+    title: str
+    url: str
+    icon_url: str | None
+    description: str | None
+    tags_json: dict[str, Any] | None
+    open_target: str
+    sort_order: int
+
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+
+class PublicSiteNavItemListResponse(BaseModel):
+    items: list[PublicSiteNavItem]
 
     model_config = ConfigDict(extra="forbid")
 

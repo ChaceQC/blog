@@ -16,16 +16,23 @@ from app.api.admin.dependencies import (
     AdminCsrfDependency,
     EncryptionSessionManagerDependency,
     FileServiceDependency,
+    LogServiceDependency,
     SettingsDependency,
     require_admin_permission,
 )
 from app.api.admin.encrypted_response import encrypted_response
 from app.core.encryption import EncryptionProfile
 from app.schemas.encryption import EncryptedApiResponse
-from app.schemas.files import AdminFileItem, AdminFileListResponse, FileVisibility
+from app.schemas.files import (
+    AdminFileItem,
+    AdminFileListResponse,
+    AdminFileTemporaryUrlResponse,
+    FileVisibility,
+)
 from app.services.auth import AuthenticatedUser
 from app.services.encryption import EncryptionSessionManager
 from app.services.files import (
+    FileAccessDeniedError,
     FileTooLargeError,
     FileValidationError,
     ManagedFileNotFoundError,
@@ -36,6 +43,7 @@ router = APIRouter(tags=["admin-files"])
 UploadedFile = Annotated[UploadFile, File()]
 FileVisibilityForm = Annotated[FileVisibility, Form()]
 AltTextForm = Annotated[str | None, Form(max_length=255)]
+PublicListedForm = Annotated[bool, Form()]
 FileUploaderDependency = Annotated[
     AuthenticatedUser,
     Depends(require_admin_permission("file:upload")),
@@ -76,6 +84,7 @@ async def upload_file(
     file: UploadedFile,
     visibility: FileVisibilityForm = "public",
     alt_text: AltTextForm = None,
+    public_listed: PublicListedForm = False,
 ) -> EncryptedApiResponse:
     try:
         uploaded_file = await service.upload_file(
@@ -84,6 +93,7 @@ async def upload_file(
                 content_type=file.content_type,
                 data=await file.read(),
                 visibility=visibility,
+                public_listed=public_listed,
                 uploader_id=current_user.id,
                 alt_text=alt_text,
                 max_size_bytes=settings.upload_max_size_bytes,
@@ -131,8 +141,59 @@ async def delete_file(
     )
 
 
+@router.get("/files/{file_id}/temporary-url", response_model=EncryptedApiResponse)
+async def create_file_temporary_url(
+    file_id: int,
+    _: FileUploaderDependency,
+    request: Request,
+    service: FileServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    settings: SettingsDependency,
+    logs: LogServiceDependency,
+) -> EncryptedApiResponse:
+    try:
+        access = await service.create_temporary_access(
+            file_id=file_id,
+            secret_key=settings.secret_key,
+            expires_seconds=settings.file_temporary_url_expire_seconds,
+        )
+    except ManagedFileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="file not found",
+        ) from exc
+    except FileAccessDeniedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="file is not public",
+        ) from exc
+
+    url = request.url_for("download_public_file", file_id=access.file.id)
+    payload = AdminFileTemporaryUrlResponse(
+        url=str(url.include_query_params(token=access.token)),
+        expires_at=access.expires_at,
+    )
+    response = await _files_response(
+        payload,
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+    await logs.record_access_log(
+        access_type="admin_file_temporary_url",
+        method=request.method,
+        path=str(request.url.path),
+        status_code=status.HTTP_200_OK,
+        entity_type="file",
+        entity_id=access.file.id,
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        detail_json={"expires_at": access.expires_at.isoformat()},
+    )
+    return response
+
+
 async def _files_response(
-    payload: AdminFileItem | AdminFileListResponse,
+    payload: AdminFileItem | AdminFileListResponse | AdminFileTemporaryUrlResponse,
     *,
     request: Request,
     encryption_manager: EncryptionSessionManager,

@@ -27,6 +27,26 @@ class FileRepository:
         )
         return [(file, int(usage_count)) for file, usage_count in result.all()]
 
+    async def list_public_listed_files(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> Sequence[BlogFile]:
+        result = await self.session.execute(
+            select(BlogFile)
+            .where(
+                BlogFile.deleted_at.is_(None),
+                BlogFile.visibility == "public",
+                BlogFile.public_listed.is_(True),
+                BlogFile.status == "active",
+            )
+            .order_by(BlogFile.updated_at.desc(), BlogFile.id.desc())
+            .limit(limit)
+            .offset(offset),
+        )
+        return result.scalars().all()
+
     async def get_file(self, file_id: int) -> BlogFile | None:
         result = await self.session.execute(
             select(BlogFile).where(
@@ -62,6 +82,7 @@ class FileRepository:
         alt_text: str | None,
         uploader_id: int | None,
         visibility: str,
+        public_listed: bool,
     ) -> BlogFile:
         file = BlogFile(
             storage=storage,
@@ -78,6 +99,7 @@ class FileRepository:
             alt_text=alt_text,
             uploader_id=uploader_id,
             visibility=visibility,
+            public_listed=public_listed,
             status="active",
         )
         self.session.add(file)

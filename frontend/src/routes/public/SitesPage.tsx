@@ -1,7 +1,19 @@
+import { useQuery } from '@tanstack/react-query'
+
 import { SiteGrid } from '../../features/sites/SiteGrid.tsx'
-import { sampleSites } from '../../features/sites/sampleSites.ts'
+import { listPublicSiteItems } from '../../features/sites/api.ts'
 
 export function SitesPage() {
+  const {
+    data: sitesData,
+    isError,
+    isLoading,
+  } = useQuery({
+    queryKey: ['public-site-items'],
+    queryFn: () => listPublicSiteItems({ limit: 100 }),
+  })
+  const sites = sitesData?.items ?? []
+
   return (
     <div className="page-flow page-flow--narrow">
       <section className="page-heading">
@@ -13,9 +25,13 @@ export function SitesPage() {
         <div className="section-heading section-heading--stacked">
           <small>DIRECTORY</small>
           <span>入口</span>
-          <small>{sampleSites.length} 个入口</small>
+          <small>{isLoading ? '加载中' : `${sites.length} 个入口`}</small>
         </div>
-        <SiteGrid sites={sampleSites} />
+        {isError ? <p className="empty-state">站点目录暂时不可用。</p> : null}
+        {!isLoading && !isError && sites.length === 0 ? (
+          <p className="empty-state">还没有公开入口。</p>
+        ) : null}
+        <SiteGrid sites={sites} />
       </section>
     </div>
   )

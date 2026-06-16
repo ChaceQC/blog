@@ -1,7 +1,19 @@
+import { useQuery } from '@tanstack/react-query'
+
 import { FriendLinkList } from '../../features/links/FriendLinkList.tsx'
-import { sampleLinks } from '../../features/links/sampleLinks.ts'
+import { listPublicFriendLinks } from '../../features/links/api.ts'
 
 export function LinksPage() {
+  const {
+    data: linksData,
+    isError,
+    isLoading,
+  } = useQuery({
+    queryKey: ['public-friend-links'],
+    queryFn: () => listPublicFriendLinks({ limit: 100 }),
+  })
+  const links = linksData?.items ?? []
+
   return (
     <div className="page-flow page-flow--narrow">
       <section className="page-heading">
@@ -13,9 +25,13 @@ export function LinksPage() {
         <div className="section-heading section-heading--stacked">
           <small>BOOKMARKS</small>
           <span>朋友们</span>
-          <small>{sampleLinks.length} 个站点</small>
+          <small>{isLoading ? '加载中' : `${links.length} 个站点`}</small>
         </div>
-        <FriendLinkList links={sampleLinks} />
+        {isError ? <p className="empty-state">友链暂时不可用。</p> : null}
+        {!isLoading && !isError && links.length === 0 ? (
+          <p className="empty-state">还没有公开友链。</p>
+        ) : null}
+        <FriendLinkList links={links} />
       </section>
     </div>
   )

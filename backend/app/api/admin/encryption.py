@@ -39,7 +39,10 @@ async def create_encryption_session(
         detail_json={"profile": "sensitive-v1"},
     )
     try:
-        return await manager.create_session(client_public_key=payload.client_public_key)
+        return await manager.create_session(
+            client_public_key=payload.client_public_key,
+            scope="admin",
+        )
     except EncryptionSessionError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

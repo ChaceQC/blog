@@ -19,12 +19,13 @@ from app.models.content import (
 )
 from app.models.file import BlogFile, FileUsage
 from app.models.link import FriendLink, FriendLinkGroup
-from app.models.log import AuditLog, LoginLog, SecurityEvent
+from app.models.log import AccessLog, AuditLog, LoginLog, SecurityEvent
 from app.models.setting import Setting
 from app.models.site import SiteNavGroup, SiteNavItem
 
 __all__ = [
     "AuditLog",
+    "AccessLog",
     "Base",
     "BlogFile",
     "Category",

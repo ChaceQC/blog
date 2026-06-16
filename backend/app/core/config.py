@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     readiness_check_database: bool
     upload_root: Path
     upload_max_size_bytes: int = Field(default=10 * 1024 * 1024, ge=1024)
+    file_temporary_url_expire_seconds: int = Field(default=300, ge=30, le=3600)
 
     dev_server_host: str
     dev_server_port: int = Field(ge=1024, le=65535)

@@ -1,4 +1,11 @@
-import { BookOpen, Compass, Home, Link as LinkIcon, Settings } from 'lucide-react'
+import {
+  BookOpen,
+  Compass,
+  FolderOpen,
+  Home,
+  Link as LinkIcon,
+  Settings,
+} from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 
 import { siteSettings } from '../../features/settings/siteSettings.ts'
@@ -22,6 +29,10 @@ export function PublicLayout() {
           <NavLink to="/links">
             <LinkIcon size={16} strokeWidth={1.8} aria-hidden="true" />
             友链
+          </NavLink>
+          <NavLink to="/files">
+            <FolderOpen size={16} strokeWidth={1.8} aria-hidden="true" />
+            文件
           </NavLink>
           <NavLink to="/sites">
             <Compass size={16} strokeWidth={1.8} aria-hidden="true" />
