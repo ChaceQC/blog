@@ -1,4 +1,4 @@
-import type { AdminPostItem, PostFormPayload } from './types.ts'
+import type { AdminPostItem, PostFormPayload, PostWritePayload } from './types.ts'
 
 export const emptyPostForm: PostFormPayload = {
   title: '',
@@ -42,13 +42,18 @@ export function postToPreviewInput(post: AdminPostItem) {
   }
 }
 
-export function normalizePostForm(form: PostFormPayload): PostFormPayload {
-  return {
-    ...form,
+export function normalizePostForm(form: PostFormPayload): PostWritePayload {
+  const { cover_file_id: coverFileId, ...formWithoutCover } = form
+  const payload: PostWritePayload = {
+    ...formWithoutCover,
     summary: nullableText(form.summary),
     seo_title: nullableText(form.seo_title),
     seo_description: nullableText(form.seo_description),
   }
+  if (coverFileId !== null) {
+    payload.cover_file_id = coverFileId
+  }
+  return payload
 }
 
 export function formatPostSaveError(error: unknown): string {
@@ -61,7 +66,7 @@ export function formatPostSaveError(error: unknown): string {
   if (error.message === 'post slug already exists') {
     return '保存失败：Slug 已被其他文章使用'
   }
-  if (error.message === 'invalid encrypted request payload') {
+  if (error.message.startsWith('invalid encrypted request payload')) {
     return '保存失败：文章表单内容不完整'
   }
   return error.message || '保存失败'

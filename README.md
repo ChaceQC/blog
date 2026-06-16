@@ -34,6 +34,8 @@ README.md             项目总览文档
 - 前端默认端口：`15173`，配置文件为 `frontend/config/development.json`。
 - 前端预览端口：`14173`，配置文件为 `frontend/config/development.json`。
 - 后端默认端口：`18080`，配置文件为 `backend/.env`。
+- 后端本地启动统一使用 `uv run python main.py`，不要直接用系统 Python 或全局 Python 启动。
+- 浏览器联调或接口验证结束后，关闭本次启动的前端、后端或预览服务，并确认相关端口不再监听。
 
 后端：
 

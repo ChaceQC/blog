@@ -10,9 +10,9 @@ import type {
   AdminPostItem,
   AdminPostListResponse,
   PageFormPayload,
-  PostFormPayload,
   PostPreviewPayload,
   PostPreviewResponse,
+  PostWritePayload,
 } from './types.ts'
 
 export function listAdminPosts(): Promise<AdminPostListResponse> {
@@ -23,10 +23,10 @@ export function listAdminPosts(): Promise<AdminPostListResponse> {
 }
 
 export function createAdminPost(
-  payload: PostFormPayload,
+  payload: PostWritePayload,
   csrfToken: string,
 ): Promise<AdminPostItem> {
-  return apiPostEncrypted<PostFormPayload, AdminPostItem>(
+  return apiPostEncrypted<PostWritePayload, AdminPostItem>(
     '/admin/posts',
     payload,
     'content-v1',
@@ -36,10 +36,10 @@ export function createAdminPost(
 
 export function updateAdminPost(
   postId: number,
-  payload: PostFormPayload,
+  payload: PostWritePayload,
   csrfToken: string,
 ): Promise<AdminPostItem> {
-  return apiPatchEncrypted<PostFormPayload, AdminPostItem>(
+  return apiPatchEncrypted<PostWritePayload, AdminPostItem>(
     `/admin/posts/${postId}`,
     payload,
     'content-v1',

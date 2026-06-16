@@ -1,5 +1,37 @@
 # 项目进度
 
+## 2026-06-17
+
+### 已完成
+
+- 修复新建文章未设置封面时仍发送 `cover_file_id: null` 的问题；前端写入 payload 现在只在封面文件 ID 非空时发送 `cover_file_id`，避免兼容旧后端进程或额外字段校验导致 `invalid encrypted request payload`。
+- 保持后端加密请求体校验失败的响应为泛化错误，不向浏览器暴露字段级校验细节。
+- 已停止昨晚仍在监听 `18080` 的旧后端进程，并使用项目虚拟环境 `uv run python main.py` 重启后端；当前 `/healthz` 返回 200。
+- 按用户要求更新 `AGENT.md`、`README.md`、`backend/README.md` 和 `PROJECT_PLAN.md`：后端本地启动必须使用 `uv run python main.py`，联调或验证结束后必须关闭本次启动的本项目服务，并确认相关端口不再监听。
+- 本次验证后已关闭当前监听 `18080` 的后端服务和监听 `15173` 的前端服务，确认 `18080`、`15173`、`14173` 均无监听。
+
+### 进行中
+
+- M1 内容管理继续推进，文章封面仍以文件 ID 输入方式衔接文件管理页，后续升级为文件选择器。
+
+### 阻塞与风险
+
+- 若前端页面仍保留旧 bundle 或旧 dev server 状态，需刷新页面后再保存文章；后端已重启到当前代码。
+
+### 下一步
+
+- 继续做后台文件选择器，让文章封面不再需要手动粘贴文件 ID。
+
+### 验证
+
+- 已运行 `uv run ruff check .`，通过。
+- 已运行 `uv run pytest tests\test_admin_content_api.py tests\test_content_service.py tests\test_markdown_provider.py`，15 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
+- 已运行 `git diff --check`，未发现空白或行尾问题。
+- 已重启后端并确认 `http://127.0.0.1:18080/healthz` 返回 200。
+- 已检查本项目开发端口，确认 `18080`、`15173`、`14173` 均无监听。
+
 ## 2026-06-16
 
 ### 已完成

@@ -65,6 +65,10 @@ export type PostFormPayload = {
   seo_description: string | null
 }
 
+export type PostWritePayload = Omit<PostFormPayload, 'cover_file_id'> & {
+  cover_file_id?: number
+}
+
 export type PageFormPayload = {
   title: string
   slug: string
