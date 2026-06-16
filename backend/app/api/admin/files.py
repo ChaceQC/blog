@@ -40,6 +40,7 @@ from app.services.files import (
     ManagedFileNotFoundError,
     UploadFileCommand,
 )
+from app.services.logs import LogService
 
 router = APIRouter(tags=["admin-files"])
 UploadedFile = Annotated[UploadFile, File()]
@@ -196,6 +197,60 @@ async def create_file_temporary_url(
     return response
 
 
+@router.get("/files/{file_id}/download")
+async def download_admin_file(
+    file_id: int,
+    _: FileUploaderDependency,
+    request: Request,
+    service: FileServiceDependency,
+    settings: SettingsDependency,
+    logs: LogServiceDependency,
+) -> FileResponse:
+    try:
+        download = await service.prepare_admin_download(
+            file_id=file_id,
+            upload_root=settings.upload_root,
+        )
+    except ManagedFileNotFoundError as exc:
+        await _record_admin_file_download_log(
+            request=request,
+            logs=logs,
+            file_id=file_id,
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="file not found",
+        ) from exc
+    except FileAccessDeniedError as exc:
+        await _record_admin_file_download_log(
+            request=request,
+            logs=logs,
+            file_id=file_id,
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="file is not downloadable",
+        ) from exc
+
+    await _record_admin_file_download_log(
+        request=request,
+        logs=logs,
+        file_id=file_id,
+        status_code=status.HTTP_200_OK,
+        detail_json={
+            "filename": download.filename,
+            "media_type": download.media_type,
+        },
+    )
+    return FileResponse(
+        download.path,
+        media_type=download.media_type,
+        filename=download.filename,
+    )
+
+
 @router.get("/files/{file_id}/preview")
 async def preview_file(
     file_id: int,
@@ -264,6 +319,27 @@ async def thumbnail_file(
         thumbnail.path,
         media_type=thumbnail.media_type,
         filename=thumbnail.filename,
+    )
+
+
+async def _record_admin_file_download_log(
+    *,
+    request: Request,
+    logs: LogService,
+    file_id: int,
+    status_code: int,
+    detail_json: dict[str, object] | None = None,
+) -> None:
+    await logs.record_access_log(
+        access_type="admin_file_download",
+        method=request.method,
+        path=str(request.url.path),
+        status_code=status_code,
+        entity_type="file",
+        entity_id=file_id,
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        detail_json=detail_json,
     )
 
 

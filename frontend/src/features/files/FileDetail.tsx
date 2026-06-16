@@ -1,11 +1,14 @@
 import {
   Copy,
+  Download,
   ExternalLink,
   FileArchive,
   FileImage,
   ImagePlus,
   Trash2,
 } from 'lucide-react'
+
+import { adminFileDownloadUrl } from './api.ts'
 
 import type { AdminFileItem, AdminFileTemporaryUrlResponse } from './types.ts'
 
@@ -147,6 +150,14 @@ export function FileDetail({
           </button>
         ) : null}
         <button
+          className="text-button"
+          onClick={() => openAdminDownload(file, setNotice)}
+          type="button"
+        >
+          <Download size={17} strokeWidth={1.8} aria-hidden="true" />
+          下载
+        </button>
+        <button
           className="text-button text-button--muted"
           disabled={isDeleting}
           onClick={onDelete}
@@ -178,6 +189,20 @@ function formatDate(value: string | null): string {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value))
+}
+
+function openAdminDownload(
+  file: AdminFileItem,
+  setNotice: (notice: string | null) => void,
+) {
+  const opened = window.open(
+    adminFileDownloadUrl(file.id),
+    '_blank',
+    'noopener,noreferrer',
+  )
+  if (!opened) {
+    setNotice('浏览器拦截了下载窗口，请允许弹出后重试')
+  }
 }
 
 async function copyFileId(

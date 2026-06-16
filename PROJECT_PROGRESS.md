@@ -38,20 +38,26 @@
 - `EncryptionSessionManager` 新增 `cleanup_expired_sessions` 业务方法，只有确实删除过期记录时才提交事务，避免空清理产生无意义提交。
 - 补充加密会话清理测试，覆盖“只删除过期会话并提交”和“没有过期会话不空提交”。
 - 按用户要求更新 `AGENT.md`、`README.md`、`backend/README.md` 和 `PROJECT_PLAN.md`：每完成一个可验证任务后，必须在进度记录中写清楚紧接着要推进的下一个具体任务。
+- 新增后台文件下载接口 `GET /api/admin/files/{file_id}/download`，登录且具备 `file:upload` 权限的后台用户可以下载公开或私有 active 文件，文件仍从后端读取，不暴露原始上传目录。
+- `FileService` 新增 `prepare_admin_download` 用例，复用存储路径安全解析，允许读取私有 object key 但仍限制路径必须位于 `BLOG_UPLOAD_ROOT` 内。
+- 后台文件下载会写入 `access_logs`，成功记录文件名和 MIME，文件不存在或不可下载时记录对应 404/403。
+- 前端后台文件详情新增“下载”按钮，直接打开后台鉴权下载接口；公开短时链接仍只用于公开文件分享，私有文件不生成公开链接。
+- 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，标记私有文件后台鉴权下载已完成，并将下一步调整为软删除文件物理清理任务。
 
 ### 进行中
 
-- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；后台维护任务体系已开始落地，下一步切到文件管理的私有文件鉴权下载和物理清理闭环。
+- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；后台私有文件鉴权下载已接入，下一步切到软删除文件物理清理任务。
 
 ### 阻塞与风险
 
 - 若前端页面仍保留旧 bundle 或旧 dev server 状态，需刷新页面后再保存文章；后端已重启到当前代码。
 - 实际执行 `cleanup-encryption-sessions` 会删除当前配置数据库里的过期会话记录；本次仅验证 CLI 子命令可见性和业务方法测试，未在未确认目标库的情况下直接运行清理命令。
+- 后台文件下载接口返回文件流，不走 `content-v1` 加密信封；安全边界依赖后台 HttpOnly Cookie 或 Bearer Token 鉴权、`file:upload` 权限和后端路径校验。
 
 ### 下一步
 
-- 实现私有文件后台鉴权下载：为私有文件提供只允许已登录且具备文件权限的后台下载接口，并补充前端文件详情入口与后端测试。
-- 在私有文件下载完成后，继续实现软删除文件的物理清理任务：复用 `app/tasks` 维护任务入口，按 `File.status=deleted` 和引用关系安全删除本地文件。
+- 实现软删除文件的物理清理任务：复用 `app/tasks` 维护任务入口，按 `File.status=deleted`、`deleted_at` 和引用关系安全删除本地文件，并提供 CLI 子命令。
+- 物理清理任务完成后，为清理结果补充进度记录、后端 README 说明和测试，明确下一步是否继续孤儿文件清理或 Redis 共享限流适配。
 - 文件清理任务完成后，再评估 Redis 共享限流适配器，替换或扩展当前单进程内存限流器。
 - 使用真实 MySQL 运行库验证上传图片、选择封面、发布文章、前台封面展示、正文图片渲染、公开文件栏下载和后台访问日志查询。
 
@@ -82,6 +88,10 @@
 - 后台维护任务入口和加密会话清理 CLI 接入后已运行 `uv run ruff check .`，通过。
 - 后台维护任务入口和加密会话清理 CLI 接入后已运行 `uv run pytest tests\test_admin_encryption_api.py tests\test_encryption.py`，8 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 已运行 `uv run python -m app.cli --help`，确认 `cleanup-encryption-sessions` 子命令已注册。
+- 后台私有文件鉴权下载接入后已运行 `uv run ruff check .`，通过。
+- 后台私有文件鉴权下载接入后已运行 `uv run pytest tests\test_admin_files_api.py`，14 个测试通过；仍存在 FastAPI TestClient 与 per-request cookies 的上游弃用警告。
+- 后台文件详情下载按钮接入后已运行 `npm.cmd run lint`，通过。
+- 后台文件详情下载按钮接入后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 主 chunk 超过 500KB 的既有提示。
 
 ## 2026-06-16
 

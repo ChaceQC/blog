@@ -78,10 +78,11 @@ uv run python -m app.cli cleanup-encryption-sessions
 - `GET /api/admin/files`：文件列表，需要 `file:upload` 权限。
 - `POST /api/admin/files`：multipart 上传，需要 `file:upload` 权限和 `X-CSRF-Token`。
 - `GET /api/admin/files/{id}/temporary-url`：为公开文件生成短时访问链接，需要 `file:upload` 权限。
+- `GET /api/admin/files/{id}/download`：后台鉴权下载公开或私有文件，需要 `file:upload` 权限。
 - `GET /api/admin/files/{id}/preview`：为后台文章预览提供短时签名图片访问，不用于公开下载。
 - `DELETE /api/admin/files/{id}`：软删除文件，需要 `file:delete` 权限和 `X-CSRF-Token`。
 
-当前本地存储驱动会将文件写入 `BLOG_UPLOAD_ROOT`，但不会挂载静态目录，也不会为新文件写入 `/uploads/...` 公开 URL。公开文件栏下载通过后台加密接口按需生成短时签名链接，再由 `/api/public/files/{id}/download?token=...` 校验后返回文件；文章正文图片渲染使用专门的 `/api/public/posts/{slug}/files/{file_id}/render?expires=...&token=...`，公开封面缩略图使用 `/api/public/posts/{slug}/files/{file_id}/thumbnail?expires=...&token=...`，签名由公开文章详情或后台预览接口按场景颁发。后台文件列表的使用次数来自 `file_usages`，目前文章封面记录为 `cover`，正文图片记录为 `post_body`。私有文件不生成公开访问链接。上传大小通过 `BLOG_UPLOAD_MAX_SIZE_BYTES` 配置，当前默认 30MB；当前白名单支持 JPEG、PNG、GIF、WebP 和 PDF，并校验扩展名、MIME 与文件头；删除只标记为 `deleted`，后续由清理任务处理物理文件。短时链接有效期通过 `BLOG_FILE_TEMPORARY_URL_EXPIRE_SECONDS` 配置。公开内容读取、公开文件下载、文章图片渲染、文章缩略图和后台短时链接生成都会写入 `access_logs`。
+当前本地存储驱动会将文件写入 `BLOG_UPLOAD_ROOT`，但不会挂载静态目录，也不会为新文件写入 `/uploads/...` 公开 URL。公开文件栏下载通过后台加密接口按需生成短时签名链接，再由 `/api/public/files/{id}/download?token=...` 校验后返回文件；私有文件不生成公开访问链接，只能通过后台鉴权下载接口读取。文章正文图片渲染使用专门的 `/api/public/posts/{slug}/files/{file_id}/render?expires=...&token=...`，公开封面缩略图使用 `/api/public/posts/{slug}/files/{file_id}/thumbnail?expires=...&token=...`，签名由公开文章详情或后台预览接口按场景颁发。后台文件列表的使用次数来自 `file_usages`，目前文章封面记录为 `cover`，正文图片记录为 `post_body`。上传大小通过 `BLOG_UPLOAD_MAX_SIZE_BYTES` 配置，当前默认 30MB；当前白名单支持 JPEG、PNG、GIF、WebP 和 PDF，并校验扩展名、MIME 与文件头；删除只标记为 `deleted`，后续由清理任务处理物理文件。短时链接有效期通过 `BLOG_FILE_TEMPORARY_URL_EXPIRE_SECONDS` 配置。公开内容读取、公开文件下载、文章图片渲染、文章缩略图、后台短时链接生成和后台文件下载都会写入 `access_logs`。
 
 ## 初始管理员
 

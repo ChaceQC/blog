@@ -295,6 +295,28 @@ class FileService:
             filename=file.original_name,
         )
 
+    async def prepare_admin_download(
+        self,
+        *,
+        file_id: int,
+        upload_root: Path,
+    ) -> FileDownload:
+        file = await self.repository.get_file(file_id)
+        if file is None:
+            raise ManagedFileNotFoundError("file not found")
+        if file.status != "active":
+            raise FileAccessDeniedError("file is not downloadable")
+
+        path = _resolve_storage_path(upload_root, file.object_key, public_only=False)
+        if path is None or not path.is_file():
+            raise ManagedFileNotFoundError("stored file not found")
+
+        return FileDownload(
+            path=path,
+            media_type=file.mime_type,
+            filename=file.original_name,
+        )
+
     async def prepare_article_render(
         self,
         *,

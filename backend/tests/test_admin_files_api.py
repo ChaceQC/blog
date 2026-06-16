@@ -16,6 +16,7 @@ from app.main import app
 from app.schemas.encryption import EncryptedApiResponse
 from app.services.auth import AuthenticatedUser
 from app.services.files import (
+    FileAccessDeniedError,
     FileDownload,
     InvalidFileAccessTokenError,
     UploadFileCommand,
@@ -159,10 +160,29 @@ class FakeDownloadFileService:
             filename="cover-thumb.jpg",
         )
 
+    async def prepare_admin_download(
+        self,
+        *,
+        file_id: int,
+        upload_root,
+    ) -> FileDownload:
+        assert file_id == 1
+        assert upload_root
+        return FileDownload(
+            path=self.path,
+            media_type="application/pdf",
+            filename="private-note.pdf",
+        )
+
 
 class FakeDeniedDownloadFileService:
     async def prepare_public_download(self, **_: object) -> FileDownload:
         raise InvalidFileAccessTokenError("invalid temporary file token")
+
+
+class FakeDeniedAdminDownloadFileService:
+    async def prepare_admin_download(self, **_: object) -> FileDownload:
+        raise FileAccessDeniedError("file is not downloadable")
 
 
 class FakePublicFileContentService:
@@ -402,6 +422,53 @@ def test_public_file_download_uses_temporary_token(tmp_path) -> None:
     assert response.content == _png_bytes()
     assert logs.items[0]["access_type"] == "public_file_download"
     assert logs.items[0]["entity_id"] == 1
+
+
+def test_admin_file_download_allows_private_file_with_admin_auth(tmp_path) -> None:
+    file_path = tmp_path / "private-note.pdf"
+    file_path.write_bytes(b"%PDF-1.7\n")
+    logs = FakeLogService()
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_file_service] = (
+        lambda: FakeDownloadFileService(file_path)
+    )
+    app.dependency_overrides[get_log_service] = lambda: logs
+    client = TestClient(app)
+
+    try:
+        response = client.get("/api/admin/files/1/download")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content == b"%PDF-1.7\n"
+    assert logs.items[0]["access_type"] == "admin_file_download"
+    assert logs.items[0]["entity_id"] == 1
+    assert logs.items[0]["detail_json"] == {
+        "filename": "private-note.pdf",
+        "media_type": "application/pdf",
+    }
+
+
+def test_admin_file_download_records_denied_access() -> None:
+    logs = FakeLogService()
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_file_service] = (
+        lambda: FakeDeniedAdminDownloadFileService()
+    )
+    app.dependency_overrides[get_log_service] = lambda: logs
+    client = TestClient(app)
+
+    try:
+        response = client.get("/api/admin/files/1/download")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "file is not downloadable"
+    assert logs.items[0]["access_type"] == "admin_file_download"
+    assert logs.items[0]["status_code"] == 403
 
 
 def test_admin_file_thumbnail_returns_small_preview(tmp_path) -> None:

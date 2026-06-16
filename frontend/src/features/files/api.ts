@@ -76,3 +76,7 @@ export function getAdminFileTemporaryUrl(
 export function adminFileThumbnailUrl(fileId: number): string {
   return `${API_BASE_URL}/admin/files/${fileId}/thumbnail`
 }
+
+export function adminFileDownloadUrl(fileId: number): string {
+  return `${API_BASE_URL}/admin/files/${fileId}/download`
+}
