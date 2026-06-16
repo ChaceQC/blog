@@ -10,7 +10,12 @@ from app.services.admin_bootstrap import (
     InitialAdminExistsError,
 )
 from app.tasks.encryption import cleanup_expired_encryption_sessions
-from app.tasks.files import DeletedFileCleanupCommand, cleanup_deleted_files
+from app.tasks.files import (
+    DeletedFileCleanupCommand,
+    OrphanFileCleanupCommand,
+    cleanup_deleted_files,
+    cleanup_orphan_files,
+)
 
 
 def main() -> None:
@@ -25,6 +30,9 @@ def main() -> None:
         return
     if args.command == "cleanup-deleted-files":
         asyncio.run(_cleanup_deleted_files(args))
+        return
+    if args.command == "cleanup-orphan-files":
+        asyncio.run(_cleanup_orphan_files(args))
         return
 
     parser.print_help()
@@ -64,6 +72,21 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_positive_int,
         default=100,
         help="单次最多扫描的软删除文件数量，默认 100",
+    )
+    cleanup_orphans = subparsers.add_parser(
+        "cleanup-orphan-files",
+        help="扫描或清理本地孤儿文件",
+    )
+    cleanup_orphans.add_argument(
+        "--limit",
+        type=_positive_int,
+        default=1000,
+        help="单次最多扫描的本地文件数量，默认 1000",
+    )
+    cleanup_orphans.add_argument(
+        "--delete",
+        action="store_true",
+        help="实际删除孤儿文件；省略时只演练扫描结果",
     )
     return parser
 
@@ -107,6 +130,28 @@ async def _cleanup_deleted_files(args: argparse.Namespace) -> None:
         f"缺失物理文件 {result.missing_objects} 个，"
         f"跳过 {result.skipped_files} 条",
     )
+
+
+async def _cleanup_orphan_files(args: argparse.Namespace) -> None:
+    result = await cleanup_orphan_files(
+        OrphanFileCleanupCommand(
+            limit=args.limit,
+            dry_run=not args.delete,
+        ),
+    )
+    mode = "演练扫描" if result.dry_run else "实际清理"
+    print(
+        f"已完成孤儿文件{mode}："
+        f"扫描 {result.scanned_files} 个，"
+        f"已登记 {result.tracked_files} 个，"
+        f"孤儿 {result.orphan_files} 个，"
+        f"删除 {result.deleted_files} 个，"
+        f"跳过 {result.skipped_files} 个",
+    )
+    if result.orphan_object_keys:
+        preview = "、".join(result.orphan_object_keys[:10])
+        suffix = "……" if len(result.orphan_object_keys) > 10 else ""
+        print(f"孤儿文件示例：{preview}{suffix}")
 
 
 def _prompt_password() -> str:

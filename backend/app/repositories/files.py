@@ -66,6 +66,14 @@ class FileRepository:
         )
         return result.scalar_one_or_none()
 
+    async def list_storage_object_keys(self) -> Sequence[str]:
+        result = await self.session.execute(
+            select(BlogFile.object_key).where(
+                BlogFile.status.in_(("active", "deleted")),
+            ),
+        )
+        return result.scalars().all()
+
     async def list_deleted_files_for_cleanup(
         self,
         *,

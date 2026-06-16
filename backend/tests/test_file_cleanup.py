@@ -6,10 +6,18 @@ from app.services.files import FileService
 
 
 class FakeCleanupRepository:
-    def __init__(self, files: list[tuple[object, int]]) -> None:
+    def __init__(
+        self,
+        files: list[tuple[object, int]],
+        object_keys: list[str] | None = None,
+    ) -> None:
         self.files = files
+        self.object_keys = object_keys or []
         self.deleted_ids: list[int] = []
         self.commit_count = 0
+
+    async def list_storage_object_keys(self) -> list[str]:
+        return self.object_keys
 
     async def list_deleted_files_for_cleanup(
         self,
@@ -110,6 +118,99 @@ def test_cleanup_deleted_files_skips_referenced_and_unsafe_paths(tmp_path) -> No
     assert result.skipped_files == 2
     assert repository.deleted_ids == []
     assert repository.commit_count == 0
+
+
+def test_cleanup_orphan_files_dry_run_keeps_local_files(tmp_path) -> None:
+    tracked_file = tmp_path / "public" / "2026" / "06" / "tracked.png"
+    orphan_file = tmp_path / "private" / "2026" / "06" / "orphan.pdf"
+    thumbnail_file = tmp_path / ".thumbs" / "orphan-thumb.jpg"
+    tracked_file.parent.mkdir(parents=True)
+    orphan_file.parent.mkdir(parents=True)
+    thumbnail_file.parent.mkdir(parents=True)
+    tracked_file.write_bytes(b"\x89PNG\r\n\x1a\n")
+    orphan_file.write_bytes(b"%PDF-1.7\n")
+    thumbnail_file.write_bytes(b"thumb")
+    repository = FakeCleanupRepository(
+        [],
+        object_keys=["public/2026/06/tracked.png"],
+    )
+    service = FileService(repository=repository, storage=FakeStorage())
+
+    result = asyncio.run(
+        service.cleanup_orphan_files(
+            upload_root=tmp_path,
+            limit=10,
+            dry_run=True,
+        ),
+    )
+
+    assert result.scanned_files == 2
+    assert result.tracked_files == 1
+    assert result.orphan_files == 1
+    assert result.deleted_files == 0
+    assert result.skipped_files == 0
+    assert result.dry_run is True
+    assert result.orphan_object_keys == ("private/2026/06/orphan.pdf",)
+    assert orphan_file.exists()
+    assert thumbnail_file.exists()
+
+
+def test_cleanup_orphan_files_delete_removes_only_untracked_managed_files(
+    tmp_path,
+) -> None:
+    tracked_file = tmp_path / "public" / "2026" / "06" / "tracked.png"
+    orphan_file = tmp_path / "private" / "2026" / "06" / "orphan.pdf"
+    unknown_file = tmp_path / "manual" / "note.txt"
+    tracked_file.parent.mkdir(parents=True)
+    orphan_file.parent.mkdir(parents=True)
+    unknown_file.parent.mkdir(parents=True)
+    tracked_file.write_bytes(b"\x89PNG\r\n\x1a\n")
+    orphan_file.write_bytes(b"%PDF-1.7\n")
+    unknown_file.write_text("keep", encoding="utf-8")
+    repository = FakeCleanupRepository(
+        [],
+        object_keys=["public/2026/06/tracked.png"],
+    )
+    service = FileService(repository=repository, storage=FakeStorage())
+
+    result = asyncio.run(
+        service.cleanup_orphan_files(
+            upload_root=tmp_path,
+            limit=10,
+            dry_run=False,
+        ),
+    )
+
+    assert result.scanned_files == 2
+    assert result.tracked_files == 1
+    assert result.orphan_files == 1
+    assert result.deleted_files == 1
+    assert result.skipped_files == 0
+    assert tracked_file.exists()
+    assert not orphan_file.exists()
+    assert unknown_file.exists()
+    assert repository.commit_count == 0
+
+
+def test_cleanup_orphan_files_respects_scan_limit(tmp_path) -> None:
+    for index in range(3):
+        path = tmp_path / "public" / "2026" / "06" / f"orphan-{index}.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"\x89PNG\r\n\x1a\n")
+    repository = FakeCleanupRepository([], object_keys=[])
+    service = FileService(repository=repository, storage=FakeStorage())
+
+    result = asyncio.run(
+        service.cleanup_orphan_files(
+            upload_root=tmp_path,
+            limit=2,
+            dry_run=True,
+        ),
+    )
+
+    assert result.scanned_files == 2
+    assert result.orphan_files == 2
+    assert len(result.orphan_object_keys) == 2
 
 
 def _file_item(file_id: int, object_key: str, sha256: str) -> object:

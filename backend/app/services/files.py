@@ -102,6 +102,17 @@ class DeletedFileCleanupResult:
 
 
 @dataclass(frozen=True)
+class OrphanFileCleanupResult:
+    scanned_files: int
+    tracked_files: int
+    orphan_files: int
+    deleted_files: int
+    skipped_files: int
+    dry_run: bool
+    orphan_object_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ArticleRenderToken:
     token: str
     expires: int
@@ -125,6 +136,8 @@ class FileRepositoryProtocol(Protocol):
     async def get_file(self, file_id: int) -> BlogFile | None: ...
 
     async def get_file_by_sha256(self, sha256: str) -> BlogFile | None: ...
+
+    async def list_storage_object_keys(self) -> Sequence[str]: ...
 
     async def list_deleted_files_for_cleanup(
         self,
@@ -285,6 +298,61 @@ class FileService:
             deleted_objects=deleted_objects,
             missing_objects=missing_objects,
             skipped_files=skipped_files,
+        )
+
+    async def cleanup_orphan_files(
+        self,
+        *,
+        upload_root: Path,
+        limit: int,
+        dry_run: bool = True,
+    ) -> OrphanFileCleanupResult:
+        tracked_object_keys = set(await self.repository.list_storage_object_keys())
+        scanned_files = 0
+        tracked_files = 0
+        orphan_files = 0
+        deleted_files = 0
+        skipped_files = 0
+        orphan_object_keys: list[str] = []
+
+        for path in _iter_managed_storage_files(upload_root):
+            if scanned_files >= limit:
+                break
+            scanned_files += 1
+
+            object_key = _storage_path_to_object_key(upload_root, path)
+            if object_key is None:
+                skipped_files += 1
+                continue
+
+            if object_key in tracked_object_keys:
+                tracked_files += 1
+                continue
+
+            orphan_files += 1
+            orphan_object_keys.append(object_key)
+            if dry_run:
+                continue
+
+            resolved_path = _resolve_storage_path(
+                upload_root,
+                object_key,
+                public_only=False,
+            )
+            if resolved_path != path:
+                skipped_files += 1
+                continue
+            path.unlink()
+            deleted_files += 1
+
+        return OrphanFileCleanupResult(
+            scanned_files=scanned_files,
+            tracked_files=tracked_files,
+            orphan_files=orphan_files,
+            deleted_files=deleted_files,
+            skipped_files=skipped_files,
+            dry_run=dry_run,
+            orphan_object_keys=tuple(orphan_object_keys),
         )
 
     async def delete_file(self, file_id: int) -> FileWithUsage:
@@ -916,6 +984,29 @@ def _resolve_storage_path(
     except ValueError:
         return None
     return path
+
+
+def _iter_managed_storage_files(upload_root: Path) -> Sequence[Path]:
+    files: list[Path] = []
+    for visibility in sorted(ALLOWED_VISIBILITIES):
+        base_path = upload_root / visibility
+        if not base_path.exists():
+            continue
+        files.extend(path for path in base_path.rglob("*") if path.is_file())
+    return sorted(files)
+
+
+def _storage_path_to_object_key(upload_root: Path, path: Path) -> str | None:
+    root = upload_root.resolve()
+    resolved_path = path.resolve()
+    try:
+        relative_path = resolved_path.relative_to(root)
+    except ValueError:
+        return None
+    parts = relative_path.parts
+    if not parts or parts[0] not in ALLOWED_VISIBILITIES:
+        return None
+    return relative_path.as_posix()
 
 
 def _thumbnail_path(upload_root: Path, file: BlogFile) -> Path:

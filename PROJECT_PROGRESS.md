@@ -49,10 +49,15 @@
 - 文件 Repository 补充软删除清理候选查询和记录删除方法，`FileService` 返回扫描数、删除记录数、删除物理文件数、缺失物理文件数和跳过数，CLI 会输出汇总。
 - 补充软删除文件清理测试，覆盖正常删除物理文件与缩略图、物理文件缺失时清理记录、仍有引用或路径不安全时跳过。
 - 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，标记软删除文件物理清理任务已完成，并将下一步调整为孤儿文件清理任务。
+- 新增孤儿文件清理任务 `cleanup_orphan_files` 和 CLI 子命令 `uv run python -m app.cli cleanup-orphan-files --limit 1000`，默认 dry-run，只汇总扫描结果和孤儿文件示例。
+- 孤儿文件任务只扫描 `BLOG_UPLOAD_ROOT` 下 `public` 与 `private` 托管目录，跳过 `.thumbs` 和其他非托管目录；对没有 active/deleted 数据库记录的文件，只有显式传入 `--delete` 才会删除。
+- 文件 Repository 补充 active/deleted object key 查询，`FileService` 返回扫描文件数、已登记文件数、孤儿文件数、删除数、跳过数和孤儿 object key 示例。
+- 补充孤儿文件清理测试，覆盖 dry-run 不删除、显式删除仅处理非登记托管文件、扫描上限生效。
+- 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，标记孤儿文件清理任务已完成，并将下一步调整为真实 MySQL 临时库与临时上传目录闭环验证。
 
 ### 进行中
 
-- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；软删除文件物理清理任务已接入，下一步切到孤儿文件清理任务。
+- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；软删除文件物理清理和孤儿文件清理任务已接入，下一步切到真实 MySQL 临时库与临时上传目录闭环验证。
 
 ### 阻塞与风险
 
@@ -60,12 +65,12 @@
 - 实际执行 `cleanup-encryption-sessions` 会删除当前配置数据库里的过期会话记录；本次仅验证 CLI 子命令可见性和业务方法测试，未在未确认目标库的情况下直接运行清理命令。
 - 后台文件下载接口返回文件流，不走 `content-v1` 加密信封；安全边界依赖后台 HttpOnly Cookie 或 Bearer Token 鉴权、`file:upload` 权限和后端路径校验。
 - 实际执行 `cleanup-deleted-files` 会删除当前配置数据库中的软删记录和本地物理文件；本次只跑服务层单元测试和 CLI 可见性检查，未在未确认目标库与上传目录的情况下直接运行清理命令。
+- `cleanup-orphan-files` 默认 dry-run 不删除文件；显式加 `--delete` 会删除当前配置上传目录中的孤儿文件，本次未在未确认目标库与上传目录的情况下执行真实删除。
 
 ### 下一步
 
-- 实现孤儿文件清理任务：扫描 `BLOG_UPLOAD_ROOT` 下没有对应 active/deleted 数据库记录的本地文件，先以 dry-run 汇总输出为默认行为，避免误删。
-- 孤儿文件清理任务完成后，补充真实 MySQL 临时库和临时上传目录验证，确认上传、软删除、清理和日志记录可以串成闭环。
-- 孤儿文件清理任务验证完成后，再评估 Redis 共享限流适配器，替换或扩展当前单进程内存限流器。
+- 补充真实 MySQL 临时库和临时上传目录验证，确认上传、软删除、`cleanup-deleted-files`、`cleanup-orphan-files` dry-run 与显式删除可以串成闭环。
+- 文件清理闭环验证完成后，再评估 Redis 共享限流适配器，替换或扩展当前单进程内存限流器。
 - 使用真实 MySQL 运行库验证上传图片、选择封面、发布文章、前台封面展示、正文图片渲染、公开文件栏下载和后台访问日志查询。
 
 ### 验证
@@ -103,6 +108,12 @@
 - 软删除文件物理清理任务接入后已运行 `uv run pytest tests\test_file_cleanup.py`，3 个测试通过。
 - 已重新运行 `uv run pytest tests\test_admin_files_api.py tests\test_file_cleanup.py`，17 个测试通过；仍存在 FastAPI TestClient 与 per-request cookies 的上游弃用警告。
 - 已运行 `uv run python -m app.cli --help`，确认 `cleanup-deleted-files` 子命令已注册。
+- 孤儿文件清理任务接入后已运行 `uv run ruff check .`，通过。
+- 孤儿文件清理任务接入后已运行 `uv run pytest tests\test_file_cleanup.py`，6 个测试通过。
+- 已重新运行 `uv run pytest tests\test_admin_files_api.py tests\test_file_cleanup.py`，20 个测试通过；仍存在 FastAPI TestClient 与 per-request cookies 的上游弃用警告。
+- 已重新运行 `uv run python -m app.cli --help`，确认 `cleanup-orphan-files` 子命令已注册。
+- 已重新运行 `git diff --check`，未发现空白或行尾问题。
+- 已重新运行后端全量 `uv run pytest`，85 个测试通过；仍存在 FastAPI TestClient 与 per-request cookies 的上游弃用警告。
 
 ## 2026-06-16
 
