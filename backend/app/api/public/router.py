@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.admin.dependencies import (
     EncryptionSessionManagerDependency,
     LogServiceDependency,
+    SettingsDependency,
+    SettingServiceDependency,
 )
 from app.api.admin.encrypted_response import encrypted_response
 from app.api.public.encryption import router as public_encryption_router
@@ -25,7 +27,9 @@ from app.schemas.links import (
     PublicSiteNavItem,
     PublicSiteNavItemListResponse,
 )
+from app.schemas.settings import PublicSiteProfileResponse
 from app.services.content import ContentNotFoundError, ContentService
+from app.services.files import sign_article_render_urls
 from app.services.links import LinkService
 
 router = APIRouter(tags=["public"])
@@ -92,6 +96,7 @@ async def get_public_post(
     request: Request,
     service: PublicContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
+    settings: SettingsDependency,
     logs: LogServiceDependency,
 ):
     try:
@@ -110,8 +115,19 @@ async def get_public_post(
             detail="post not found",
         ) from exc
 
+    detail = PublicPostDetail.model_validate(post)
+    signed_detail = detail.model_copy(
+        update={
+            "content_html": sign_article_render_urls(
+                content_html=detail.content_html,
+                post_slug=detail.slug,
+                expires_seconds=settings.file_temporary_url_expire_seconds,
+                secret_key=settings.secret_key,
+            ),
+        },
+    )
     response = await encrypted_response(
-        PublicPostDetail.model_validate(post),
+        signed_detail,
         request=request,
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
@@ -124,6 +140,32 @@ async def get_public_post(
         entity_type="post",
         entity_id=post.id,
         detail_json={"slug": slug},
+    )
+    return response
+
+
+@router.get("/settings/site-profile")
+async def get_public_site_profile(
+    request: Request,
+    service: SettingServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
+):
+    setting = await service.get_site_profile()
+    profile = _site_profile_response(setting.value_json)
+    response = await encrypted_response(
+        profile,
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+    await _record_public_access(
+        logs,
+        request=request,
+        access_type="public_site_profile",
+        status_code=status.HTTP_200_OK,
+        entity_type="setting",
+        detail_json={"key_name": setting.key_name},
     )
     return response
 
@@ -184,6 +226,29 @@ async def list_public_site_items(
         detail_json={"limit": limit, "offset": offset, "count": len(items)},
     )
     return response
+
+
+def _site_profile_response(value: dict[str, object]) -> PublicSiteProfileResponse:
+    return PublicSiteProfileResponse(
+        title=_string_value(value.get("title"), "静默书房"),
+        owner=_string_value(value.get("owner"), "ChaceQC"),
+        avatar_url=_string_value(
+            value.get("avatar_url"),
+            "https://github.com/ChaceQC.png",
+        ),
+        description=_string_value(
+            value.get("description"),
+            "把长期写作、素材管理和自建服务收束到一处安静的发布空间。",
+        ),
+        quote=_string_value(
+            value.get("quote"),
+            "「把想法放慢一点，让每一次发布都留下可以回看的纹理。」",
+        ),
+    )
+
+
+def _string_value(value: object, fallback: str) -> str:
+    return value if isinstance(value, str) and value else fallback
 
 
 async def _record_public_access(

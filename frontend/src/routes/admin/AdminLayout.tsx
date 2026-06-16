@@ -8,10 +8,14 @@ import {
   ScrollText,
   Settings,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
 import { hasAnyAdminPermission } from '../../features/auth/permissions.ts'
 import { useAuth } from '../../features/auth/useAuth.ts'
+import { getPublicSiteProfile } from '../../features/settings/api.ts'
+import { siteSettings } from '../../features/settings/siteSettings.ts'
 import { adminAccess } from './adminAccess.ts'
 
 const adminLinks = [
@@ -27,12 +31,21 @@ const adminLinks = [
 export function AdminLayout() {
   const { logout, session } = useAuth()
   const navigate = useNavigate()
+  const { data: siteProfile } = useQuery({
+    queryKey: ['public-site-profile'],
+    queryFn: getPublicSiteProfile,
+  })
+  const title = siteProfile?.title ?? siteSettings.title
   const visibleLinks =
     session === null
       ? []
       : adminLinks.filter((item) =>
           hasAnyAdminPermission(session.user, item.permissions),
         )
+
+  useEffect(() => {
+    document.title = title
+  }, [title])
 
   async function handleLogout() {
     await logout()
@@ -43,7 +56,7 @@ export function AdminLayout() {
     <div className="admin-shell">
       <aside className="admin-sidebar">
         <NavLink className="brand brand--admin" to="/">
-          静默书房
+          {title}
         </NavLink>
         <nav aria-label="后台导航">
           {visibleLinks.map((item) => {

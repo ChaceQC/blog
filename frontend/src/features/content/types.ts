@@ -39,6 +39,15 @@ export type AdminPostListResponse = {
   items: AdminPostItem[]
 }
 
+export type PostPreviewPayload = {
+  slug: string
+  content_md: string
+}
+
+export type PostPreviewResponse = {
+  content_html: string
+}
+
 export type AdminPageListResponse = {
   items: AdminPageItem[]
 }

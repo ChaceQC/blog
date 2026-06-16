@@ -17,3 +17,11 @@ export type SettingUpdatePayload = {
   group_name: string
   is_public: boolean
 }
+
+export type PublicSiteProfile = {
+  title: string
+  owner: string
+  avatar_url: string
+  description: string
+  quote: string
+}

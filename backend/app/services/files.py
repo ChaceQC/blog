@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import re
 import struct
 import tempfile
 from base64 import urlsafe_b64decode, urlsafe_b64encode
@@ -87,6 +88,12 @@ class FileDownload:
     path: Path
     media_type: str
     filename: str
+
+
+@dataclass(frozen=True)
+class ArticleRenderToken:
+    token: str
+    expires: int
 
 
 class FileRepositoryProtocol(Protocol):
@@ -322,6 +329,38 @@ class FileService:
             filename=file.original_name,
         )
 
+    async def prepare_admin_preview(
+        self,
+        *,
+        file_id: int,
+        token: str,
+        expires: int,
+        secret_key: str,
+        upload_root: Path,
+    ) -> FileDownload:
+        file = await self.repository.get_file(file_id)
+        if file is None:
+            raise ManagedFileNotFoundError("file not found")
+        if file.status != "active" or not file.mime_type.startswith("image/"):
+            raise FileAccessDeniedError("file is not previewable")
+        if not verify_admin_file_preview_token(
+            token=token,
+            expires=expires,
+            file_id=file.id,
+            secret_key=secret_key,
+        ):
+            raise InvalidFileAccessTokenError("invalid preview token")
+
+        path = _resolve_storage_path(upload_root, file.object_key, public_only=False)
+        if path is None or not path.is_file():
+            raise ManagedFileNotFoundError("stored file not found")
+
+        return FileDownload(
+            path=path,
+            media_type=file.mime_type,
+            filename=file.original_name,
+        )
+
     def _validate_size(self, data: bytes, max_size_bytes: int) -> None:
         if not data:
             raise InvalidFileTypeError("empty file is not allowed")
@@ -496,8 +535,198 @@ def _verify_file_token(
     )
 
 
-def _resolve_storage_path(upload_root: Path, object_key: str) -> Path | None:
-    if not object_key.startswith("public/"):
+def create_article_render_token(
+    *,
+    post_slug: str,
+    file_id: int,
+    expires_seconds: int,
+    secret_key: str,
+) -> ArticleRenderToken:
+    expires = int((utc_now() + timedelta(seconds=expires_seconds)).timestamp())
+    payload = {
+        "exp": expires,
+        "file_id": file_id,
+        "scope": "post_image_render",
+        "slug": post_slug,
+    }
+    payload_bytes = json.dumps(
+        payload,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    payload_part = _base64url_encode(payload_bytes)
+    signature = hmac.new(
+        secret_key.encode("utf-8"),
+        payload_part.encode("ascii"),
+        hashlib.sha256,
+    ).digest()
+    return ArticleRenderToken(
+        token=f"{payload_part}.{_base64url_encode(signature)}",
+        expires=expires,
+    )
+
+
+def create_admin_file_preview_token(
+    *,
+    file_id: int,
+    expires_seconds: int,
+    secret_key: str,
+) -> ArticleRenderToken:
+    expires = int((utc_now() + timedelta(seconds=expires_seconds)).timestamp())
+    payload = {
+        "exp": expires,
+        "file_id": file_id,
+        "scope": "admin_file_preview",
+    }
+    payload_bytes = json.dumps(
+        payload,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    payload_part = _base64url_encode(payload_bytes)
+    signature = hmac.new(
+        secret_key.encode("utf-8"),
+        payload_part.encode("ascii"),
+        hashlib.sha256,
+    ).digest()
+    return ArticleRenderToken(
+        token=f"{payload_part}.{_base64url_encode(signature)}",
+        expires=expires,
+    )
+
+
+def verify_article_render_token(
+    *,
+    token: str,
+    expires: int,
+    post_slug: str,
+    file_id: int,
+    secret_key: str,
+) -> bool:
+    try:
+        payload_part, signature_part = token.split(".", maxsplit=1)
+        expected_signature = hmac.new(
+            secret_key.encode("utf-8"),
+            payload_part.encode("ascii"),
+            hashlib.sha256,
+        ).digest()
+        if not hmac.compare_digest(
+            signature_part,
+            _base64url_encode(expected_signature),
+        ):
+            return False
+        payload = json.loads(_base64url_decode(payload_part))
+    except (BinasciiError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
+        return False
+
+    return (
+        payload.get("scope") == "post_image_render"
+        and payload.get("slug") == post_slug
+        and payload.get("file_id") == file_id
+        and payload.get("exp") == expires
+        and expires > int(utc_now().timestamp())
+    )
+
+
+def verify_admin_file_preview_token(
+    *,
+    token: str,
+    expires: int,
+    file_id: int,
+    secret_key: str,
+) -> bool:
+    try:
+        payload_part, signature_part = token.split(".", maxsplit=1)
+        expected_signature = hmac.new(
+            secret_key.encode("utf-8"),
+            payload_part.encode("ascii"),
+            hashlib.sha256,
+        ).digest()
+        if not hmac.compare_digest(
+            signature_part,
+            _base64url_encode(expected_signature),
+        ):
+            return False
+        payload = json.loads(_base64url_decode(payload_part))
+    except (BinasciiError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
+        return False
+
+    return (
+        payload.get("scope") == "admin_file_preview"
+        and payload.get("file_id") == file_id
+        and payload.get("exp") == expires
+        and expires > int(utc_now().timestamp())
+    )
+
+
+def sign_article_render_urls(
+    *,
+    content_html: str,
+    post_slug: str,
+    expires_seconds: int,
+    secret_key: str,
+) -> str:
+    pattern = re.compile(
+        r'(?P<prefix>\bsrc=["\'])'
+        r'(?P<path>/?api/public/posts/'
+        + re.escape(post_slug)
+        + r'/files/(?P<file_id>\d+)/render)'
+        r'(?P<suffix>["\'])',
+    )
+
+    def replace(match: re.Match[str]) -> str:
+        file_id = int(match.group("file_id"))
+        access = create_article_render_token(
+            post_slug=post_slug,
+            file_id=file_id,
+            expires_seconds=expires_seconds,
+            secret_key=secret_key,
+        )
+        path = match.group("path")
+        signed_path = f"{path}?expires={access.expires}&token={access.token}"
+        return f"{match.group('prefix')}{signed_path}{match.group('suffix')}"
+
+    return pattern.sub(replace, content_html)
+
+
+def sign_admin_preview_image_urls(
+    *,
+    content_html: str,
+    post_slug: str,
+    expires_seconds: int,
+    secret_key: str,
+) -> str:
+    pattern = re.compile(
+        r'(?P<prefix>\bsrc=["\'])'
+        r'(?P<path>/?api/public/posts/'
+        + re.escape(post_slug)
+        + r'/files/(?P<file_id>\d+)/render)'
+        r'(?P<suffix>["\'])',
+    )
+
+    def replace(match: re.Match[str]) -> str:
+        file_id = int(match.group("file_id"))
+        access = create_admin_file_preview_token(
+            file_id=file_id,
+            expires_seconds=expires_seconds,
+            secret_key=secret_key,
+        )
+        preview_path = (
+            f"/api/admin/files/{file_id}/preview?"
+            f"expires={access.expires}&token={access.token}"
+        )
+        return f"{match.group('prefix')}{preview_path}{match.group('suffix')}"
+
+    return pattern.sub(replace, content_html)
+
+
+def _resolve_storage_path(
+    upload_root: Path,
+    object_key: str,
+    *,
+    public_only: bool = True,
+) -> Path | None:
+    if public_only and not object_key.startswith("public/"):
         return None
 
     root = upload_root.resolve()

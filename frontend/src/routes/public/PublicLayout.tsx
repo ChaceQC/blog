@@ -6,11 +6,24 @@ import {
   Link as LinkIcon,
   Settings,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
+import { getPublicSiteProfile } from '../../features/settings/api.ts'
 import { siteSettings } from '../../features/settings/siteSettings.ts'
 
 export function PublicLayout() {
+  const { data: siteProfile } = useQuery({
+    queryKey: ['public-site-profile'],
+    queryFn: getPublicSiteProfile,
+  })
+  const title = siteProfile?.title ?? siteSettings.title
+
+  useEffect(() => {
+    document.title = title
+  }, [title])
+
   return (
     <div className="public-shell">
       <header className="site-header">
@@ -18,7 +31,7 @@ export function PublicLayout() {
           <span className="brand-mark" aria-hidden="true">
             <BookOpen size={18} strokeWidth={1.8} />
           </span>
-          <span>{siteSettings.title}</span>
+          <span>{title}</span>
         </NavLink>
         <nav aria-label="前台导航">
           <NavLink to="/" end>

@@ -25,10 +25,13 @@ from app.services.files import (
     FileAccessDeniedError,
     InvalidFileAccessTokenError,
     ManagedFileNotFoundError,
+    verify_article_render_token,
 )
 
 router = APIRouter(tags=["public-files"])
 TemporaryFileToken = Annotated[str, Query(min_length=16)]
+ArticleImageToken = Annotated[str | None, Query(min_length=16)]
+ArticleImageExpires = Annotated[int | None, Query(ge=1)]
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
 
 
@@ -199,7 +202,29 @@ async def render_post_file(
     file_service: FileServiceDependency,
     settings: SettingsDependency,
     logs: LogServiceDependency,
+    token: ArticleImageToken = None,
+    expires: ArticleImageExpires = None,
 ) -> FileResponse:
+    if token is None or expires is None or not verify_article_render_token(
+        token=token,
+        expires=expires,
+        post_slug=slug,
+        file_id=file_id,
+        secret_key=settings.secret_key,
+    ):
+        await _record_file_access(
+            logs,
+            request=request,
+            access_type="post_image_render",
+            status_code=status.HTTP_403_FORBIDDEN,
+            file_id=file_id,
+            detail_json={"slug": slug},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="invalid image access",
+        )
+
     try:
         post = await content_service.get_public_post_by_slug(slug)
         download = await file_service.prepare_article_render(

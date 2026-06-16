@@ -3,7 +3,11 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from app.api.admin.dependencies import get_encryption_session_manager, get_log_service
+from app.api.admin.dependencies import (
+    get_encryption_session_manager,
+    get_log_service,
+    get_setting_service,
+)
 from app.api.public.router import get_public_content_service, get_public_link_service
 from app.core.encryption import EncryptionProfile
 from app.main import app
@@ -92,7 +96,10 @@ class FakePublicContentService:
             title="公开文章",
             slug="public-post",
             summary="摘要",
-            content_html="<p>正文</p>",
+            content_html=(
+                '<p><img src="/api/public/posts/public-post/files/1/render" '
+                'alt="封面"></p>'
+            ),
             word_count=3,
             seo_title=None,
             seo_description="SEO 摘要",
@@ -144,6 +151,20 @@ class FakePublicLinkService:
                 sort_order=0,
             ),
         ]
+
+
+class FakeSettingService:
+    async def get_site_profile(self) -> object:
+        return SimpleNamespace(
+            key_name="site_profile",
+            value_json={
+                "title": "恬妡的小屋",
+                "owner": "恬妡",
+                "avatar_url": "https://example.com/avatar.png",
+                "description": "新的首页描述",
+                "quote": "新的引文",
+            },
+        )
 
 
 def test_public_encryption_session_uses_public_scope() -> None:
@@ -218,9 +239,37 @@ def test_public_post_detail_returns_html_content() -> None:
     assert response.status_code == 200
     assert response.json()["profile"] == "content-v1"
     assert manager.payload is not None
-    assert manager.payload["content_html"] == "<p>正文</p>"
+    assert (
+        'src="/api/public/posts/public-post/files/1/render?expires='
+        in str(manager.payload["content_html"])
+    )
+    assert "token=" in str(manager.payload["content_html"])
     assert logs.items[0]["access_type"] == "public_post_detail"
     assert logs.items[0]["entity_id"] == 1
+
+
+def test_public_site_profile_returns_encrypted_setting() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    logs = FakeLogService()
+    app.dependency_overrides[get_setting_service] = lambda: FakeSettingService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get(
+            "/api/public/settings/site-profile",
+            headers={"X-Encryption-Session": "public-session"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload is not None
+    assert manager.payload["title"] == "恬妡的小屋"
+    assert manager.payload["owner"] == "恬妡"
+    assert logs.items[0]["access_type"] == "public_site_profile"
 
 
 def test_public_post_detail_returns_404_for_missing_post() -> None:

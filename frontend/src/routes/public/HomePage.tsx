@@ -7,6 +7,7 @@ import {
   formatPostDate,
   formatRelativePostDate,
 } from '../../features/posts/postMeta.ts'
+import { getPublicSiteProfile } from '../../features/settings/api.ts'
 import { siteSettings } from '../../features/settings/siteSettings.ts'
 import { listPublicSiteItems } from '../../features/sites/api.ts'
 
@@ -27,6 +28,19 @@ export function HomePage() {
     queryKey: ['public-site-items', 'home'],
     queryFn: () => listPublicSiteItems({ limit: 3 }),
   })
+  const { data: siteProfile } = useQuery({
+    queryKey: ['public-site-profile'],
+    queryFn: getPublicSiteProfile,
+  })
+  const profile = siteProfile
+    ? {
+        title: siteProfile.title,
+        owner: siteProfile.owner,
+        avatarUrl: siteProfile.avatar_url,
+        description: siteProfile.description,
+        quote: siteProfile.quote,
+      }
+    : siteSettings
   const featuredPosts = postsData?.items ?? []
   const featuredSites = sitesData?.items ?? []
   const socialIconMap = {
@@ -41,15 +55,15 @@ export function HomePage() {
         <div className="hero-identity">
           <img
             className="hero-avatar"
-            src={siteSettings.avatarUrl}
-            alt={`${siteSettings.owner} 的头像`}
+            src={profile.avatarUrl}
+            alt={`${profile.owner} 的头像`}
           />
-          <h1>{siteSettings.description}</h1>
+          <h1>{profile.description}</h1>
           <p className="hero-lead">
             一间安静的小站，用来放文章、素材、友链和一些常去的入口。
           </p>
           <div className="hero-quote">
-            <span>{siteSettings.quote}</span>
+            <span>{profile.quote}</span>
             <small>
               {siteSettings.stats.map((stat) => stat.value).join(' · ')}
             </small>

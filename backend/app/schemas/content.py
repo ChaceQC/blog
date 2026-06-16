@@ -39,6 +39,19 @@ class PostUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class PostPreviewRequest(BaseModel):
+    slug: str = Field(min_length=1, max_length=220, pattern=SLUG_PATTERN)
+    content_md: str = Field(min_length=1)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PostPreviewResponse(BaseModel):
+    content_html: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class AdminPostItem(BaseModel):
     id: int
     title: str

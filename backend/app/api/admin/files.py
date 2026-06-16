@@ -11,6 +11,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.responses import FileResponse
 
 from app.api.admin.dependencies import (
     AdminCsrfDependency,
@@ -35,6 +36,7 @@ from app.services.files import (
     FileAccessDeniedError,
     FileTooLargeError,
     FileValidationError,
+    InvalidFileAccessTokenError,
     ManagedFileNotFoundError,
     UploadFileCommand,
 )
@@ -44,6 +46,8 @@ UploadedFile = Annotated[UploadFile, File()]
 FileVisibilityForm = Annotated[FileVisibility, Form()]
 AltTextForm = Annotated[str | None, Form(max_length=255)]
 PublicListedForm = Annotated[bool, Form()]
+PreviewToken = Annotated[str | None, Query(min_length=16)]
+PreviewExpires = Annotated[int | None, Query(ge=1)]
 FileUploaderDependency = Annotated[
     AuthenticatedUser,
     Depends(require_admin_permission("file:upload")),
@@ -190,6 +194,47 @@ async def create_file_temporary_url(
         detail_json={"expires_at": access.expires_at.isoformat()},
     )
     return response
+
+
+@router.get("/files/{file_id}/preview")
+async def preview_file(
+    file_id: int,
+    _: FileUploaderDependency,
+    request: Request,
+    service: FileServiceDependency,
+    settings: SettingsDependency,
+    token: PreviewToken = None,
+    expires: PreviewExpires = None,
+) -> FileResponse:
+    if token is None or expires is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="invalid preview access",
+        )
+    try:
+        download = await service.prepare_admin_preview(
+            file_id=file_id,
+            token=token,
+            expires=expires,
+            secret_key=settings.secret_key,
+            upload_root=settings.upload_root,
+        )
+    except ManagedFileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="file not found",
+        ) from exc
+    except (FileAccessDeniedError, InvalidFileAccessTokenError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="invalid preview access",
+        ) from exc
+
+    return FileResponse(
+        download.path,
+        media_type=download.media_type,
+        filename=download.filename,
+    )
 
 
 async def _files_response(

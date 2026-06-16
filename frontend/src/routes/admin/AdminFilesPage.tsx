@@ -4,6 +4,7 @@ import {
   ExternalLink,
   FileArchive,
   FileImage,
+  ImagePlus,
   LockKeyhole,
   Search,
   Trash2,
@@ -39,6 +40,7 @@ export function AdminFilesPage() {
   const [visibility, setVisibility] = useState<FileVisibility>('public')
   const [publicListed, setPublicListed] = useState(false)
   const [altText, setAltText] = useState('')
+  const [articleSlug, setArticleSlug] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
   const [temporaryUrls, setTemporaryUrls] = useState<
     Record<number, AdminFileTemporaryUrlResponse>
@@ -213,9 +215,14 @@ export function AdminFilesPage() {
                 temporaryUrlMutation.isPending &&
                 temporaryUrlMutation.variables === selectedFile.id
               }
+              articleSlug={articleSlug}
               onCopy={() => void copyFileLink(selectedFile, getTemporaryUrl, setNotice)}
+              onCopyArticleImage={() =>
+                void copyArticleImageLink(selectedFile, articleSlug, setNotice)
+              }
               onDelete={() => deleteMutation.mutate()}
               onOpen={() => void openFileLink(selectedFile, getTemporaryUrl, setNotice)}
+              onArticleSlugChange={setArticleSlug}
               temporaryUrl={temporaryUrls[selectedFile.id] ?? null}
             />
           ) : (
@@ -288,25 +295,32 @@ export function AdminFilesPage() {
 }
 
 type FileDetailProps = {
+  articleSlug: string
   file: AdminFileItem
   isDeleting: boolean
   isLinkLoading: boolean
+  onArticleSlugChange: (slug: string) => void
   onCopy: () => void
+  onCopyArticleImage: () => void
   onDelete: () => void
   onOpen: () => void
   temporaryUrl: AdminFileTemporaryUrlResponse | null
 }
 
 function FileDetail({
+  articleSlug,
   file,
   isDeleting,
   isLinkLoading,
+  onArticleSlugChange,
   onCopy,
+  onCopyArticleImage,
   onDelete,
   onOpen,
   temporaryUrl,
 }: FileDetailProps) {
   const isPublic = file.visibility === 'public'
+  const isArticleImage = isPublic && file.mime_type.startsWith('image/')
 
   return (
     <div className="admin-detail">
@@ -365,7 +379,28 @@ function FileDetail({
           </div>
         ) : null}
       </dl>
+      {isArticleImage ? (
+        <label className="inline-field">
+          文章 Slug
+          <input
+            onChange={(event) => onArticleSlugChange(event.target.value)}
+            placeholder="填写要引用这张图的文章 slug"
+            value={articleSlug}
+          />
+        </label>
+      ) : null}
       <div className="form-actions">
+        {isArticleImage ? (
+          <button
+            className="text-button"
+            disabled={!articleSlug.trim()}
+            onClick={onCopyArticleImage}
+            type="button"
+          >
+            <ImagePlus size={17} strokeWidth={1.8} aria-hidden="true" />
+            复制文章引用
+          </button>
+        ) : null}
         <button
           className="text-button"
           disabled={!isPublic || isLinkLoading}
@@ -466,4 +501,27 @@ async function openFileLink(
   if (!opened) {
     setNotice('浏览器拦截了新窗口，请复制链接后打开')
   }
+}
+
+async function copyArticleImageLink(
+  file: AdminFileItem,
+  postSlug: string,
+  setNotice: (notice: string | null) => void,
+) {
+  const slug = postSlug.trim()
+  if (!slug) {
+    setNotice('先填写文章 Slug')
+    return
+  }
+  if (file.visibility !== 'public' || !file.mime_type.startsWith('image/')) {
+    setNotice('只有公开图片能作为文章图片引用')
+    return
+  }
+
+  const altText = file.alt_text?.trim() || file.original_name
+  const markdown = `![${altText}](/api/public/posts/${slug}/files/${file.id}/render)`
+  navigator.clipboard
+    .writeText(markdown)
+    .then(() => setNotice('文章引用已复制'))
+    .catch(() => setNotice('复制失败，请手动选择引用'))
 }

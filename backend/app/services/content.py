@@ -141,6 +141,9 @@ class ContentService:
         await self.repository.refresh(post)
         return post
 
+    def render_preview(self, content_md: str) -> str:
+        return self.renderer.render(content_md)
+
     async def update_post(self, *, post_id: int, changes: dict[str, Any]) -> Post:
         post = await self.get_post(post_id)
         slug = changes.get("slug")

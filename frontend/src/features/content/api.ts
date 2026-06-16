@@ -11,6 +11,8 @@ import type {
   AdminPostListResponse,
   PageFormPayload,
   PostFormPayload,
+  PostPreviewPayload,
+  PostPreviewResponse,
 } from './types.ts'
 
 export function listAdminPosts(): Promise<AdminPostListResponse> {
@@ -54,6 +56,18 @@ export function publishAdminPost(
     {},
     'content-v1',
     { csrfToken },
+  )
+}
+
+export function previewAdminPost(
+  payload: PostPreviewPayload,
+  csrfToken: string,
+): Promise<PostPreviewResponse> {
+  return apiPostEncrypted<PostPreviewPayload, PostPreviewResponse>(
+    '/admin/posts/preview',
+    payload,
+    'content-v1',
+    { csrfToken, encryptRequest: true },
   )
 }
 

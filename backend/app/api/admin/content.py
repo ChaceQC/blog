@@ -7,6 +7,7 @@ from app.api.admin.dependencies import (
     AdminCsrfDependency,
     ContentServiceDependency,
     EncryptionSessionManagerDependency,
+    SettingsDependency,
     require_admin_permission,
 )
 from app.api.admin.encrypted_response import (
@@ -22,6 +23,8 @@ from app.schemas.content import (
     PageCreateRequest,
     PageUpdateRequest,
     PostCreateRequest,
+    PostPreviewRequest,
+    PostPreviewResponse,
     PostUpdateRequest,
 )
 from app.schemas.encryption import EncryptedApiRequest, EncryptedApiResponse
@@ -33,6 +36,7 @@ from app.services.content import (
     CreatePostCommand,
 )
 from app.services.encryption import EncryptionSessionManager
+from app.services.files import sign_admin_preview_image_urls
 
 router = APIRouter(tags=["admin-content"])
 PostReaderDependency = Annotated[
@@ -106,6 +110,39 @@ async def create_post(
 
     return await _content_response(
         AdminPostItem.model_validate(post),
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+
+
+@router.post("/posts/preview", response_model=EncryptedApiResponse)
+async def preview_post(
+    payload: EncryptedApiRequest,
+    _: AdminCsrfDependency,
+    __: PostWriterDependency,
+    request: Request,
+    service: ContentServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    settings: SettingsDependency,
+) -> EncryptedApiResponse:
+    decrypted_payload = await _decrypt_content_payload(
+        payload,
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+    preview_payload = _validate_decrypted_payload(
+        PostPreviewRequest,
+        decrypted_payload,
+    )
+    content_html = service.render_preview(preview_payload.content_md)
+    content_html = sign_admin_preview_image_urls(
+        content_html=content_html,
+        post_slug=preview_payload.slug,
+        expires_seconds=settings.file_temporary_url_expire_seconds,
+        secret_key=settings.secret_key,
+    )
+    return await _content_response(
+        PostPreviewResponse(content_html=content_html),
         request=request,
         encryption_manager=encryption_manager,
     )

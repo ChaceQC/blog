@@ -28,3 +28,13 @@ class SettingUpdateRequest(BaseModel):
     is_public: bool
 
     model_config = ConfigDict(extra="forbid")
+
+
+class PublicSiteProfileResponse(BaseModel):
+    title: str
+    owner: str
+    avatar_url: str
+    description: str
+    quote: str
+
+    model_config = ConfigDict(extra="forbid")

@@ -57,6 +57,12 @@ class SettingService:
             settings.insert(0, self.default_site_profile())
         return settings
 
+    async def get_site_profile(self) -> Setting | VirtualSetting:
+        setting = await self.repository.get_setting(SITE_PROFILE_KEY)
+        if setting is None or not setting.is_public:
+            return self.default_site_profile()
+        return setting
+
     async def update_setting(
         self,
         *,

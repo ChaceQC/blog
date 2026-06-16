@@ -69,6 +69,7 @@ export function AdminSettingsPage() {
     onSuccess: () => {
       setDraftForm(null)
       queryClient.invalidateQueries({ queryKey: ['admin-settings'] })
+      queryClient.invalidateQueries({ queryKey: ['public-site-profile'] })
       setNotice('设置已保存')
     },
     onError: (error) => {

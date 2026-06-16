@@ -3,6 +3,7 @@ import { apiGetEncrypted, apiPatchEncrypted } from '../../api/client.ts'
 import type {
   AdminSettingItem,
   AdminSettingListResponse,
+  PublicSiteProfile,
   SettingUpdatePayload,
 } from './types.ts'
 
@@ -25,5 +26,13 @@ export function updateAdminSetting(
     payload,
     'sensitive-v1',
     { csrfToken, encryptRequest: true },
+  )
+}
+
+export function getPublicSiteProfile(): Promise<PublicSiteProfile> {
+  return apiGetEncrypted<PublicSiteProfile>(
+    '/public/settings/site-profile',
+    'content-v1',
+    { encryptionScope: 'public' },
   )
 }

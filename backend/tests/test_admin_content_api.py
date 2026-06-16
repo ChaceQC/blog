@@ -58,6 +58,13 @@ class FakeContentService:
             updated_at=datetime(2026, 6, 16, tzinfo=UTC),
         )
 
+    def render_preview(self, content_md: str) -> str:
+        assert content_md
+        return (
+            '<p><img src="/api/public/posts/second-post/files/1/render" '
+            'alt="封面"></p>'
+        )
+
 
 class FakeEncryptionSessionManager:
     def __init__(self, decrypted_payload: dict[str, object] | None = None) -> None:
@@ -188,3 +195,47 @@ def test_create_admin_post_decrypts_content_request() -> None:
     assert manager.request_payload is not None
     assert manager.payload is not None
     assert manager.payload["slug"] == "second-post"
+
+
+def test_preview_admin_post_renders_current_markdown() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    manager = FakeEncryptionSessionManager(
+        decrypted_payload={
+            "slug": "second-post",
+            "content_md": "![封面](/api/public/posts/second-post/files/1/render)",
+        },
+    )
+    app.dependency_overrides[get_current_admin_user] = lambda: AuthenticatedUser(
+        id=1,
+        username="admin",
+        display_name="管理员",
+        roles=["super_admin"],
+        permissions=["*"],
+    )
+    app.dependency_overrides[get_content_service] = lambda: FakeContentService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+
+    try:
+        response = client.post(
+            "/api/admin/posts/preview",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "content-session",
+            },
+            json={
+                "session_id": "content-session",
+                "profile": "content-v1",
+                "nonce": "test-nonce",
+                "ciphertext": "test-ciphertext",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload is not None
+    content_html = str(manager.payload["content_html"])
+    assert "/api/admin/files/1/preview?expires=" in content_html
+    assert "token=" in content_html

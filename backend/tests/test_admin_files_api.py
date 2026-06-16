@@ -10,6 +10,7 @@ from app.api.admin.dependencies import (
     get_log_service,
 )
 from app.api.public.files import get_public_file_content_service
+from app.core.config import get_settings
 from app.core.encryption import EncryptionProfile
 from app.main import app
 from app.schemas.encryption import EncryptedApiResponse
@@ -18,6 +19,7 @@ from app.services.files import (
     FileDownload,
     InvalidFileAccessTokenError,
     UploadFileCommand,
+    create_article_render_token,
 )
 
 
@@ -394,9 +396,19 @@ def test_post_file_render_uses_article_image_endpoint(tmp_path) -> None:
     )
     app.dependency_overrides[get_log_service] = lambda: logs
     client = TestClient(app)
+    settings = get_settings()
+    access = create_article_render_token(
+        post_slug="public-post",
+        file_id=1,
+        expires_seconds=settings.file_temporary_url_expire_seconds,
+        secret_key=settings.secret_key,
+    )
 
     try:
-        response = client.get("/api/public/posts/public-post/files/1/render")
+        response = client.get(
+            "/api/public/posts/public-post/files/1/render",
+            params={"expires": access.expires, "token": access.token},
+        )
     finally:
         app.dependency_overrides.clear()
 
@@ -409,6 +421,30 @@ def test_post_file_render_uses_article_image_endpoint(tmp_path) -> None:
         "filename": "cover.png",
         "media_type": "image/png",
     }
+
+
+def test_post_file_render_rejects_missing_image_token(tmp_path) -> None:
+    file_path = tmp_path / "cover.png"
+    file_path.write_bytes(_png_bytes())
+    logs = FakeLogService()
+    app.dependency_overrides[get_file_service] = (
+        lambda: FakeDownloadFileService(file_path)
+    )
+    app.dependency_overrides[get_public_file_content_service] = (
+        lambda: FakePublicFileContentService()
+    )
+    app.dependency_overrides[get_log_service] = lambda: logs
+    client = TestClient(app)
+
+    try:
+        response = client.get("/api/public/posts/public-post/files/1/render")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "invalid image access"
+    assert logs.items[0]["access_type"] == "post_image_render"
+    assert logs.items[0]["status_code"] == 403
 
 
 def _file_item(status: str = "active", public_listed: bool = False) -> object:
