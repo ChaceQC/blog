@@ -26,6 +26,16 @@ class Settings(BaseSettings):
         ge=10,
         le=3600,
     )
+    friend_link_application_rate_limit_max_attempts: int = Field(
+        default=5,
+        ge=1,
+        le=100,
+    )
+    friend_link_application_rate_limit_window_seconds: int = Field(
+        default=600,
+        ge=10,
+        le=3600,
+    )
     rate_limit_backend: Literal["memory", "redis"] = "memory"
     redis_url: str | None = None
     redis_key_prefix: str = "blog:rate-limit"

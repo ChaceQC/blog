@@ -4,6 +4,11 @@
 
 ### 已完成
 
+- 新增公开友链申请接口 `POST /api/public/friend-links/applications`：请求体使用 public scope `content-v1` 加密，后端校验站点 URL、头像 URL 和 RSS URL 仅允许 `http/https`，固定创建 `pending` 状态友链。
+- 公开友链申请入口接入现有限流服务，默认 `BLOG_FRIEND_LINK_APPLICATION_RATE_LIMIT_MAX_ATTEMPTS=5`、`BLOG_FRIEND_LINK_APPLICATION_RATE_LIMIT_WINDOW_SECONDS=600`，命中返回 `429` 并写入 `security_events`。
+- 前台 `/links` 新增友链申请表单，可提交站点名称、URL、头像 URL、RSS URL 和描述；提交成功后显示审核提示，公开列表仍只展示已通过友链。
+- 公开友链申请会写入 `access_logs`，后台友链审核列表可继续接住 `pending` 记录并审核通过或拒绝。
+- 同步更新根目录 `README.md`、后端 `README.md`、`PROJECT_PLAN.md` 和环境变量示例，记录公开友链申请、限流配置和后续状态检查任务。
 - 按用户要求将首页“近期笔墨”限制为最多 3 篇。
 - 文章列表页改为每页 5 篇，超过 5 篇时显示上一页/下一页分页控件。
 - 首页“碎念”已并入 `site_profile.musings`，后台“站点资料”页可编辑两条碎念内容和日期。
@@ -83,7 +88,7 @@
 
 ### 进行中
 
-- M1 内容管理继续推进，文章发布核心目标已覆盖 Markdown/LaTeX、草稿、发布、定时发布、分类、标签、封面和 SEO 信息；下一步切到友链管理核心目标。
+- M1 内容管理继续推进，友链公开申请、后台创建编辑审核、排序、头像 URL、描述和公开展示已形成基础闭环；下一步补齐友链状态检查任务。
 
 ### 阻塞与风险
 
@@ -97,13 +102,20 @@
 - Docker Desktop daemon 当前不可用，`wsl --update` 返回 403；本次已用临时 Windows Redis 完成真实 Redis 联调，后续若要验证 Docker Compose 私有 Redis，需要先修复 Docker/WSL 环境。
 - 真实运行库闭环验证会创建一篇测试文章和一个公开上传文件；脚本默认会把测试文章归档，但上传文件与访问日志会保留，后续如需清理应先确认是否仍被 `file_usages` 引用。
 - 本次运行库验证中复用了同一张验证图片文件 `file_id=10`；验证文章已归档，但验证图片和访问日志保留，后续文件清理前需要确认引用状态。
+- 公开友链申请入口已接入应用限流，但公开加密会话协商仍会先发生；若后续遇到明显垃圾申请，需要继续评估验证码、黑名单或更细粒度的 URL 去重策略。
 
 ### 下一步
 
-- 友链管理：友链申请、审核、排序、头像、描述、状态检查。
+- 友链状态检查任务：新增后台维护任务和 CLI 子命令，定期访问已通过友链 URL，写入最后检查时间、HTTP 状态码和异常状态，并在后台友链列表中展示检查结果。
 
 ### 验证
 
+- 公开友链申请入口新增后已运行 `uv run ruff check .`，通过。
+- 公开友链申请入口新增后已运行 `uv run pytest tests\test_public_content_api.py tests\test_admin_links_api.py tests\test_rate_limit.py`，20 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 公开友链申请入口新增后已运行 `uv run pytest`，89 个测试通过、2 个 Redis 集成测试因未配置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 相关上游弃用警告。
+- 公开友链申请表单新增后已运行 `npm.cmd run lint`，通过。
+- 公开友链申请表单新增后已运行 `npm.cmd run build`，通过。
+- 公开友链申请入口新增后已运行 `git diff --check`，未发现空白或行尾问题。
 - 已运行 `uv run ruff check .`，通过。
 - 已运行 `uv run pytest tests\test_markdown_provider.py tests\test_public_content_api.py tests\test_admin_files_api.py tests\test_content_service.py`，29 个测试通过；仍存在 FastAPI TestClient 与 Starlette TestClient cookies 的上游弃用警告。
 - 已运行 `npm.cmd run lint`，通过。

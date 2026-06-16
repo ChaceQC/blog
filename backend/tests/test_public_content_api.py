@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app.api.admin.dependencies import (
     get_encryption_session_manager,
     get_log_service,
+    get_rate_limit_service,
     get_setting_service,
 )
 from app.api.public.router import get_public_content_service, get_public_link_service
@@ -14,14 +15,19 @@ from app.main import app
 from app.schemas.encryption import (
     BrowserPublicKey,
     CreateEncryptionSessionResponse,
+    EncryptedApiRequest,
     EncryptedApiResponse,
 )
 from app.services.content import ContentNotFoundError
+from app.services.links import CreateFriendLinkCommand
+from app.services.rate_limit import RateLimitService
 
 
 class FakeEncryptionSessionManager:
-    def __init__(self) -> None:
+    def __init__(self, decrypted_payload: dict[str, object] | None = None) -> None:
+        self.decrypted_payload = decrypted_payload or {}
         self.payload: dict[str, object] | None = None
+        self.request_payload: EncryptedApiRequest | None = None
 
     async def encrypt_response(
         self,
@@ -60,6 +66,18 @@ class FakeEncryptionSessionManager:
             profiles=[EncryptionProfile.CONTENT],
             expires_at=datetime(2026, 6, 16, tzinfo=UTC),
         )
+
+    async def decrypt_request(
+        self,
+        *,
+        session_id: str,
+        profile: EncryptionProfile,
+        payload: EncryptedApiRequest,
+    ) -> dict[str, object]:
+        assert session_id == "public-session"
+        assert profile == EncryptionProfile.CONTENT
+        self.request_payload = payload
+        return self.decrypted_payload
 
 
 class FakeLogService:
@@ -161,6 +179,17 @@ class FakePublicLinkService:
                 sort_order=0,
             ),
         ]
+
+    async def create_friend_link(self, command: CreateFriendLinkCommand) -> object:
+        assert command.group_id is None
+        assert command.name == "新朋友"
+        assert command.url == "https://friend.example.test"
+        assert command.status == "pending"
+        assert command.sort_order == 1000
+        return SimpleNamespace(
+            id=2,
+            status=command.status,
+        )
 
 
 class FakeSettingService:
@@ -343,6 +372,45 @@ def test_public_friend_links_return_encrypted_list() -> None:
     assert manager.payload is not None
     assert manager.payload["items"][0]["name"] == "ChaceQC"
     assert logs.items[0]["access_type"] == "public_friend_links_list"
+
+
+def test_public_friend_link_application_decrypts_content_request() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager(
+        decrypted_payload={
+            "name": "新朋友",
+            "url": "https://friend.example.test",
+            "avatar_url": "",
+            "description": "新的个人站点",
+        },
+    )
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_link_service] = lambda: FakePublicLinkService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
+
+    try:
+        response = client.post(
+            "/api/public/friend-links/applications",
+            headers={"X-Encryption-Session": "public-session"},
+            json={
+                "session_id": "public-session",
+                "profile": "content-v1",
+                "nonce": "test-nonce",
+                "ciphertext": "test-ciphertext",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.request_payload is not None
+    assert manager.payload is not None
+    assert manager.payload["status"] == "pending"
+    assert logs.items[0]["access_type"] == "public_friend_link_application"
+    assert logs.items[0]["entity_id"] == 2
 
 
 def test_public_site_items_return_encrypted_list() -> None:

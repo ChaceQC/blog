@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 FriendLinkStatus = Literal["pending", "healthy", "rejected"]
 SiteNavOpenTarget = Literal["blank", "self"]
@@ -47,6 +48,48 @@ class PublicFriendLinkItem(BaseModel):
 
 class PublicFriendLinkListResponse(BaseModel):
     items: list[PublicFriendLinkItem]
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PublicFriendLinkApplicationRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    url: str = Field(min_length=1, max_length=1000)
+    avatar_url: str | None = Field(default=None, max_length=1000)
+    description: str | None = Field(default=None, max_length=255)
+    rss_url: str | None = Field(default=None, max_length=1000)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("name", "url", mode="before")
+    @classmethod
+    def _strip_required_text(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("avatar_url", "description", "rss_url", mode="before")
+    @classmethod
+    def _strip_optional_text(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
+
+    @field_validator("url", "avatar_url", "rss_url")
+    @classmethod
+    def _validate_http_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("url must use http or https")
+        return value
+
+
+class PublicFriendLinkApplicationResponse(BaseModel):
+    id: int
+    status: FriendLinkStatus
 
     model_config = ConfigDict(extra="forbid")
 

@@ -85,3 +85,16 @@ export type FriendLink = {
 export type PublicFriendLinkListResponse = {
   items: FriendLink[]
 }
+
+export type PublicFriendLinkApplicationPayload = {
+  name: string
+  url: string
+  avatar_url: string | null
+  description: string | null
+  rss_url: string | null
+}
+
+export type PublicFriendLinkApplicationResponse = {
+  id: number
+  status: 'pending'
+}

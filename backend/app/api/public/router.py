@@ -1,15 +1,21 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.admin.dependencies import (
     EncryptionSessionManagerDependency,
     LogServiceDependency,
+    RateLimitServiceDependency,
     SettingsDependency,
     SettingServiceDependency,
 )
-from app.api.admin.encrypted_response import encrypted_response
+from app.api.admin.encrypted_response import (
+    decrypt_encrypted_request,
+    encrypted_response,
+)
+from app.api.admin.limits import client_ip, enforce_rate_limit
 from app.api.public.encryption import router as public_encryption_router
 from app.api.public.files import router as public_files_router
 from app.core.database import get_session
@@ -23,7 +29,10 @@ from app.schemas.content import (
     PublicPostItem,
     PublicPostListResponse,
 )
+from app.schemas.encryption import EncryptedApiRequest
 from app.schemas.links import (
+    PublicFriendLinkApplicationRequest,
+    PublicFriendLinkApplicationResponse,
     PublicFriendLinkItem,
     PublicFriendLinkListResponse,
     PublicSiteNavItem,
@@ -32,7 +41,8 @@ from app.schemas.links import (
 from app.schemas.settings import PublicSiteProfileResponse
 from app.services.content import ContentNotFoundError, ContentService
 from app.services.files import create_article_render_token, sign_article_render_urls
-from app.services.links import LinkService
+from app.services.links import CreateFriendLinkCommand, LinkService
+from app.services.rate_limit import RateLimitRule
 
 router = APIRouter(tags=["public"])
 router.include_router(public_encryption_router)
@@ -213,6 +223,68 @@ async def list_public_friend_links(
     return response
 
 
+@router.post("/friend-links/applications")
+async def create_public_friend_link_application(
+    payload: EncryptedApiRequest,
+    request: Request,
+    service: PublicLinkServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    settings: SettingsDependency,
+    logs: LogServiceDependency,
+    rate_limiter: RateLimitServiceDependency,
+):
+    await enforce_rate_limit(
+        request=request,
+        limiter=rate_limiter,
+        logs=logs,
+        key=f"friend-link-application:{client_ip(request) or 'unknown'}",
+        rule=RateLimitRule(
+            max_attempts=settings.friend_link_application_rate_limit_max_attempts,
+            window_seconds=settings.friend_link_application_rate_limit_window_seconds,
+        ),
+        event_type="rate_limit.friend_link_application",
+        detail_json={"scope": "public"},
+    )
+    decrypted_payload = await decrypt_encrypted_request(
+        payload,
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+    application = _validate_decrypted_payload(
+        PublicFriendLinkApplicationRequest,
+        decrypted_payload,
+    )
+    link = await service.create_friend_link(
+        CreateFriendLinkCommand(
+            group_id=None,
+            name=application.name,
+            url=application.url,
+            avatar_url=application.avatar_url,
+            description=application.description,
+            rss_url=application.rss_url,
+            status="pending",
+            sort_order=1000,
+        ),
+    )
+    response = await encrypted_response(
+        PublicFriendLinkApplicationResponse(id=link.id, status="pending"),
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+    await _record_public_access(
+        logs,
+        request=request,
+        access_type="public_friend_link_application",
+        status_code=status.HTTP_200_OK,
+        entity_type="friend_link",
+        entity_id=link.id,
+        detail_json={"name": application.name, "url": application.url},
+    )
+    return response
+
+
 @router.get("/site-items")
 async def list_public_site_items(
     request: Request,
@@ -240,6 +312,19 @@ async def list_public_site_items(
         detail_json={"limit": limit, "offset": offset, "count": len(items)},
     )
     return response
+
+
+def _validate_decrypted_payload[T: BaseModel](
+    model: type[T],
+    payload: dict[str, object],
+) -> T:
+    try:
+        return model.model_validate(payload)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="invalid encrypted request payload",
+        ) from exc
 
 
 def _site_profile_response(value: dict[str, object]) -> PublicSiteProfileResponse:

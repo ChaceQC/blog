@@ -11,6 +11,8 @@ import type {
   AdminSiteNavItemListResponse,
   FriendLinkReviewPayload,
   FriendLinkWritePayload,
+  PublicFriendLinkApplicationPayload,
+  PublicFriendLinkApplicationResponse,
   PublicFriendLinkListResponse,
   SiteNavItemWritePayload,
 } from './types.ts'
@@ -106,6 +108,18 @@ export function listPublicFriendLinks(
     'content-v1',
     { encryptionScope: 'public' },
   )
+}
+
+export function submitPublicFriendLinkApplication(
+  payload: PublicFriendLinkApplicationPayload,
+): Promise<PublicFriendLinkApplicationResponse> {
+  return apiPostEncrypted<
+    PublicFriendLinkApplicationPayload,
+    PublicFriendLinkApplicationResponse
+  >('/public/friend-links/applications', payload, 'content-v1', {
+    encryptionScope: 'public',
+    encryptRequest: true,
+  })
 }
 
 function buildPublicListQuery(options: PublicLinkListOptions): string {
