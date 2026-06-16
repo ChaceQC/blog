@@ -18,6 +18,7 @@ uv run alembic upgrade head --sql
 uv run alembic downgrade 20260615_0002:20260615_0001 --sql
 uv run python -m app.cli --help
 uv run python -m app.cli cleanup-encryption-sessions
+uv run python -m app.cli cleanup-deleted-files --older-than-days 7 --limit 100
 ```
 
 本地端口、数据库连接、CORS 和上传目录都来自 `.env`，不要写死在代码里。
@@ -48,14 +49,15 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 
 ## 后台维护任务
 
-后台维护任务放在 `app/tasks`，供 CLI、cron 或 systemd timer 调用，不通过公开 HTTP 入口触发。当前已提供过期应用层加密会话清理任务：
+后台维护任务放在 `app/tasks`，供 CLI、cron 或 systemd timer 调用，不通过公开 HTTP 入口触发。当前已提供过期应用层加密会话清理任务和软删除文件物理清理任务：
 
 ```powershell
 $env:PYTHONUTF8='1'
 uv run python -m app.cli cleanup-encryption-sessions
+uv run python -m app.cli cleanup-deleted-files --older-than-days 7 --limit 100
 ```
 
-该命令会删除 `encryption_sessions` 中已过期的会话记录，并输出清理数量。后续文件物理清理、孤儿文件清理、友链健康检查和 sitemap 刷新也应沿用同一类维护任务入口。
+`cleanup-encryption-sessions` 会删除 `encryption_sessions` 中已过期的会话记录，并输出清理数量。`cleanup-deleted-files` 只清理已软删除、超过保留天数、没有 `file_usages` 引用且 object key 解析后仍位于 `BLOG_UPLOAD_ROOT` 内的本地文件；物理文件缺失时会清理对应数据库软删记录，路径不安全或仍有引用时会跳过。默认保留 7 天，单次最多扫描 100 条。后续孤儿文件清理、友链健康检查和 sitemap 刷新也应沿用同一类维护任务入口。
 
 ## 后台内容管理
 
@@ -82,7 +84,7 @@ uv run python -m app.cli cleanup-encryption-sessions
 - `GET /api/admin/files/{id}/preview`：为后台文章预览提供短时签名图片访问，不用于公开下载。
 - `DELETE /api/admin/files/{id}`：软删除文件，需要 `file:delete` 权限和 `X-CSRF-Token`。
 
-当前本地存储驱动会将文件写入 `BLOG_UPLOAD_ROOT`，但不会挂载静态目录，也不会为新文件写入 `/uploads/...` 公开 URL。公开文件栏下载通过后台加密接口按需生成短时签名链接，再由 `/api/public/files/{id}/download?token=...` 校验后返回文件；私有文件不生成公开访问链接，只能通过后台鉴权下载接口读取。文章正文图片渲染使用专门的 `/api/public/posts/{slug}/files/{file_id}/render?expires=...&token=...`，公开封面缩略图使用 `/api/public/posts/{slug}/files/{file_id}/thumbnail?expires=...&token=...`，签名由公开文章详情或后台预览接口按场景颁发。后台文件列表的使用次数来自 `file_usages`，目前文章封面记录为 `cover`，正文图片记录为 `post_body`。上传大小通过 `BLOG_UPLOAD_MAX_SIZE_BYTES` 配置，当前默认 30MB；当前白名单支持 JPEG、PNG、GIF、WebP 和 PDF，并校验扩展名、MIME 与文件头；删除只标记为 `deleted`，后续由清理任务处理物理文件。短时链接有效期通过 `BLOG_FILE_TEMPORARY_URL_EXPIRE_SECONDS` 配置。公开内容读取、公开文件下载、文章图片渲染、文章缩略图、后台短时链接生成和后台文件下载都会写入 `access_logs`。
+当前本地存储驱动会将文件写入 `BLOG_UPLOAD_ROOT`，但不会挂载静态目录，也不会为新文件写入 `/uploads/...` 公开 URL。公开文件栏下载通过后台加密接口按需生成短时签名链接，再由 `/api/public/files/{id}/download?token=...` 校验后返回文件；私有文件不生成公开访问链接，只能通过后台鉴权下载接口读取。文章正文图片渲染使用专门的 `/api/public/posts/{slug}/files/{file_id}/render?expires=...&token=...`，公开封面缩略图使用 `/api/public/posts/{slug}/files/{file_id}/thumbnail?expires=...&token=...`，签名由公开文章详情或后台预览接口按场景颁发。后台文件列表的使用次数来自 `file_usages`，目前文章封面记录为 `cover`，正文图片记录为 `post_body`。上传大小通过 `BLOG_UPLOAD_MAX_SIZE_BYTES` 配置，当前默认 30MB；当前白名单支持 JPEG、PNG、GIF、WebP 和 PDF，并校验扩展名、MIME 与文件头；删除只标记为 `deleted`，由 `cleanup-deleted-files` 在超过保留期且无引用时处理物理文件和数据库记录。短时链接有效期通过 `BLOG_FILE_TEMPORARY_URL_EXPIRE_SECONDS` 配置。公开内容读取、公开文件下载、文章图片渲染、文章缩略图、后台短时链接生成和后台文件下载都会写入 `access_logs`。
 
 ## 初始管理员
 

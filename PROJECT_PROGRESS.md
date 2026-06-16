@@ -43,22 +43,29 @@
 - 后台文件下载会写入 `access_logs`，成功记录文件名和 MIME，文件不存在或不可下载时记录对应 404/403。
 - 前端后台文件详情新增“下载”按钮，直接打开后台鉴权下载接口；公开短时链接仍只用于公开文件分享，私有文件不生成公开链接。
 - 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，标记私有文件后台鉴权下载已完成，并将下一步调整为软删除文件物理清理任务。
+- 新增软删除文件物理清理任务 `cleanup_deleted_files` 和 CLI 子命令 `uv run python -m app.cli cleanup-deleted-files --older-than-days 7 --limit 100`，默认保留 7 天，单次最多扫描 100 条。
+- 文件清理任务只处理 `status=deleted`、`deleted_at` 早于保留时间且没有 `file_usages` 引用的文件；路径解析必须保持在 `BLOG_UPLOAD_ROOT` 内，否则跳过。
+- 清理任务会删除本地物理文件和对应缩略图；若物理文件已缺失，会清理数据库软删记录并计入缺失文件数量；若仍有引用或路径不安全则跳过且不提交删除。
+- 文件 Repository 补充软删除清理候选查询和记录删除方法，`FileService` 返回扫描数、删除记录数、删除物理文件数、缺失物理文件数和跳过数，CLI 会输出汇总。
+- 补充软删除文件清理测试，覆盖正常删除物理文件与缩略图、物理文件缺失时清理记录、仍有引用或路径不安全时跳过。
+- 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，标记软删除文件物理清理任务已完成，并将下一步调整为孤儿文件清理任务。
 
 ### 进行中
 
-- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；后台私有文件鉴权下载已接入，下一步切到软删除文件物理清理任务。
+- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；软删除文件物理清理任务已接入，下一步切到孤儿文件清理任务。
 
 ### 阻塞与风险
 
 - 若前端页面仍保留旧 bundle 或旧 dev server 状态，需刷新页面后再保存文章；后端已重启到当前代码。
 - 实际执行 `cleanup-encryption-sessions` 会删除当前配置数据库里的过期会话记录；本次仅验证 CLI 子命令可见性和业务方法测试，未在未确认目标库的情况下直接运行清理命令。
 - 后台文件下载接口返回文件流，不走 `content-v1` 加密信封；安全边界依赖后台 HttpOnly Cookie 或 Bearer Token 鉴权、`file:upload` 权限和后端路径校验。
+- 实际执行 `cleanup-deleted-files` 会删除当前配置数据库中的软删记录和本地物理文件；本次只跑服务层单元测试和 CLI 可见性检查，未在未确认目标库与上传目录的情况下直接运行清理命令。
 
 ### 下一步
 
-- 实现软删除文件的物理清理任务：复用 `app/tasks` 维护任务入口，按 `File.status=deleted`、`deleted_at` 和引用关系安全删除本地文件，并提供 CLI 子命令。
-- 物理清理任务完成后，为清理结果补充进度记录、后端 README 说明和测试，明确下一步是否继续孤儿文件清理或 Redis 共享限流适配。
-- 文件清理任务完成后，再评估 Redis 共享限流适配器，替换或扩展当前单进程内存限流器。
+- 实现孤儿文件清理任务：扫描 `BLOG_UPLOAD_ROOT` 下没有对应 active/deleted 数据库记录的本地文件，先以 dry-run 汇总输出为默认行为，避免误删。
+- 孤儿文件清理任务完成后，补充真实 MySQL 临时库和临时上传目录验证，确认上传、软删除、清理和日志记录可以串成闭环。
+- 孤儿文件清理任务验证完成后，再评估 Redis 共享限流适配器，替换或扩展当前单进程内存限流器。
 - 使用真实 MySQL 运行库验证上传图片、选择封面、发布文章、前台封面展示、正文图片渲染、公开文件栏下载和后台访问日志查询。
 
 ### 验证
@@ -92,6 +99,10 @@
 - 后台私有文件鉴权下载接入后已运行 `uv run pytest tests\test_admin_files_api.py`，14 个测试通过；仍存在 FastAPI TestClient 与 per-request cookies 的上游弃用警告。
 - 后台文件详情下载按钮接入后已运行 `npm.cmd run lint`，通过。
 - 后台文件详情下载按钮接入后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 主 chunk 超过 500KB 的既有提示。
+- 软删除文件物理清理任务接入后已运行 `uv run ruff check .`，通过。
+- 软删除文件物理清理任务接入后已运行 `uv run pytest tests\test_file_cleanup.py`，3 个测试通过。
+- 已重新运行 `uv run pytest tests\test_admin_files_api.py tests\test_file_cleanup.py`，17 个测试通过；仍存在 FastAPI TestClient 与 per-request cookies 的上游弃用警告。
+- 已运行 `uv run python -m app.cli --help`，确认 `cleanup-deleted-files` 子命令已注册。
 
 ## 2026-06-16
 

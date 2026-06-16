@@ -1,6 +1,7 @@
 from collections.abc import Sequence
+from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.file import BlogFile, FileUsage
@@ -64,6 +65,29 @@ class FileRepository:
             ),
         )
         return result.scalar_one_or_none()
+
+    async def list_deleted_files_for_cleanup(
+        self,
+        *,
+        deleted_before: datetime,
+        limit: int,
+    ) -> Sequence[tuple[BlogFile, int]]:
+        result = await self.session.execute(
+            select(BlogFile, func.count(FileUsage.id))
+            .outerjoin(FileUsage, FileUsage.file_id == BlogFile.id)
+            .where(
+                BlogFile.status == "deleted",
+                BlogFile.deleted_at.is_not(None),
+                BlogFile.deleted_at <= deleted_before,
+            )
+            .group_by(BlogFile.id)
+            .order_by(BlogFile.deleted_at.asc(), BlogFile.id.asc())
+            .limit(limit),
+        )
+        return [(file, int(usage_count)) for file, usage_count in result.all()]
+
+    async def delete_file_record(self, file_id: int) -> None:
+        await self.session.execute(delete(BlogFile).where(BlogFile.id == file_id))
 
     async def create_file(
         self,

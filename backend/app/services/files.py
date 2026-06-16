@@ -93,6 +93,15 @@ class FileDownload:
 
 
 @dataclass(frozen=True)
+class DeletedFileCleanupResult:
+    scanned_files: int
+    deleted_records: int
+    deleted_objects: int
+    missing_objects: int
+    skipped_files: int
+
+
+@dataclass(frozen=True)
 class ArticleRenderToken:
     token: str
     expires: int
@@ -116,6 +125,15 @@ class FileRepositoryProtocol(Protocol):
     async def get_file(self, file_id: int) -> BlogFile | None: ...
 
     async def get_file_by_sha256(self, sha256: str) -> BlogFile | None: ...
+
+    async def list_deleted_files_for_cleanup(
+        self,
+        *,
+        deleted_before: datetime,
+        limit: int,
+    ) -> Sequence[tuple[BlogFile, int]]: ...
+
+    async def delete_file_record(self, file_id: int) -> None: ...
 
     async def create_file(
         self,
@@ -214,6 +232,60 @@ class FileService:
         await self.repository.commit()
         await self.repository.refresh(file)
         return FileWithUsage(file=file, usage_count=0)
+
+    async def cleanup_deleted_files(
+        self,
+        *,
+        upload_root: Path,
+        deleted_before: datetime,
+        limit: int,
+    ) -> DeletedFileCleanupResult:
+        candidates = await self.repository.list_deleted_files_for_cleanup(
+            deleted_before=deleted_before,
+            limit=limit,
+        )
+        deleted_records = 0
+        deleted_objects = 0
+        missing_objects = 0
+        skipped_files = 0
+
+        for file, usage_count in candidates:
+            if usage_count > 0:
+                skipped_files += 1
+                continue
+
+            path = _resolve_storage_path(
+                upload_root,
+                file.object_key,
+                public_only=False,
+            )
+            if path is None:
+                skipped_files += 1
+                continue
+
+            if path.is_file():
+                path.unlink()
+                deleted_objects += 1
+            else:
+                missing_objects += 1
+
+            thumbnail_path = _thumbnail_path(upload_root, file)
+            if thumbnail_path.is_file():
+                thumbnail_path.unlink()
+
+            await self.repository.delete_file_record(file.id)
+            deleted_records += 1
+
+        if deleted_records > 0:
+            await self.repository.commit()
+
+        return DeletedFileCleanupResult(
+            scanned_files=len(candidates),
+            deleted_records=deleted_records,
+            deleted_objects=deleted_objects,
+            missing_objects=missing_objects,
+            skipped_files=skipped_files,
+        )
 
     async def delete_file(self, file_id: int) -> FileWithUsage:
         file = await self.repository.get_file(file_id)
