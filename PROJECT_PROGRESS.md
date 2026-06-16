@@ -68,10 +68,15 @@
 - 新增真实 Redis 集成测试 `tests/test_rate_limit_redis_integration.py`，默认未设置 `BLOG_TEST_REDIS_URL` 时跳过；设置后会验证后台加密协商入口和后台登录入口在 Redis 共享限流后端下返回 429、携带 `Retry-After` 并记录安全事件。
 - 将 Redis 客户端初始化显式设置为 RESP2 协议，兼容本次临时 Windows Redis 5 和生产 Docker Redis 7。
 - 由于 Docker Desktop daemon 未运行且本机 `wsl --update` 返回 403，本次改用一次性下载的 Windows Redis `v5.0.14.1` zip 在 `127.0.0.1:16379` 验证真实 Redis 集成测试；验证后已关闭 Redis 进程并删除临时目录。
+- 新增真实运行库 HTTP 级闭环验证脚本 `backend/scripts/verify_runtime_publish_flow.py`，覆盖后台 `sensitive-v1` 加密登录、`content-v1` 上传公开图片、后台文章实时预览、创建并发布文章、公开文章列表与详情、封面缩略图、正文图片签名渲染、公开文件栏临时链接下载、后台鉴权下载和后台访问日志查询。
+- 脚本默认从 `BLOG_VERIFY_ADMIN_USERNAME`、`BLOG_VERIFY_ADMIN_PASSWORD` 和 `BLOG_VERIFY_BASE_URL` 读取验证环境，验证完成后默认把测试文章归档，避免长期占用公开文章列表；传入 `--keep-published` 可保留公开状态。
+- 使用真实运行库 `blog_codex_runtime` 跑通闭环验证，结果为 `post_id=9`、`post_slug=runtime-flow-verify-50d3b1ca`、`file_id=10`，并确认访问日志包含 `admin_file_download`、`post_image_render`、`post_image_thumbnail`、`public_file_download`、`public_file_temporary_url`、`public_post_detail` 和 `public_posts_list`。
+- 本次为真实运行库验证创建了临时后台账号 `codex_verify_20260617`；验证后因测试文章作者外键引用不能直接删除用户，已撤销刷新令牌、移除角色、禁用账号并重置为随机密码，避免留下可用后台入口。
+- 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，记录真实运行库闭环验证脚本，并按用户纠偏将下一步拉回“真实前端写作发布闭环”这一核心目标。
 
 ### 进行中
 
-- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；软删除文件物理清理、孤儿文件清理、真实 MySQL 临时库闭环验证、Redis 共享限流适配器、维护任务 systemd timer 示例和真实 Redis 限流联调已完成，下一步切到真实运行库的文件与文章发布链路验证。
+- M1 内容管理继续推进，文章封面选择、前台展示、文件下载和真实运行库文章发布链路已形成 HTTP 级第一版闭环；下一步紧贴核心目标，改用真实前端页面验证并修复“登录后台，上传图片，写文章，前台看到文章”的人工可用闭环。
 
 ### 阻塞与风险
 
@@ -83,10 +88,11 @@
 - 本次真实清理验证仅使用 `blog_codex_cleanup_verify`、`blog_codex_cleanup_cli_verify` 和对应临时上传目录，未触碰当前运行库 `blog_codex_runtime`；MySQL 对重复 `DROP DATABASE IF EXISTS` 输出过一次“database doesn't exist”提示，但最终复查临时库和临时目录均不存在。
 - systemd timer 示例默认 `WorkingDirectory=/opt/blog`，如果实际部署目录不同，安装前必须修改 `deploy/systemd/*.service`；孤儿文件 timer 只 dry-run，不自动执行 `--delete`。
 - Docker Desktop daemon 当前不可用，`wsl --update` 返回 403；本次已用临时 Windows Redis 完成真实 Redis 联调，后续若要验证 Docker Compose 私有 Redis，需要先修复 Docker/WSL 环境。
+- 真实运行库闭环验证会创建一篇测试文章和一个公开上传文件；脚本默认会把测试文章归档，但上传文件与访问日志会保留，后续如需清理应先确认是否仍被 `file_usages` 引用。
 
 ### 下一步
 
-- 使用真实 MySQL 运行库验证上传图片、选择封面、发布文章、前台封面展示、正文图片渲染、公开文件栏下载和后台访问日志查询。
+- 启动真实后端和前端，用浏览器从后台登录开始完成上传图片、选择文章封面、插入正文图片、实时预览、发布文章，并在前台首页、文章列表和文章详情确认文章、封面和正文图片可见；若任一环节不能顺畅完成，优先修复该核心链路问题。
 
 ### 验证
 
@@ -112,6 +118,14 @@
 - 移动端公开页边距和后台登录页返回入口修复后已重新运行 `npm.cmd run lint` 与 `npm.cmd run build`，均通过；仍存在 KaTeX 主 chunk 超过 500KB 的既有提示。
 - 后台移动端总览溢出修复后已重新运行 `npm.cmd run lint` 与 `npm.cmd run build`，均通过；仍存在 KaTeX 主 chunk 超过 500KB 的既有提示。
 - 后台“最近素材”内部溢出修复后已重新运行 `npm.cmd run lint` 与 `npm.cmd run build`，均通过；仍存在 KaTeX 主 chunk 超过 500KB 的既有提示。
+- 真实运行库闭环验证脚本新增后已运行 `uv run ruff check .`，通过。
+- 已运行 `uv run python scripts/verify_runtime_publish_flow.py --help`，确认脚本参数说明可正常输出。
+- 已运行 `uv run alembic upgrade head`，真实运行库迁移状态已到最新。
+- 已启动本地后端 `uv run python main.py`，确认 `http://127.0.0.1:18080/healthz` 返回 200 后运行真实运行库闭环验证脚本，脚本返回 `ok: true`。
+- 真实运行库闭环验证结束后已关闭本次启动的后端服务，并确认 `18080`、`15173`、`14173` 均无监听。
+- 已清理本次真实运行库验证使用的临时后台账号权限：撤销刷新令牌、移除角色、禁用账号并重置随机密码。
+- 已运行 `uv run pytest tests\test_admin_content_api.py tests\test_admin_files_api.py tests\test_public_content_api.py tests\test_admin_logs_api.py`，28 个测试通过；仍存在 FastAPI TestClient 与 Starlette TestClient cookies 的上游弃用警告。
+- 已运行 `git diff --check`，未发现空白或行尾问题。
 - 后台维护任务入口和加密会话清理 CLI 接入后已运行 `uv run ruff check .`，通过。
 - 后台维护任务入口和加密会话清理 CLI 接入后已运行 `uv run pytest tests\test_admin_encryption_api.py tests\test_encryption.py`，8 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 已运行 `uv run python -m app.cli --help`，确认 `cleanup-encryption-sessions` 子命令已注册。

@@ -22,6 +22,9 @@ uv run python -m app.cli cleanup-deleted-files --older-than-days 7 --limit 100
 uv run python -m app.cli cleanup-orphan-files --limit 1000
 $env:BLOG_TEST_REDIS_URL='redis://127.0.0.1:6379/15'
 uv run pytest tests/test_rate_limit_redis_integration.py
+$env:BLOG_VERIFY_ADMIN_USERNAME='admin'
+$env:BLOG_VERIFY_ADMIN_PASSWORD='你的本地后台管理员密码'
+uv run python scripts/verify_runtime_publish_flow.py
 ```
 
 本地端口、数据库连接、CORS 和上传目录都来自 `.env`，不要写死在代码里。
@@ -123,6 +126,8 @@ Windows 本机安装 MySQL 8 时，可以使用临时库验证真实迁移和认
 4. 运行 `uv run python -m app.cli create-admin ...` 验证初始管理员创建。
 5. 通过服务层或接口验证加密协商、登录、当前用户、刷新令牌和退出。
 6. 运行 `uv run alembic downgrade base` 后删除临时库。
+
+真实运行库 HTTP 闭环验证可使用 `scripts/verify_runtime_publish_flow.py`。脚本需要本地后端服务已通过 `uv run python main.py` 启动，并通过 `BLOG_VERIFY_ADMIN_USERNAME` 与 `BLOG_VERIFY_ADMIN_PASSWORD` 提供后台管理员凭据。它会按真实接口协商 `sensitive-v1` / `content-v1` 加密会话，完成后台登录、公开图片上传、文章实时预览、创建并发布文章、公开列表和详情封面缩略图、正文图片渲染、公开文件栏下载、后台鉴权下载和访问日志查询；默认验证完成后把测试文章归档，传入 `--keep-published` 可保留公开状态。
 
 ## 部署目标
 
