@@ -38,7 +38,7 @@ export function HomePage() {
           />
           <h1>{siteSettings.description}</h1>
           <p className="hero-lead">
-            一个自托管的个人博客与轻量 CMS，写作、文件、友链和导航都在同一套可维护的节奏里。
+            一间安静的小站，用来放文章、素材、友链和一些常去的入口。
           </p>
           <div className="hero-quote">
             <span>{siteSettings.quote}</span>
@@ -114,7 +114,7 @@ export function HomePage() {
               <span>碎念</span>
             </div>
             <div className="musing-list">
-              <p>「后台先把边界搭稳，前台再慢慢长出自己的呼吸。」</p>
+              <p>「先把字句放稳，页面自然会慢慢有自己的呼吸。」</p>
               <small>2026年6月15日星期一</small>
               <p>「UI 的留白不是空，是让内容有地方沉下来。」</p>
               <small>2026年6月15日星期一</small>

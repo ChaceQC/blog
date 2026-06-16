@@ -56,6 +56,14 @@
 - 修复加密篡改测试的构造方式，改为篡改 base64url 解码后的真实密文字节，避免只修改编码尾位时未改变密文内容。
 - 后台导航条目接口补齐 `POST /api/admin/site-items` 与 `PATCH /api/admin/site-items/{item_id}`，创建和更新请求均使用 `content-v1` 加密请求体、CSRF 与 `site_nav:write` 权限。
 - 前端 `/admin/links` 新增导航条目管理面板组件，支持导航新建、编辑和列表刷新；同时将 `AdminLinksPage` 从 576 行拆分到 335 行，避免页面文件继续堆积复杂业务逻辑。
+- 新增后台文件 Repository、Service、Schema、本地存储 Provider 和 Admin API，提供 `GET /api/admin/files`、`POST /api/admin/files` 与 `DELETE /api/admin/files/{file_id}`。
+- 文件列表、上传和删除响应统一使用 `content-v1` 加密信封；上传接口使用 multipart、CSRF 与 `file:upload` 权限，删除接口使用 CSRF 与 `file:delete` 权限。
+- 文件上传支持 JPEG、PNG、GIF、WebP 和 PDF 白名单，校验扩展名、MIME 与文件头，公开文件生成 `/uploads/...` 只读链接，私有文件不返回公开 URL。
+- 新增 `BLOG_UPLOAD_MAX_SIZE_BYTES` 配置并同步本地与部署环境变量示例；当前默认限制为 10MB。
+- 前端 `/admin/files` 已从临时 `sampleFiles` 切换到真实后台接口，支持文件搜索、上传、复制公开链接和软删除。
+- 补充后台文件 API 测试，覆盖 `content-v1` 加密响应、multipart 上传和删除入口。
+- 后台总览页文件统计和“最近素材”已切换到真实后台文件接口，移除不再引用的 `sampleFiles` 临时数据文件，避免继续展示假文件。
+- 清理后台和前台显得过于工程说明化的展示文案：删除设置页“登录与发布”说明块，将“安全基线”“生产边界”“上传策略”“后端 sanitize”等界面文案改为更贴近个人博客后台的日常说法。
 
 ### 进行中
 
@@ -67,15 +75,15 @@
 - 当前限流器为单进程内存实现，适合 M1 单进程验证；生产多进程、多实例或横向扩展前，需要替换为 Redis 等共享存储适配器。
 - 应用层加密协商已改为数据库保存短期会话密钥；仍需补充过期会话定时清理和更多审计记录。
 - 公开文章链路已接入真实 Public API，但本次尚未重新启动本机 MySQL 临时库做后台发布到前台展示的端到端联调。
-- 文件管理当前仍为前端界面先行，文件上传仍需接入真实 Admin API。
+- 文件管理已形成列表、上传和软删除最小闭环；文章封面、正文图片引用追踪、私有文件鉴权下载和物理清理任务仍需继续补齐。
 - 本次已启动前后端和本机 MySQL 临时库完成真实登录、加密协商、文章创建、文章发布和页面创建联调；联调后按要求关闭前后端开发服务。
 - 本次按用户最新要求，完成可验证小步后自动 commit 并 push。
 
 ### 下一步
 
-- 继续实现文件上传的真实 Admin API 与最小文件管理闭环。
+- 继续将文件管理接入文章封面、正文图片引用追踪和私有文件鉴权下载。
 - 补充加密会话过期清理任务，并评估 Redis 限流适配器。
-- 使用真实 MySQL 临时库重新做“后台发布文章 -> 前台首页、列表、详情可见”的端到端联调。
+- 使用真实 MySQL 临时库重新做“后台上传文件 -> 后台发布文章 -> 前台首页、列表、详情可见”的端到端联调。
 
 ### 验证
 
@@ -124,6 +132,14 @@
 - 后台友链创建编辑前端接入后已重新运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - 后台导航写入前端接入和面板拆分后已重新运行 `npm.cmd run lint`，通过。
 - 后台导航写入前端接入和面板拆分后已重新运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
+- 后台文件 API 接入后已重新运行 `uv run ruff check .`，通过。
+- 后台文件 API 接入后已运行 `uv run pytest tests/test_admin_files_api.py`，3 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 后台文件前端接入后已重新运行 `npm.cmd run lint`，通过。
+- 后台文件前端接入后已重新运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
+- 已使用真实 MySQL 临时库 `blog_codex_files_verify` 运行 Alembic 迁移并创建临时管理员，通过真实后端 API 验证加密协商、后台登录、`POST /api/admin/files` multipart 上传、`GET /api/admin/files` 列表读取和 `DELETE /api/admin/files/{file_id}` 软删除；上传对象 key 为 `public/2026/06/c47dd9465c00e9a0c8b85e9e.png`，物理文件曾写入 `backend/var/uploads-files-verify`。
+- 已按用户提醒改用当前 `.env` 的真实本地库 `blog_codex_runtime` 做浏览器可见联调，通过真实 API 上传并保留 1 条文件记录；已确认额外临时库 `blog_codex_files_verify` 不存在，当前 MySQL 仅剩 `blog_codex_runtime` 这个博客本地库。
+- 设置页说明块删除和前端文案清理后已重新运行 `npm.cmd run lint`，通过。
+- 设置页说明块删除和前端文案清理后已重新运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - 已临时启动后端 `18080` 与前端 `15173`，通过 Playwright CLI + Microsoft Edge 登录后台并打开 `/admin/links`，确认友链列表和导航条目接口均返回 200，页面显示真实接口空态；登录前 `/api/admin/auth/me` 的 401 属于会话探测预期现象。
 - 后台友链与导航接入后已重新运行 `git diff --check`，通过；验证后已关闭临时前后端服务，确认 `18080` 与 `15173` 无监听。
 - 已临时启动后端 `18080` 与前端 `15173`，通过 Playwright CLI + Microsoft Edge 登录后台，在 `/admin/links` 新建“Codex验证友链”并编辑为“Codex验证友链已编辑”，确认 `POST /api/admin/friend-links` 与 `PATCH /api/admin/friend-links/1` 均返回 200；验证后已关闭临时前后端服务。

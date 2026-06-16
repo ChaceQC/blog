@@ -15,7 +15,7 @@ export function PostListPage() {
       <section className="page-heading">
         <small>ARCHIVE</small>
         <h1>全部文章</h1>
-        <p>按发布时间收束已经公开发布的技术记录和长期维护流程。</p>
+        <p>按发布时间收起已经公开的文章和随手记下的长句。</p>
       </section>
       <section className="content-section">
         <div className="section-heading section-heading--stacked">

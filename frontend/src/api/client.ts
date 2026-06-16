@@ -79,6 +79,23 @@ export async function apiPostEncrypted<TBody, TResponse>(
   })
 }
 
+export async function apiPostFormEncrypted<TResponse>(
+  path: string,
+  body: FormData,
+  profile: EncryptionProfile,
+  options: ApiRequestOptions = {},
+): Promise<TResponse> {
+  const session = await getEncryptionSession(profile)
+  return requestJson<TResponse>(path, {
+    method: 'POST',
+    headers: jsonHeaders(options, {
+      encryptionSessionId: session.id,
+    }),
+    body,
+    encryption: { profile, session },
+  })
+}
+
 export async function apiPatchEncrypted<TBody, TResponse>(
   path: string,
   body: TBody,
@@ -96,6 +113,21 @@ export async function apiPatchEncrypted<TBody, TResponse>(
       encryptionSessionId: session.id,
     }),
     body: JSON.stringify(requestBody),
+    encryption: { profile, session },
+  })
+}
+
+export async function apiDeleteEncrypted<TResponse>(
+  path: string,
+  profile: EncryptionProfile,
+  options: ApiRequestOptions = {},
+): Promise<TResponse> {
+  const session = await getEncryptionSession(profile)
+  return requestJson<TResponse>(path, {
+    method: 'DELETE',
+    headers: jsonHeaders(options, {
+      encryptionSessionId: session.id,
+    }),
     encryption: { profile, session },
   })
 }

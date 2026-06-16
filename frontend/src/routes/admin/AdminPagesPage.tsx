@@ -72,7 +72,7 @@ export function AdminPagesPage() {
   return (
     <div className="admin-flow">
       <section className="admin-heading admin-heading--with-action">
-        <span>PAGES</span>
+        <span>页面</span>
         <h1>页面管理</h1>
         <button
           className="text-button admin-heading__action"
@@ -126,7 +126,7 @@ export function AdminPagesPage() {
         <section className="admin-panel admin-panel--editor">
           <div className="section-heading">
             <span>{selectedPage ? '编辑页面' : '新建页面'}</span>
-            <small>{notice ?? 'content-v1 加密保存'}</small>
+            <small>{notice ?? '保存后会更新预览'}</small>
           </div>
           <form className="content-form" onSubmit={(event) => {
             event.preventDefault()
@@ -229,10 +229,10 @@ export function AdminPagesPage() {
 
         <section className="admin-panel admin-panel--preview">
           <div className="section-heading">
-            <span>HTML 预览</span>
+            <span>页面预览</span>
             <small>
               <Eye size={14} strokeWidth={1.8} aria-hidden="true" />
-              后端 sanitize
+              保存后的样子
             </small>
           </div>
           {selectedPage ? (

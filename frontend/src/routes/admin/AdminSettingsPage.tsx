@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save, ShieldCheck, SlidersHorizontal } from 'lucide-react'
+import { Save, SlidersHorizontal } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import {
@@ -79,8 +79,8 @@ export function AdminSettingsPage() {
   return (
     <div className="admin-flow">
       <section className="admin-heading admin-heading--with-action">
-        <span>SETTINGS</span>
-        <h1>站点设置</h1>
+        <span>偏好</span>
+        <h1>站点资料</h1>
         <button
           className="text-button admin-heading__action"
           disabled={!session || saveMutation.isPending}
@@ -95,8 +95,8 @@ export function AdminSettingsPage() {
       <div className="admin-workspace admin-workspace--two">
         <section className="admin-panel admin-panel--editor">
           <div className="section-heading">
-            <span>公开站点</span>
-            <small>{notice ?? (isLoading ? '加载中' : 'site profile')}</small>
+            <span>公开资料</span>
+            <small>{notice ?? (isLoading ? '加载中' : '正在使用')}</small>
           </div>
           {isError ? <p className="form-error">设置加载失败</p> : null}
           <form className="content-form">
@@ -169,29 +169,6 @@ export function AdminSettingsPage() {
         </section>
       </div>
 
-      <section className="admin-panel">
-        <div className="section-heading">
-          <span>生产边界</span>
-          <small>
-            <ShieldCheck size={14} strokeWidth={1.8} aria-hidden="true" />
-            基线
-          </small>
-        </div>
-        <div className="settings-grid">
-          <span>
-            <strong>后台 Cookie</strong>
-            <small>HttpOnly + CSRF 双提交</small>
-          </span>
-          <span>
-            <strong>内容传输</strong>
-            <small>sensitive-v1 / content-v1 加密信封</small>
-          </span>
-          <span>
-            <strong>公网入口</strong>
-            <small>Nginx 只暴露 80/443</small>
-          </span>
-        </div>
-      </section>
     </div>
   )
 

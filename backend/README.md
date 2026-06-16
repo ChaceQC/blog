@@ -56,6 +56,16 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 
 创建和更新请求体必须是 `content-v1` 加密信封，解密后再进行 Pydantic 字段校验。`content_html` 由 `markdown-it-py` 渲染 Markdown，`mdit-py-plugins` 保留行内与块级 LaTeX 公式节点，再由 `bleach` 统一执行 HTML sanitize。当前后端只生成安全 HTML 与公式占位节点，前端展示公式时还需要接入 KaTeX 等渲染样式。
 
+## 后台文件管理
+
+后台文件管理接口已接入 `content-v1` 加密响应，调用方需要携带 `X-Encryption-Session`：
+
+- `GET /api/admin/files`：文件列表，需要 `file:upload` 权限。
+- `POST /api/admin/files`：multipart 上传，需要 `file:upload` 权限和 `X-CSRF-Token`。
+- `DELETE /api/admin/files/{id}`：软删除文件，需要 `file:delete` 权限和 `X-CSRF-Token`。
+
+当前本地存储驱动会将文件写入 `BLOG_UPLOAD_ROOT`，公开文件生成 `/uploads/...` 只读链接，私有文件不返回公开 URL。上传大小通过 `BLOG_UPLOAD_MAX_SIZE_BYTES` 配置，当前白名单支持 JPEG、PNG、GIF、WebP 和 PDF，并校验扩展名、MIME 与文件头；删除只标记为 `deleted`，后续由清理任务处理物理文件。
+
 ## 初始管理员
 
 连接真实数据库并执行迁移后，使用 CLI 创建初始后台管理员：

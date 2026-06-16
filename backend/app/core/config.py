@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     docs_enabled: bool
     readiness_check_database: bool
     upload_root: Path
+    upload_max_size_bytes: int = Field(default=10 * 1024 * 1024, ge=1024)
 
     dev_server_host: str
     dev_server_port: int = Field(ge=1024, le=65535)

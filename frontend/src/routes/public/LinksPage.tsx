@@ -7,7 +7,7 @@ export function LinksPage() {
       <section className="page-heading">
         <small>FRIENDS</small>
         <h1>友链</h1>
-        <p>保留一些值得长期互相拜访的站点，审核状态和描述后续由后台维护。</p>
+        <p>保留一些值得常去看看的站点，也给彼此留一个入口。</p>
       </section>
       <section className="content-section">
         <div className="section-heading section-heading--stacked">

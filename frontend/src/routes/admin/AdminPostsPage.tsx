@@ -99,7 +99,7 @@ export function AdminPostsPage() {
   return (
     <div className="admin-flow">
       <section className="admin-heading admin-heading--with-action">
-        <span>POSTS</span>
+        <span>写作</span>
         <h1>文章管理</h1>
         <button
           className="text-button admin-heading__action"
@@ -153,7 +153,7 @@ export function AdminPostsPage() {
         <section className="admin-panel admin-panel--editor">
           <div className="section-heading">
             <span>{selectedPost ? '编辑文章' : '新建文章'}</span>
-            <small>{notice ?? 'content-v1 加密保存'}</small>
+            <small>{notice ?? '草稿会按当前内容保存'}</small>
           </div>
           <form className="content-form" onSubmit={(event) => {
             event.preventDefault()
@@ -266,10 +266,10 @@ export function AdminPostsPage() {
 
         <section className="admin-panel admin-panel--preview">
           <div className="section-heading">
-            <span>HTML 预览</span>
+            <span>文章预览</span>
             <small>
               <Eye size={14} strokeWidth={1.8} aria-hidden="true" />
-              后端 sanitize
+              保存后的样子
             </small>
           </div>
           {selectedPost ? (

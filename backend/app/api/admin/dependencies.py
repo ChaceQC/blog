@@ -12,16 +12,19 @@ from app.api.admin.session import (
 )
 from app.core.config import Settings, get_settings
 from app.core.database import get_session
+from app.core.storage import LocalStorageProvider
 from app.policies.auth import AuthPolicy
 from app.repositories.auth import AuthRepository
 from app.repositories.content import ContentRepository
 from app.repositories.encryption import EncryptionSessionRepository
+from app.repositories.files import FileRepository
 from app.repositories.links import LinkRepository
 from app.repositories.logs import LogRepository
 from app.repositories.settings import SettingRepository
 from app.services.auth import AuthenticatedUser, AuthenticationError, AuthService
 from app.services.content import ContentService
 from app.services.encryption import EncryptionSessionManager
+from app.services.files import FileService
 from app.services.links import LinkService
 from app.services.logs import LogService
 from app.services.rate_limit import RateLimitService
@@ -53,6 +56,19 @@ def get_content_service(session: SessionDependency) -> ContentService:
 
 
 ContentServiceDependency = Annotated[ContentService, Depends(get_content_service)]
+
+
+def get_file_service(
+    session: SessionDependency,
+    settings: SettingsDependency,
+) -> FileService:
+    return FileService(
+        repository=FileRepository(session),
+        storage=LocalStorageProvider(settings.upload_root),
+    )
+
+
+FileServiceDependency = Annotated[FileService, Depends(get_file_service)]
 
 
 def get_link_service(session: SessionDependency) -> LinkService:

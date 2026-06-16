@@ -7,7 +7,7 @@ export function SitesPage() {
       <section className="page-heading">
         <small>GATEWAYS</small>
         <h1>站点目录</h1>
-        <p>把自建服务、文档和写作入口收在一页，方便从博客跳转到日常工具。</p>
+        <p>把常用入口收在一页，需要的时候不用到处翻。</p>
       </section>
       <section className="content-section">
         <div className="section-heading section-heading--stacked">

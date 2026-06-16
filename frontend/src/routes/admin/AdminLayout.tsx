@@ -41,7 +41,7 @@ export function AdminLayout() {
     <div className="admin-shell">
       <aside className="admin-sidebar">
         <NavLink className="brand brand--admin" to="/">
-          个人博客 CMS
+          静默书房
         </NavLink>
         <nav aria-label="后台导航">
           {visibleLinks.map((item) => {
