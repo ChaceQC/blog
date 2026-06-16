@@ -1,10 +1,15 @@
-import { apiGetEncrypted, apiPatchEncrypted } from '../../api/client.ts'
+import {
+  apiGetEncrypted,
+  apiPatchEncrypted,
+  apiPostEncrypted,
+} from '../../api/client.ts'
 
 import type {
   AdminFriendLink,
   AdminFriendLinkListResponse,
   AdminSiteNavItemListResponse,
   FriendLinkReviewPayload,
+  FriendLinkWritePayload,
 } from './types.ts'
 
 export function listAdminFriendLinks(): Promise<AdminFriendLinkListResponse> {
@@ -21,6 +26,31 @@ export function reviewAdminFriendLink(
 ): Promise<AdminFriendLink> {
   return apiPatchEncrypted<FriendLinkReviewPayload, AdminFriendLink>(
     `/admin/friend-links/${linkId}/review`,
+    payload,
+    'content-v1',
+    { csrfToken, encryptRequest: true },
+  )
+}
+
+export function createAdminFriendLink(
+  payload: FriendLinkWritePayload,
+  csrfToken: string,
+): Promise<AdminFriendLink> {
+  return apiPostEncrypted<FriendLinkWritePayload, AdminFriendLink>(
+    '/admin/friend-links',
+    payload,
+    'content-v1',
+    { csrfToken, encryptRequest: true },
+  )
+}
+
+export function updateAdminFriendLink(
+  linkId: number,
+  payload: FriendLinkWritePayload,
+  csrfToken: string,
+): Promise<AdminFriendLink> {
+  return apiPatchEncrypted<FriendLinkWritePayload, AdminFriendLink>(
+    `/admin/friend-links/${linkId}`,
     payload,
     'content-v1',
     { csrfToken, encryptRequest: true },

@@ -32,6 +32,32 @@ class LinkRepository:
         )
         return result.scalar_one_or_none()
 
+    async def create_friend_link(
+        self,
+        *,
+        group_id: int | None,
+        name: str,
+        url: str,
+        avatar_url: str | None,
+        description: str | None,
+        rss_url: str | None,
+        status: str,
+        sort_order: int,
+    ) -> FriendLink:
+        link = FriendLink(
+            group_id=group_id,
+            name=name,
+            url=url,
+            avatar_url=avatar_url,
+            description=description,
+            rss_url=rss_url,
+            status=status,
+            sort_order=sort_order,
+        )
+        self.session.add(link)
+        await self.session.flush()
+        return link
+
     async def list_site_nav_items(
         self,
         *,

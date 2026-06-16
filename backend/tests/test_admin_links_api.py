@@ -12,6 +12,7 @@ from app.core.encryption import EncryptionProfile
 from app.main import app
 from app.schemas.encryption import EncryptedApiRequest, EncryptedApiResponse
 from app.services.auth import AuthenticatedUser
+from app.services.links import CreateFriendLinkCommand
 
 
 class FakeLinkService:
@@ -50,6 +51,51 @@ class FakeLinkService:
             description="长期写作入口",
             rss_url=None,
             status=status,
+            sort_order=0,
+            last_checked_at=None,
+            last_status_code=None,
+            created_at=datetime(2026, 6, 16, tzinfo=UTC),
+            updated_at=datetime(2026, 6, 16, tzinfo=UTC),
+        )
+
+    async def create_friend_link(self, command: CreateFriendLinkCommand) -> object:
+        assert command.name == "新友链"
+        assert command.url == "https://new-link.example.test"
+        return SimpleNamespace(
+            id=2,
+            group_id=command.group_id,
+            group_name=None,
+            name=command.name,
+            url=command.url,
+            avatar_url=command.avatar_url,
+            description=command.description,
+            rss_url=command.rss_url,
+            status=command.status,
+            sort_order=command.sort_order,
+            last_checked_at=None,
+            last_status_code=None,
+            created_at=datetime(2026, 6, 16, tzinfo=UTC),
+            updated_at=datetime(2026, 6, 16, tzinfo=UTC),
+        )
+
+    async def update_friend_link(
+        self,
+        *,
+        link_id: int,
+        changes: dict[str, object],
+    ) -> object:
+        assert link_id == 1
+        assert changes["name"] == "更新后的友链"
+        return SimpleNamespace(
+            id=1,
+            group_id=1,
+            group_name=None,
+            name=changes["name"],
+            url=changes.get("url", "https://blog.example.test"),
+            avatar_url=None,
+            description=changes.get("description"),
+            rss_url=None,
+            status=changes.get("status", "pending"),
             sort_order=0,
             last_checked_at=None,
             last_status_code=None,
@@ -181,6 +227,88 @@ def test_review_admin_friend_link_decrypts_content_request() -> None:
     assert manager.request_payload is not None
     assert manager.payload is not None
     assert manager.payload["status"] == "healthy"
+
+
+def test_create_admin_friend_link_decrypts_content_request() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    manager = FakeEncryptionSessionManager(
+        decrypted_payload={
+            "name": "新友链",
+            "url": "https://new-link.example.test",
+            "description": "新的长期入口",
+            "status": "pending",
+            "sort_order": 0,
+        },
+    )
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_link_service] = lambda: FakeLinkService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+
+    try:
+        response = client.post(
+            "/api/admin/friend-links",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "content-session",
+            },
+            json={
+                "encrypted": True,
+                "session_id": "content-session",
+                "profile": "content-v1",
+                "algorithm": "AES-256-GCM-HKDF-SHA256",
+                "nonce": "test-nonce",
+                "ciphertext": "test-ciphertext",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.request_payload is not None
+    assert manager.payload is not None
+    assert manager.payload["name"] == "新友链"
+
+
+def test_update_admin_friend_link_decrypts_content_request() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    manager = FakeEncryptionSessionManager(
+        decrypted_payload={
+            "name": "更新后的友链",
+            "description": "更新后的描述",
+            "status": "healthy",
+        },
+    )
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_link_service] = lambda: FakeLinkService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+
+    try:
+        response = client.patch(
+            "/api/admin/friend-links/1",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "content-session",
+            },
+            json={
+                "encrypted": True,
+                "session_id": "content-session",
+                "profile": "content-v1",
+                "algorithm": "AES-256-GCM-HKDF-SHA256",
+                "nonce": "test-nonce",
+                "ciphertext": "test-ciphertext",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.request_payload is not None
+    assert manager.payload is not None
+    assert manager.payload["name"] == "更新后的友链"
 
 
 def test_admin_site_items_use_content_encryption_profile() -> None:

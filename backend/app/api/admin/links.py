@@ -20,11 +20,14 @@ from app.schemas.links import (
     AdminFriendLinkListResponse,
     AdminSiteNavItem,
     AdminSiteNavItemListResponse,
+    FriendLinkCreateRequest,
     FriendLinkReviewRequest,
+    FriendLinkUpdateRequest,
 )
 from app.services.auth import AuthenticatedUser
 from app.services.encryption import EncryptionSessionManager
 from app.services.links import (
+    CreateFriendLinkCommand,
     InvalidFriendLinkStatusError,
     LinkNotFoundError,
 )
@@ -59,6 +62,85 @@ async def list_friend_links(
     )
 
 
+@router.post("/friend-links", response_model=EncryptedApiResponse)
+async def create_friend_link(
+    payload: EncryptedApiRequest,
+    _: AdminCsrfDependency,
+    __: FriendLinkReviewerDependency,
+    request: Request,
+    service: LinkServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+) -> EncryptedApiResponse:
+    decrypted_payload = await decrypt_encrypted_request(
+        payload,
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+    link_payload = _validate_decrypted_payload(
+        FriendLinkCreateRequest,
+        decrypted_payload,
+    )
+    try:
+        link = await service.create_friend_link(
+            CreateFriendLinkCommand(
+                group_id=link_payload.group_id,
+                name=link_payload.name,
+                url=link_payload.url,
+                avatar_url=link_payload.avatar_url,
+                description=link_payload.description,
+                rss_url=link_payload.rss_url,
+                status=link_payload.status,
+                sort_order=link_payload.sort_order,
+            ),
+        )
+    except InvalidFriendLinkStatusError as exc:
+        raise _invalid_status() from exc
+
+    return await _links_response(
+        AdminFriendLinkItem.model_validate(link),
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+
+
+@router.patch("/friend-links/{link_id}", response_model=EncryptedApiResponse)
+async def update_friend_link(
+    link_id: int,
+    payload: EncryptedApiRequest,
+    _: AdminCsrfDependency,
+    __: FriendLinkReviewerDependency,
+    request: Request,
+    service: LinkServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+) -> EncryptedApiResponse:
+    decrypted_payload = await decrypt_encrypted_request(
+        payload,
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+    link_payload = _validate_decrypted_payload(
+        FriendLinkUpdateRequest,
+        decrypted_payload,
+    )
+    try:
+        link = await service.update_friend_link(
+            link_id=link_id,
+            changes=link_payload.model_dump(exclude_unset=True),
+        )
+    except LinkNotFoundError as exc:
+        raise _link_not_found() from exc
+    except InvalidFriendLinkStatusError as exc:
+        raise _invalid_status() from exc
+
+    return await _links_response(
+        AdminFriendLinkItem.model_validate(link),
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+
+
 @router.patch("/friend-links/{link_id}/review", response_model=EncryptedApiResponse)
 async def review_friend_link(
     link_id: int,
@@ -85,15 +167,9 @@ async def review_friend_link(
             status=review_payload.status,
         )
     except LinkNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="friend link not found",
-        ) from exc
+        raise _link_not_found() from exc
     except InvalidFriendLinkStatusError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="invalid friend link status",
-        ) from exc
+        raise _invalid_status() from exc
 
     return await _links_response(
         AdminFriendLinkItem.model_validate(link),
@@ -150,3 +226,17 @@ def _validate_decrypted_payload[T: BaseModel](
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="invalid encrypted request payload",
         ) from exc
+
+
+def _link_not_found() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="friend link not found",
+    )
+
+
+def _invalid_status() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail="invalid friend link status",
+    )

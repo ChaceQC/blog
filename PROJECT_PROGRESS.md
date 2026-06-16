@@ -51,10 +51,13 @@
 - 新增后台友链与导航 Repository、Service、Schema 和 Admin API，提供 `GET /api/admin/friend-links`、`PATCH /api/admin/friend-links/{link_id}/review` 与 `GET /api/admin/site-items`。
 - 友链和导航后台接口统一使用 `content-v1` 加密信封；友链审核写操作继续要求 CSRF 与 `friend_link:review` 权限，导航读取入口要求 `site_nav:write` 权限。
 - 前端 `/admin/links` 已从 `sampleLinks` / `sampleSites` 切换到真实后台接口，支持读取友链列表、审核通过/拒绝和读取导航条目。
+- 后台友链接口补齐 `POST /api/admin/friend-links` 与 `PATCH /api/admin/friend-links/{link_id}`，创建和更新请求均使用 `content-v1` 加密请求体、CSRF 与 `friend_link:review` 权限。
+- 前端 `/admin/links` 启用友链新建和编辑表单，保存后刷新真实友链列表并保留审核通过/拒绝操作。
+- 修复加密篡改测试的构造方式，改为篡改 base64url 解码后的真实密文字节，避免只修改编码尾位时未改变密文内容。
 
 ### 进行中
 
-- M1 认证与后台框架继续推进；后台登录、Cookie 会话、CSRF、权限菜单、`sensitive-v1` 加密响应、后台日志查询、入口限流、后台文章与页面管理接口已形成第一版后端闭环，文章与页面后台前端已接入 `content-v1` 加密列表、创建、更新、文章发布、后端 HTML 预览和 KaTeX 公式渲染流程；后台文件、友链/导航、设置页已具备独立界面入口，设置基础资料、友链审核和导航条目读取已接入真实接口，公开前台已接入已发布文章列表与详情读取链路。
+- M1 认证与后台框架继续推进；后台登录、Cookie 会话、CSRF、权限菜单、`sensitive-v1` 加密响应、后台日志查询、入口限流、后台文章与页面管理接口已形成第一版后端闭环，文章与页面后台前端已接入 `content-v1` 加密列表、创建、更新、文章发布、后端 HTML 预览和 KaTeX 公式渲染流程；后台文件、友链/导航、设置页已具备独立界面入口，设置基础资料、友链创建编辑审核和导航条目读取已接入真实接口，公开前台已接入已发布文章列表与详情读取链路。
 
 ### 阻塞与风险
 
@@ -62,13 +65,13 @@
 - 当前限流器为单进程内存实现，适合 M1 单进程验证；生产多进程、多实例或横向扩展前，需要替换为 Redis 等共享存储适配器。
 - 应用层加密协商已改为数据库保存短期会话密钥；仍需补充过期会话定时清理和更多审计记录。
 - 公开文章链路已接入真实 Public API，但本次尚未重新启动本机 MySQL 临时库做后台发布到前台展示的端到端联调。
-- 文件管理当前仍为前端界面先行；友链创建编辑、导航写入和文件上传仍需接入真实 Admin API。
+- 文件管理当前仍为前端界面先行；导航写入和文件上传仍需接入真实 Admin API。
 - 本次已启动前后端和本机 MySQL 临时库完成真实登录、加密协商、文章创建、文章发布和页面创建联调；联调后按要求关闭前后端开发服务。
 - 本次按用户最新要求，完成可验证小步后自动 commit 并 push。
 
 ### 下一步
 
-- 继续实现文件上传、友链创建编辑和导航写入的真实 Admin API 与最小 CRUD。
+- 继续实现文件上传和导航写入的真实 Admin API 与最小 CRUD。
 - 补充加密会话过期清理任务，并评估 Redis 限流适配器。
 - 使用真实 MySQL 临时库重新做“后台发布文章 -> 前台首页、列表、详情可见”的端到端联调。
 
@@ -109,12 +112,16 @@
 - 后台设置接口接入后已重新运行 `git diff --check`，通过。
 - 已临时启动后端 `18080` 与前端 `15173`，通过浏览器登录后台并在 `/admin/settings` 点击“保存设置”，确认真实设置接口可保存并返回“设置已保存”提示。
 - 后台友链与导航接口接入后已重新运行 `uv run ruff check .`，通过。
-- 后台友链与导航接口接入后已重新运行 `uv run pytest tests/test_admin_links_api.py`，3 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
-- 后台友链与导航接口接入后已重新运行 `uv run pytest`，48 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 后台友链与导航接口接入后已重新运行 `uv run pytest tests/test_admin_links_api.py`，5 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 后台友链创建编辑接入后已重新运行 `uv run pytest`，50 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 后台友链与导航前端接入后已重新运行 `npm.cmd run lint`，通过。
 - 后台友链与导航前端接入后已重新运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
+- 后台友链创建编辑前端接入后已重新运行 `npm.cmd run lint`，通过。
+- 后台友链创建编辑前端接入后已重新运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - 已临时启动后端 `18080` 与前端 `15173`，通过 Playwright CLI + Microsoft Edge 登录后台并打开 `/admin/links`，确认友链列表和导航条目接口均返回 200，页面显示真实接口空态；登录前 `/api/admin/auth/me` 的 401 属于会话探测预期现象。
 - 后台友链与导航接入后已重新运行 `git diff --check`，通过；验证后已关闭临时前后端服务，确认 `18080` 与 `15173` 无监听。
+- 已临时启动后端 `18080` 与前端 `15173`，通过 Playwright CLI + Microsoft Edge 登录后台，在 `/admin/links` 新建“Codex验证友链”并编辑为“Codex验证友链已编辑”，确认 `POST /api/admin/friend-links` 与 `PATCH /api/admin/friend-links/1` 均返回 200；验证后已关闭临时前后端服务。
+- 后台友链创建编辑接入后已重新运行 `git diff --check`，通过；验证后确认 `18080` 与 `15173` 无监听。
 
 ## 2026-06-15
 

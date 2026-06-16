@@ -28,6 +28,19 @@ class LinkRepositoryProtocol(Protocol):
 
     async def get_friend_link(self, link_id: int) -> FriendLink | None: ...
 
+    async def create_friend_link(
+        self,
+        *,
+        group_id: int | None,
+        name: str,
+        url: str,
+        avatar_url: str | None,
+        description: str | None,
+        rss_url: str | None,
+        status: str,
+        sort_order: int,
+    ) -> FriendLink: ...
+
     async def list_site_nav_items(
         self,
         *,
@@ -77,6 +90,18 @@ class AdminSiteNavItemRecord:
     updated_at: datetime | None
 
 
+@dataclass(frozen=True)
+class CreateFriendLinkCommand:
+    group_id: int | None
+    name: str
+    url: str
+    avatar_url: str | None
+    description: str | None
+    rss_url: str | None
+    status: str
+    sort_order: int
+
+
 class LinkService:
     def __init__(self, *, repository: LinkRepositoryProtocol) -> None:
         self.repository = repository
@@ -107,6 +132,56 @@ class LinkService:
             raise LinkNotFoundError("friend link not found")
 
         link.status = status
+        await self.repository.commit()
+        await self.repository.refresh(link)
+        return self._friend_link_record(link=link, group_name=None)
+
+    async def create_friend_link(
+        self,
+        command: CreateFriendLinkCommand,
+    ) -> AdminFriendLinkRecord:
+        self._ensure_valid_status(command.status)
+        link = await self.repository.create_friend_link(
+            group_id=command.group_id,
+            name=command.name,
+            url=command.url,
+            avatar_url=command.avatar_url,
+            description=command.description,
+            rss_url=command.rss_url,
+            status=command.status,
+            sort_order=command.sort_order,
+        )
+        await self.repository.commit()
+        await self.repository.refresh(link)
+        return self._friend_link_record(link=link, group_name=None)
+
+    async def update_friend_link(
+        self,
+        *,
+        link_id: int,
+        changes: dict[str, Any],
+    ) -> AdminFriendLinkRecord:
+        status = changes.get("status")
+        if isinstance(status, str):
+            self._ensure_valid_status(status)
+
+        link = await self.repository.get_friend_link(link_id)
+        if link is None:
+            raise LinkNotFoundError("friend link not found")
+
+        for field in (
+            "group_id",
+            "name",
+            "url",
+            "avatar_url",
+            "description",
+            "rss_url",
+            "status",
+            "sort_order",
+        ):
+            if field in changes:
+                setattr(link, field, changes[field])
+
         await self.repository.commit()
         await self.repository.refresh(link)
         return self._friend_link_record(link=link, group_name=None)
@@ -149,6 +224,10 @@ class LinkService:
             created_at=link.created_at,
             updated_at=link.updated_at,
         )
+
+    def _ensure_valid_status(self, status: str) -> None:
+        if status not in ALLOWED_FRIEND_LINK_STATUSES:
+            raise InvalidFriendLinkStatusError("invalid friend link status")
 
     def _site_nav_item_record(
         self,

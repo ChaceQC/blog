@@ -1,3 +1,5 @@
+from base64 import urlsafe_b64decode, urlsafe_b64encode
+
 import pytest
 
 from app.core.encryption import (
@@ -51,14 +53,13 @@ def test_encryption_rejects_tampered_ciphertext() -> None:
         secret_key=SECRET_KEY,
         profile=EncryptionProfile.CONTENT,
     )
+    ciphertext_bytes = bytearray(_base64url_decode(envelope.ciphertext))
+    ciphertext_bytes[-1] ^= 1
     tampered = EncryptedEnvelope(
         profile=envelope.profile,
         algorithm=envelope.algorithm,
         nonce=envelope.nonce,
-        ciphertext=(
-            f"{envelope.ciphertext[:-1]}"
-            f"{'A' if envelope.ciphertext[-1] != 'A' else 'B'}"
-        ),
+        ciphertext=_base64url_encode(bytes(ciphertext_bytes)),
     )
 
     with pytest.raises(EncryptionError):
@@ -77,3 +78,12 @@ def test_encrypted_envelope_does_not_expose_plaintext() -> None:
     )
 
     assert "admin" not in envelope.ciphertext
+
+
+def _base64url_decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return urlsafe_b64decode(f"{value}{padding}")
+
+
+def _base64url_encode(value: bytes) -> str:
+    return urlsafe_b64encode(value).decode("ascii").rstrip("=")

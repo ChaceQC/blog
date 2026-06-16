@@ -25,6 +25,17 @@ export type FriendLinkReviewPayload = {
   status: AdminFriendLinkStatus
 }
 
+export type FriendLinkWritePayload = {
+  group_id: number | null
+  name: string
+  url: string
+  avatar_url: string | null
+  description: string | null
+  rss_url: string | null
+  status: AdminFriendLinkStatus
+  sort_order: number
+}
+
 export type AdminSiteNavItem = {
   id: number
   group_id: number | null

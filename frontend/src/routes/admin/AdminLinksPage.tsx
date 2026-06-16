@@ -1,16 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, ExternalLink, Link2, Navigation, XCircle } from 'lucide-react'
+import {
+  CheckCircle2,
+  ExternalLink,
+  Link2,
+  Navigation,
+  Save,
+  XCircle,
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { StatusBadge } from '../../components/StatusBadge.tsx'
 import {
+  createAdminFriendLink,
   listAdminFriendLinks,
   listAdminSiteNavItems,
   reviewAdminFriendLink,
+  updateAdminFriendLink,
 } from '../../features/links/api.ts'
 import { useAuth } from '../../features/auth/useAuth.ts'
 
-import type { AdminFriendLinkStatus } from '../../features/links/types.ts'
+import type {
+  AdminFriendLink,
+  AdminFriendLinkStatus,
+  FriendLinkWritePayload,
+} from '../../features/links/types.ts'
 
 const linkStatusLabels = {
   healthy: '通过',
@@ -18,10 +31,31 @@ const linkStatusLabels = {
   rejected: '已拒绝',
 } satisfies Record<AdminFriendLinkStatus, string>
 
+type FriendLinkForm = {
+  name: string
+  url: string
+  avatarUrl: string
+  description: string
+  rssUrl: string
+  status: AdminFriendLinkStatus
+  sortOrder: number
+}
+
+const emptyForm: FriendLinkForm = {
+  name: '',
+  url: '',
+  avatarUrl: '',
+  description: '',
+  rssUrl: '',
+  status: 'pending',
+  sortOrder: 0,
+}
+
 export function AdminLinksPage() {
   const { session } = useAuth()
   const queryClient = useQueryClient()
   const [selectedLinkId, setSelectedLinkId] = useState<number | null>(null)
+  const [draftForm, setDraftForm] = useState<FriendLinkForm | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const linksQuery = useQuery({
     queryKey: ['admin-friend-links'],
@@ -38,6 +72,12 @@ export function AdminLinksPage() {
       links.find((link) => link.id === selectedLinkId) ?? links[0] ?? null,
     [links, selectedLinkId],
   )
+  const loadedForm = useMemo(
+    () => (selectedLink ? linkToForm(selectedLink) : emptyForm),
+    [selectedLink],
+  )
+  const form = draftForm ?? loadedForm
+  const isCreating = selectedLinkId === null && draftForm !== null
   const reviewMutation = useMutation({
     mutationFn: async (status: AdminFriendLinkStatus) => {
       if (!session || !selectedLink) {
@@ -54,13 +94,42 @@ export function AdminLinksPage() {
       setNotice(error instanceof Error ? error.message : '审核更新失败')
     },
   })
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!session) {
+        throw new Error('当前会话已失效')
+      }
+      const payload = formToPayload(form, selectedLink)
+      if (isCreating || !selectedLink) {
+        return createAdminFriendLink(payload, session.csrfToken)
+      }
+      return updateAdminFriendLink(selectedLink.id, payload, session.csrfToken)
+    },
+    onSuccess: (link) => {
+      setSelectedLinkId(link.id)
+      setDraftForm(null)
+      queryClient.invalidateQueries({ queryKey: ['admin-friend-links'] })
+      setNotice(isCreating ? '友链已创建' : '友链已保存')
+    },
+    onError: (error) => {
+      setNotice(error instanceof Error ? error.message : '保存失败')
+    },
+  })
 
   return (
     <div className="admin-flow">
       <section className="admin-heading admin-heading--with-action">
         <span>LINKS</span>
         <h1>友链与导航</h1>
-        <button className="text-button admin-heading__action" disabled type="button">
+        <button
+          className="text-button admin-heading__action"
+          onClick={() => {
+            setSelectedLinkId(null)
+            setDraftForm(emptyForm)
+            setNotice('正在新建友链')
+          }}
+          type="button"
+        >
           <Link2 size={17} strokeWidth={1.8} aria-hidden="true" />
           新建条目
         </button>
@@ -80,7 +149,11 @@ export function AdminLinksPage() {
                   link.id === selectedLink?.id ? 'content-row active' : 'content-row'
                 }
                 key={link.id}
-                onClick={() => setSelectedLinkId(link.id)}
+                onClick={() => {
+                  setSelectedLinkId(link.id)
+                  setDraftForm(null)
+                  setNotice(null)
+                }}
                 type="button"
               >
                 <span>
@@ -98,42 +171,106 @@ export function AdminLinksPage() {
 
         <section className="admin-panel admin-panel--editor">
           <div className="section-heading">
-            <span>审核详情</span>
+            <span>{isCreating ? '新建友链' : '友链编辑'}</span>
             <small>{notice ?? selectedLink?.group_name ?? '未分组'}</small>
           </div>
-          {selectedLink ? (
+          {selectedLink || isCreating ? (
             <div className="admin-detail">
               <div className="admin-title-row">
                 <span>
-                  <strong>{selectedLink.name}</strong>
-                  <small>{selectedLink.description ?? '暂无描述'}</small>
+                  <strong>{form.name || '未命名友链'}</strong>
+                  <small>{form.description || '暂无描述'}</small>
                 </span>
-                <a className="icon-button" href={selectedLink.url} aria-label="打开友链">
+                <a className="icon-button" href={form.url || '#'} aria-label="打开友链">
                   <ExternalLink size={17} strokeWidth={1.8} aria-hidden="true" />
                 </a>
               </div>
-              <dl className="detail-list">
-                <div>
-                  <dt>站点 URL</dt>
-                  <dd>{selectedLink.url}</dd>
+              <form className="content-form">
+                <div className="form-grid form-grid--two">
+                  <label>
+                    名称
+                    <input
+                      onChange={(event) => updateForm('name', event.target.value)}
+                      value={form.name}
+                    />
+                  </label>
+                  <label>
+                    状态
+                    <select
+                      onChange={(event) =>
+                        updateForm(
+                          'status',
+                          event.target.value as AdminFriendLinkStatus,
+                        )
+                      }
+                      value={form.status}
+                    >
+                      <option value="pending">待审核</option>
+                      <option value="healthy">通过</option>
+                      <option value="rejected">已拒绝</option>
+                    </select>
+                  </label>
                 </div>
-                <div>
-                  <dt>分组</dt>
-                  <dd>{selectedLink.group_name ?? '未分组'}</dd>
+                <label>
+                  站点 URL
+                  <input
+                    onChange={(event) => updateForm('url', event.target.value)}
+                    value={form.url}
+                  />
+                </label>
+                <label>
+                  描述
+                  <textarea
+                    onChange={(event) =>
+                      updateForm('description', event.target.value)
+                    }
+                    rows={3}
+                    value={form.description}
+                  />
+                </label>
+                <div className="form-grid form-grid--two">
+                  <label>
+                    头像 URL
+                    <input
+                      onChange={(event) =>
+                        updateForm('avatarUrl', event.target.value)
+                      }
+                      value={form.avatarUrl}
+                    />
+                  </label>
+                  <label>
+                    RSS URL
+                    <input
+                      onChange={(event) => updateForm('rssUrl', event.target.value)}
+                      value={form.rssUrl}
+                    />
+                  </label>
                 </div>
-                <div>
-                  <dt>RSS</dt>
-                  <dd>{selectedLink.rss_url ?? '未填写'}</dd>
-                </div>
-                <div>
-                  <dt>状态</dt>
-                  <dd>{linkStatusLabels[selectedLink.status]}</dd>
-                </div>
-              </dl>
+                <label>
+                  排序
+                  <input
+                    min={0}
+                    onChange={(event) =>
+                      updateForm('sortOrder', Number(event.target.value))
+                    }
+                    type="number"
+                    value={form.sortOrder}
+                  />
+                </label>
+              </form>
               <div className="form-actions">
                 <button
                   className="text-button"
-                  disabled={!session || reviewMutation.isPending}
+                  disabled={!session || saveMutation.isPending || form.name === ''}
+                  onClick={() => saveMutation.mutate()}
+                  type="button"
+                >
+                  <Save size={17} strokeWidth={1.8} aria-hidden="true" />
+                  {saveMutation.isPending ? '保存中' : '保存'}
+                </button>
+                <button
+                  className="text-button"
+                  disabled={!session || !selectedLink || reviewMutation.isPending}
                   onClick={() => reviewMutation.mutate('healthy')}
                   type="button"
                 >
@@ -142,7 +279,7 @@ export function AdminLinksPage() {
                 </button>
                 <button
                   className="text-button text-button--muted"
-                  disabled={!session || reviewMutation.isPending}
+                  disabled={!session || !selectedLink || reviewMutation.isPending}
                   onClick={() => reviewMutation.mutate('rejected')}
                   type="button"
                 >
@@ -183,4 +320,44 @@ export function AdminLinksPage() {
       </div>
     </div>
   )
+
+  function updateForm<Key extends keyof FriendLinkForm>(
+    key: Key,
+    value: FriendLinkForm[Key],
+  ) {
+    setDraftForm((current) => ({ ...(current ?? form), [key]: value }))
+  }
+}
+
+function linkToForm(link: AdminFriendLink): FriendLinkForm {
+  return {
+    name: link.name,
+    url: link.url,
+    avatarUrl: link.avatar_url ?? '',
+    description: link.description ?? '',
+    rssUrl: link.rss_url ?? '',
+    status: link.status,
+    sortOrder: link.sort_order,
+  }
+}
+
+function formToPayload(
+  form: FriendLinkForm,
+  link: AdminFriendLink | null,
+): FriendLinkWritePayload {
+  return {
+    group_id: link?.group_id ?? null,
+    name: form.name,
+    url: form.url,
+    avatar_url: emptyToNull(form.avatarUrl),
+    description: emptyToNull(form.description),
+    rss_url: emptyToNull(form.rssUrl),
+    status: form.status,
+    sort_order: Number.isFinite(form.sortOrder) ? form.sortOrder : 0,
+  }
+}
+
+function emptyToNull(value: string): string | null {
+  const trimmed = value.trim()
+  return trimmed === '' ? null : trimmed
 }
