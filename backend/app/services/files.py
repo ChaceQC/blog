@@ -298,6 +298,7 @@ class FileService:
         *,
         file_id: int,
         post_slug: str,
+        post_cover_file_id: int | None,
         post_content_md: str,
         post_content_html: str,
         upload_root: Path,
@@ -314,6 +315,7 @@ class FileService:
         if not _article_render_reference_exists(
             post_slug=post_slug,
             file_id=file.id,
+            cover_file_id=post_cover_file_id,
             content_md=post_content_md,
             content_html=post_content_html,
         ):
@@ -742,9 +744,13 @@ def _article_render_reference_exists(
     *,
     post_slug: str,
     file_id: int,
+    cover_file_id: int | None,
     content_md: str,
     content_html: str,
 ) -> bool:
+    if cover_file_id == file_id:
+        return True
+
     references = (
         f"/api/public/posts/{post_slug}/files/{file_id}/render",
         f"api/public/posts/{post_slug}/files/{file_id}/render",

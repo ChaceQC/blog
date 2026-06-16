@@ -1,3 +1,5 @@
+import re
+
 import bleach
 from markdown_it import MarkdownIt
 from mdit_py_plugins.dollarmath import dollarmath_plugin
@@ -40,6 +42,9 @@ ALLOWED_ATTRIBUTES = {
 }
 ALLOWED_PROTOCOLS = {"http", "https", "mailto"}
 MATH_CLASSES = {"math", "inline", "block"}
+WORD_PATTERN = re.compile(
+    r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]|[A-Za-z0-9]+(?:[-_'][A-Za-z0-9]+)*",
+)
 
 
 class MarkdownRenderer:
@@ -63,7 +68,7 @@ class MarkdownRenderer:
 
 
 def count_words(content_md: str) -> int:
-    return len([part for part in content_md.split() if part.strip()])
+    return len(WORD_PATTERN.findall(content_md))
 
 
 def _allowed_attributes(

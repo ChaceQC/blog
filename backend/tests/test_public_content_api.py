@@ -80,7 +80,9 @@ class FakePublicContentService:
                 title="公开文章",
                 slug="public-post",
                 summary="摘要",
-                word_count=3,
+                cover_file_id=1,
+                content_md="中文阅读时长 test-article 2026",
+                word_count=1,
                 seo_title=None,
                 seo_description="SEO 摘要",
                 published_at=datetime(2026, 6, 16, tzinfo=UTC),
@@ -96,11 +98,13 @@ class FakePublicContentService:
             title="公开文章",
             slug="public-post",
             summary="摘要",
+            cover_file_id=1,
             content_html=(
                 '<p><img src="/api/public/posts/public-post/files/1/render" '
                 'alt="封面"></p>'
             ),
-            word_count=3,
+            content_md="中文阅读时长 test-article 2026",
+            word_count=1,
             seo_title=None,
             seo_description="SEO 摘要",
             published_at=datetime(2026, 6, 16, tzinfo=UTC),
@@ -215,6 +219,11 @@ def test_public_posts_returns_published_post_list() -> None:
     assert manager.payload is not None
     assert manager.payload["items"][0]["slug"] == "public-post"
     assert "content_html" not in manager.payload["items"][0]
+    assert manager.payload["items"][0]["word_count"] == 8
+    assert (
+        "/api/public/posts/public-post/files/1/render?expires="
+        in str(manager.payload["items"][0]["cover_image_url"])
+    )
     assert logs.items[0]["access_type"] == "public_posts_list"
 
 
@@ -242,6 +251,11 @@ def test_public_post_detail_returns_html_content() -> None:
     assert (
         'src="/api/public/posts/public-post/files/1/render?expires='
         in str(manager.payload["content_html"])
+    )
+    assert manager.payload["word_count"] == 8
+    assert (
+        "/api/public/posts/public-post/files/1/render?expires="
+        in str(manager.payload["cover_image_url"])
     )
     assert "token=" in str(manager.payload["content_html"])
     assert logs.items[0]["access_type"] == "public_post_detail"

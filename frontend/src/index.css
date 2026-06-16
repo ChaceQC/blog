@@ -634,11 +634,34 @@ img {
 
 .post-row {
   display: grid;
-  grid-template-columns: 54px minmax(0, 1fr);
+  grid-template-columns: 54px minmax(0, 156px) minmax(0, 1fr);
   gap: 18px;
   min-height: 132px;
   padding: 24px 0;
   border-bottom: 1px solid var(--color-border);
+}
+
+.post-row:not(:has(.post-row__cover)) {
+  grid-template-columns: 54px minmax(0, 1fr);
+}
+
+.post-row__cover {
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  align-self: center;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-neutral-2);
+}
+
+.post-row__cover img,
+.post-detail__cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .post-row__body {
@@ -699,6 +722,16 @@ img {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.post-detail__cover {
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-neutral-2);
 }
 
 .post-prose {
@@ -1590,6 +1623,59 @@ img {
 .content-preview pre code {
   padding: 0;
   background: transparent;
+}
+
+.cover-picker {
+  display: grid;
+  gap: 10px;
+}
+
+.cover-picker__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.cover-picker__item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 54px;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: rgba(254, 254, 251, 0.8);
+  color: var(--color-neutral-8);
+  text-align: left;
+}
+
+.cover-picker__item.active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.cover-picker__item span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.cover-picker__item strong,
+.cover-picker__item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cover-picker__item small,
+.cover-picker__hint {
+  color: var(--color-neutral-7);
+  font-size: 0.82rem;
+}
+
+.cover-picker__hint {
+  margin: 0;
 }
 
 .icon-button {

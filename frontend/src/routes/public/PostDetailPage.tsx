@@ -7,6 +7,7 @@ import { getPublicPost } from '../../features/posts/api.ts'
 import {
   formatPostDate,
   getReadingMinutes,
+  publicApiAssetUrl,
 } from '../../features/posts/postMeta.ts'
 
 export function PostDetailPage() {
@@ -59,6 +60,14 @@ export function PostDetailPage() {
           </span>
         </div>
       </header>
+      {post.cover_image_url ? (
+        <figure className="post-detail__cover">
+          <img
+            alt={post.title}
+            src={publicApiAssetUrl(post.cover_image_url)}
+          />
+        </figure>
+      ) : null}
       <MathHtml
         className="post-prose"
         html={post.content_html}

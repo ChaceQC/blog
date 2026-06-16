@@ -63,7 +63,7 @@ class AdminPostItem(BaseModel):
     content_html: str
     status: str
     visibility: str
-    cover_file_id: int | None
+    cover_file_id: int | None = None
     author_id: int
     word_count: int
     seo_title: str | None
@@ -86,6 +86,8 @@ class PublicPostItem(BaseModel):
     title: str
     slug: str
     summary: str | None
+    cover_file_id: int | None
+    cover_image_url: str | None = None
     word_count: int
     seo_title: str | None
     seo_description: str | None

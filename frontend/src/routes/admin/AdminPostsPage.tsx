@@ -14,6 +14,7 @@ import {
   contentStatusLabels,
   postVisibilityLabels,
 } from '../../features/content/contentLabels.ts'
+import { PostCoverPicker } from '../../features/content/PostCoverPicker.tsx'
 import {
   createEmptyPostForm,
   formatPostSaveError,
@@ -264,22 +265,11 @@ export function AdminPostsPage() {
                 />
               </label>
             </div>
-            <label>
-              封面文件 ID（文件夹中可复制）
-              <input
-                min={1}
-                placeholder="可留空"
-                type="number"
-                value={currentForm.cover_file_id ?? ''}
-                onChange={(event) => {
-                  const value = event.target.value
-                  updateForm(
-                    'cover_file_id',
-                    value === '' ? null : Number(value),
-                  )
-                }}
-              />
-            </label>
+            <PostCoverPicker
+              disabled={!canWrite}
+              value={currentForm.cover_file_id}
+              onChange={(value) => updateForm('cover_file_id', value)}
+            />
             <label>
               摘要
               <textarea

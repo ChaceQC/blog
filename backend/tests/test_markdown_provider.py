@@ -1,4 +1,4 @@
-from app.providers.markdown import MarkdownRenderer
+from app.providers.markdown import MarkdownRenderer, count_words
 
 
 def test_markdown_renderer_outputs_basic_markdown_html() -> None:
@@ -52,3 +52,7 @@ def test_markdown_renderer_sanitizes_dangerous_html_and_urls() -> None:
     assert "<script>" not in html
     assert '<a href="javascript:' not in html
     assert 'class="math inline evil"' not in html
+
+
+def test_count_words_counts_chinese_characters_and_english_words() -> None:
+    assert count_words("中文阅读时长 test-article 2026") == 8

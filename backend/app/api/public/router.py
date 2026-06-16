@@ -14,6 +14,8 @@ from app.api.public.encryption import router as public_encryption_router
 from app.api.public.files import router as public_files_router
 from app.core.database import get_session
 from app.core.encryption import EncryptionProfile
+from app.models.content import Post
+from app.providers.markdown import count_words
 from app.repositories.content import ContentRepository
 from app.repositories.links import LinkRepository
 from app.schemas.content import (
@@ -29,7 +31,7 @@ from app.schemas.links import (
 )
 from app.schemas.settings import PublicSiteProfileResponse
 from app.services.content import ContentNotFoundError, ContentService
-from app.services.files import sign_article_render_urls
+from app.services.files import create_article_render_token, sign_article_render_urls
 from app.services.links import LinkService
 
 router = APIRouter(tags=["public"])
@@ -66,6 +68,7 @@ async def list_public_posts(
     request: Request,
     service: PublicContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
+    settings: SettingsDependency,
     logs: LogServiceDependency,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
@@ -73,7 +76,14 @@ async def list_public_posts(
     posts = await service.list_public_posts(limit=limit, offset=offset)
     response = await encrypted_response(
         PublicPostListResponse(
-            items=[PublicPostItem.model_validate(post) for post in posts],
+            items=[
+                _public_post_item(
+                    post,
+                    expires_seconds=settings.file_temporary_url_expire_seconds,
+                    secret_key=settings.secret_key,
+                )
+                for post in posts
+            ],
         ),
         request=request,
         manager=encryption_manager,
@@ -115,7 +125,11 @@ async def get_public_post(
             detail="post not found",
         ) from exc
 
-    detail = PublicPostDetail.model_validate(post)
+    detail = _public_post_detail(
+        post,
+        expires_seconds=settings.file_temporary_url_expire_seconds,
+        secret_key=settings.secret_key,
+    )
     signed_detail = detail.model_copy(
         update={
             "content_html": sign_article_render_urls(
@@ -249,6 +263,71 @@ def _site_profile_response(value: dict[str, object]) -> PublicSiteProfileRespons
 
 def _string_value(value: object, fallback: str) -> str:
     return value if isinstance(value, str) and value else fallback
+
+
+def _public_post_item(
+    post: Post,
+    *,
+    expires_seconds: int,
+    secret_key: str,
+) -> PublicPostItem:
+    item = PublicPostItem.model_validate(post)
+    return item.model_copy(
+        update={
+            "cover_image_url": _signed_cover_url(
+                post,
+                expires_seconds=expires_seconds,
+                secret_key=secret_key,
+            ),
+            "word_count": max(
+                item.word_count,
+                count_words(getattr(post, "content_md", "")),
+            ),
+        },
+    )
+
+
+def _public_post_detail(
+    post: Post,
+    *,
+    expires_seconds: int,
+    secret_key: str,
+) -> PublicPostDetail:
+    detail = PublicPostDetail.model_validate(post)
+    return detail.model_copy(
+        update={
+            "cover_image_url": _signed_cover_url(
+                post,
+                expires_seconds=expires_seconds,
+                secret_key=secret_key,
+            ),
+            "word_count": max(
+                detail.word_count,
+                count_words(getattr(post, "content_md", "")),
+            ),
+        },
+    )
+
+
+def _signed_cover_url(
+    post: Post,
+    *,
+    expires_seconds: int,
+    secret_key: str,
+) -> str | None:
+    if post.cover_file_id is None:
+        return None
+
+    access = create_article_render_token(
+        post_slug=post.slug,
+        file_id=post.cover_file_id,
+        expires_seconds=expires_seconds,
+        secret_key=secret_key,
+    )
+    return (
+        f"/api/public/posts/{post.slug}/files/{post.cover_file_id}/render"
+        f"?expires={access.expires}&token={access.token}"
+    )
 
 
 async def _record_public_access(

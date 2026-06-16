@@ -108,12 +108,14 @@ class FakeDownloadFileService:
         *,
         file_id: int,
         post_slug: str,
+        post_cover_file_id: int | None,
         post_content_md: str,
         post_content_html: str,
         upload_root,
     ) -> FileDownload:
         assert file_id == 1
         assert post_slug == "public-post"
+        assert post_cover_file_id == 1
         assert "files/1/render" in post_content_md
         assert upload_root
         return FileDownload(
@@ -134,6 +136,7 @@ class FakePublicFileContentService:
         return SimpleNamespace(
             id=1,
             slug=slug,
+            cover_file_id=1,
             content_md="![封面](/api/public/posts/public-post/files/1/render)",
             content_html=(
                 '<p><img src="/api/public/posts/public-post/files/1/render" '

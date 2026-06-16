@@ -2,7 +2,11 @@ import { Clock3 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { StatusBadge } from '../../components/StatusBadge.tsx'
-import { formatPostDate, getReadingMinutes } from './postMeta.ts'
+import {
+  formatPostDate,
+  getReadingMinutes,
+  publicApiAssetUrl,
+} from './postMeta.ts'
 import type { PublicPostItem } from './types.ts'
 
 type PostListProps = {
@@ -17,6 +21,15 @@ export function PostList({ posts }: PostListProps) {
           <span className="post-row__index">
             {String(index + 1).padStart(2, '0')}
           </span>
+          {post.cover_image_url ? (
+            <Link className="post-row__cover" to={`/posts/${post.slug}`}>
+              <img
+                alt={post.title}
+                loading="lazy"
+                src={publicApiAssetUrl(post.cover_image_url)}
+              />
+            </Link>
+          ) : null}
           <div className="post-row__body">
             <div className="post-row__meta">
               <StatusBadge tone="published">已发布</StatusBadge>

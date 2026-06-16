@@ -4,6 +4,11 @@
 
 ### 已完成
 
+- 修复公开文章列表与详情的阅读时长统计口径：后端 `count_words` 改为同时统计中文字符和英文/数字词，公开文章响应会用正文实时统计兜底旧数据，避免历史 `word_count` 偏小导致页面一直显示 `1 分钟`。
+- 公开文章列表与详情响应新增 `cover_file_id` 与带签名的 `cover_image_url`，文章图片渲染接口允许公开文章封面文件走同一签名渲染路径。
+- 前台 `/posts` 与 `/posts/:slug` 已展示文章封面，保留无封面文章的原列表布局。
+- 后台 `/admin/posts` 已将封面文件 ID 输入升级为封面选择器，直接从后台公开图片文件中选择封面，不再要求手动粘贴文件 ID。
+- 同步更新根目录 `README.md` 和 `PROJECT_PLAN.md`，记录封面选择器、前台封面展示和后续计划调整。
 - 修复新建文章未设置封面时仍发送 `cover_file_id: null` 的问题；前端写入 payload 现在只在封面文件 ID 非空时发送 `cover_file_id`，避免兼容旧后端进程或额外字段校验导致 `invalid encrypted request payload`。
 - 保持后端加密请求体校验失败的响应为泛化错误，不向浏览器暴露字段级校验细节。
 - 已停止昨晚仍在监听 `18080` 的旧后端进程，并使用项目虚拟环境 `uv run python main.py` 重启后端；当前 `/healthz` 返回 200。
@@ -12,7 +17,7 @@
 
 ### 进行中
 
-- M1 内容管理继续推进，文章封面仍以文件 ID 输入方式衔接文件管理页，后续升级为文件选择器。
+- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环，后续继续补齐私有文件下载、清理任务、加密会话清理和真实 MySQL 运行库联调。
 
 ### 阻塞与风险
 
@@ -20,10 +25,17 @@
 
 ### 下一步
 
-- 继续做后台文件选择器，让文章封面不再需要手动粘贴文件 ID。
+- 将文件管理继续接入私有文件鉴权下载、更多使用场景引用追踪和物理清理任务。
+- 补充加密会话过期清理任务，并评估 Redis 共享限流适配。
+- 使用真实 MySQL 运行库验证上传图片、选择封面、发布文章、前台封面展示、正文图片渲染、公开文件栏下载和后台访问日志查询。
 
 ### 验证
 
+- 已运行 `uv run ruff check .`，通过。
+- 已运行 `uv run pytest tests\test_markdown_provider.py tests\test_public_content_api.py tests\test_admin_files_api.py tests\test_content_service.py`，29 个测试通过；仍存在 FastAPI TestClient 与 Starlette TestClient cookies 的上游弃用警告。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
+- 已运行 `git diff --check`，未发现空白或行尾问题。
 - 已运行 `uv run ruff check .`，通过。
 - 已运行 `uv run pytest tests\test_admin_content_api.py tests\test_content_service.py tests\test_markdown_provider.py`，15 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 已运行 `npm.cmd run lint`，通过。

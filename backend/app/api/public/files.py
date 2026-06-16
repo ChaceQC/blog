@@ -230,6 +230,7 @@ async def render_post_file(
         download = await file_service.prepare_article_render(
             file_id=file_id,
             post_slug=slug,
+            post_cover_file_id=post.cover_file_id,
             post_content_md=post.content_md,
             post_content_html=post.content_html,
             upload_root=settings.upload_root,

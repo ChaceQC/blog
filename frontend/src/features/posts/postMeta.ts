@@ -1,3 +1,5 @@
+import { API_BASE_URL } from '../../api/config.ts'
+
 const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
   year: 'numeric',
   month: '2-digit',
@@ -37,4 +39,14 @@ export function formatRelativePostDate(value: string | null): string {
   )
 
   return days === 0 ? '今天' : `${days} 天前`
+}
+
+export function publicApiAssetUrl(value: string): string {
+  if (/^https?:\/\//.test(value)) {
+    return value
+  }
+
+  const origin = API_BASE_URL.replace(/\/api$/, '')
+  const path = value.startsWith('/') ? value : `/${value}`
+  return `${origin}${path}`
 }

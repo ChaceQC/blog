@@ -3,6 +3,8 @@ export type PublicPostItem = {
   title: string
   slug: string
   summary: string | null
+  cover_file_id: number | null
+  cover_image_url: string | null
   word_count: number
   seo_title: string | null
   seo_description: string | null
