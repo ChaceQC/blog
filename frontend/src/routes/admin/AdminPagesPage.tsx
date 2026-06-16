@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye, FilePlus2, Save } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import { ListPager } from '../../components/ListPager.tsx'
 import { MathHtml } from '../../components/MathHtml.tsx'
 import {
   createAdminPage,
@@ -28,6 +29,7 @@ const emptyPageForm: PageFormPayload = {
   seo_description: '',
 }
 const emptyPages: AdminPageItem[] = []
+const LIST_PAGE_SIZE = 8
 
 export function AdminPagesPage() {
   const { session } = useAuth()
@@ -41,6 +43,15 @@ export function AdminPagesPage() {
     queryFn: listAdminPages,
   })
   const pages = data?.items ?? emptyPages
+  const [listPage, setListPage] = useState(0)
+  const safeListPage = Math.min(
+    listPage,
+    Math.max(0, Math.ceil(pages.length / LIST_PAGE_SIZE) - 1),
+  )
+  const visiblePages = pages.slice(
+    safeListPage * LIST_PAGE_SIZE,
+    safeListPage * LIST_PAGE_SIZE + LIST_PAGE_SIZE,
+  )
   const selectedPage = useMemo(
     () => pages.find((page) => page.id === selectedId) ?? null,
     [pages, selectedId],
@@ -98,7 +109,7 @@ export function AdminPagesPage() {
             <p className="form-error">页面列表加载失败</p>
           ) : (
             <div className="content-list">
-              {pages.map((page) => (
+              {visiblePages.map((page) => (
                 <button
                   className={page.id === selectedId ? 'content-row active' : 'content-row'}
                   key={page.id}
@@ -121,6 +132,14 @@ export function AdminPagesPage() {
               ) : null}
             </div>
           )}
+          <ListPager
+            page={safeListPage}
+            pageSize={LIST_PAGE_SIZE}
+            totalItems={pages.length}
+            isLoading={isLoading}
+            variant="admin"
+            onPageChange={setListPage}
+          />
         </section>
 
         <section className="admin-panel admin-panel--editor">

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { LockKeyhole, LogIn, UserRound } from 'lucide-react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { ArrowLeft, LockKeyhole, LogIn, UserRound } from 'lucide-react'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 
 import { ApiError } from '../../api/client.ts'
 import { useAuth } from '../../features/auth/useAuth.ts'
@@ -51,6 +51,10 @@ export function AdminLoginPage() {
   return (
     <main className="login-shell">
       <section className="login-panel">
+        <Link className="timeline-link login-back-link" to="/">
+          <ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" />
+          返回主站点
+        </Link>
         <div className="admin-heading">
           <span>ADMIN</span>
           <h1>进入管理台</h1>

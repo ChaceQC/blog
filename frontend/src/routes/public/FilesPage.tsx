@@ -1,15 +1,20 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Download } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
+import { ListPager } from '../../components/ListPager.tsx'
 import {
   getPublicFileTemporaryUrl,
   listPublicFiles,
 } from '../../features/files/api.ts'
 import type { PublicFileItem } from '../../features/files/types.ts'
 
+const PAGE_SIZE = 8
+const emptyFiles: PublicFileItem[] = []
+
 export function FilesPage() {
   const [notice, setNotice] = useState<string | null>(null)
+  const [page, setPage] = useState(0)
   const filesQuery = useQuery({
     queryKey: ['public-files'],
     queryFn: listPublicFiles,
@@ -18,7 +23,12 @@ export function FilesPage() {
     mutationFn: getPublicFileTemporaryUrl,
     onError: () => setNotice('下载链接暂时无法生成。'),
   })
-  const files = filesQuery.data?.items ?? []
+  const files = filesQuery.data?.items ?? emptyFiles
+  const safePage = Math.min(page, Math.max(0, Math.ceil(files.length / PAGE_SIZE) - 1))
+  const visibleFiles = useMemo(
+    () => files.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE),
+    [files, safePage],
+  )
 
   async function openFile(file: PublicFileItem) {
     try {
@@ -50,7 +60,7 @@ export function FilesPage() {
           <p className="empty-state">还没有公开文件。</p>
         ) : null}
         <div className="compact-list">
-          {files.map((file) => (
+          {visibleFiles.map((file) => (
             <button
               className="compact-row"
               disabled={temporaryUrlMutation.isPending}
@@ -70,6 +80,13 @@ export function FilesPage() {
             </button>
           ))}
         </div>
+        <ListPager
+          page={safePage}
+          pageSize={PAGE_SIZE}
+          totalItems={files.length}
+          isLoading={filesQuery.isLoading}
+          onPageChange={setPage}
+        />
       </section>
     </div>
   )

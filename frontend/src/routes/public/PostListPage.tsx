@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
+import { ListPager } from '../../components/ListPager.tsx'
 import { PostList } from '../../features/posts/PostList.tsx'
 import { listPublicPosts } from '../../features/posts/api.ts'
 
@@ -16,7 +16,6 @@ export function PostListPage() {
   })
   const posts = (data?.items ?? []).slice(0, PAGE_SIZE)
   const hasNextPage = (data?.items.length ?? 0) > PAGE_SIZE
-  const hasPreviousPage = page > 0
 
   return (
     <div className="page-flow page-flow--narrow">
@@ -36,29 +35,13 @@ export function PostListPage() {
           <p className="empty-state">还没有公开发布的文章。</p>
         ) : null}
         {posts.length > 0 ? <PostList posts={posts} startIndex={page * PAGE_SIZE} /> : null}
-        {hasPreviousPage || hasNextPage ? (
-          <div className="pagination-bar">
-            <button
-              className="text-button text-button--muted"
-              disabled={!hasPreviousPage || isLoading}
-              onClick={() => setPage((current) => Math.max(0, current - 1))}
-              type="button"
-            >
-              <ChevronLeft size={16} strokeWidth={1.8} aria-hidden="true" />
-              上一页
-            </button>
-            <span>第 {page + 1} 页</span>
-            <button
-              className="text-button text-button--muted"
-              disabled={!hasNextPage || isLoading}
-              onClick={() => setPage((current) => current + 1)}
-              type="button"
-            >
-              下一页
-              <ChevronRight size={16} strokeWidth={1.8} aria-hidden="true" />
-            </button>
-          </div>
-        ) : null}
+        <ListPager
+          page={page}
+          pageSize={PAGE_SIZE}
+          totalItems={page * PAGE_SIZE + posts.length + (hasNextPage ? 1 : 0)}
+          isLoading={isLoading}
+          onPageChange={setPage}
+        />
       </section>
     </div>
   )

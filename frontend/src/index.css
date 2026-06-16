@@ -45,6 +45,7 @@
 
 body {
   position: relative;
+  overflow-x: hidden;
   min-width: 320px;
   min-height: 100svh;
   margin: 0;
@@ -405,6 +406,7 @@ img {
 }
 
 .section-heading {
+  min-width: 0;
   justify-content: space-between;
   gap: 16px;
 }
@@ -417,10 +419,15 @@ img {
 }
 
 .section-heading span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
   color: var(--color-neutral-10);
   font-family: var(--font-serif);
   font-size: 1.75rem;
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .section-heading a,
@@ -436,6 +443,7 @@ img {
 
 .section-heading a,
 .inline-link {
+  flex-shrink: 0;
   color: var(--color-neutral-8);
   text-decoration: underline;
   text-decoration-color: var(--color-neutral-5);
@@ -852,6 +860,40 @@ img {
   font-size: 0.92rem;
 }
 
+.pagination-bar--compact {
+  justify-content: flex-start;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.84rem;
+}
+
+.pagination-bar--compact .text-button {
+  min-height: 32px;
+  margin-top: 0;
+  padding: 0 10px;
+}
+
+.timeline-link {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 38px;
+  gap: 7px;
+  color: var(--color-neutral-7);
+  font-size: 0.92rem;
+  transition:
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.timeline-link:hover {
+  color: var(--color-neutral-10);
+  transform: translateX(-2px);
+}
+
 .post-detail {
   gap: 28px;
 }
@@ -1089,6 +1131,7 @@ img {
 .admin-shell {
   display: grid;
   grid-template-columns: 230px minmax(0, 1fr);
+  min-width: 0;
   min-height: 100svh;
   background:
     radial-gradient(circle at 88% 10%, rgba(197, 100, 115, 0.08), transparent 24rem),
@@ -1099,6 +1142,7 @@ img {
   position: sticky;
   top: 0;
   display: flex;
+  min-width: 0;
   align-self: start;
   flex-direction: column;
   gap: 22px;
@@ -1150,6 +1194,7 @@ img {
 }
 
 .admin-main {
+  min-width: 0;
   padding: 42px;
 }
 
@@ -1165,6 +1210,7 @@ img {
 
 .admin-flow {
   display: grid;
+  min-width: 0;
   gap: 24px;
 }
 
@@ -1236,6 +1282,7 @@ img {
 }
 
 .metric {
+  min-width: 0;
   min-height: 118px;
   align-items: flex-start;
   flex-direction: column;
@@ -1264,6 +1311,7 @@ img {
 
 .admin-panel {
   display: grid;
+  min-width: 0;
   gap: 16px;
   padding: 18px;
 }
@@ -1328,10 +1376,26 @@ img {
 }
 
 .file-row {
+  width: 100%;
+  min-width: 0;
   gap: 12px;
   padding: 12px;
   border-radius: 8px;
   background: var(--color-neutral-2);
+}
+
+.file-list,
+.file-row span {
+  min-width: 0;
+}
+
+.file-row svg {
+  flex: 0 0 auto;
+}
+
+.file-row small {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .content-list {
@@ -1396,6 +1460,8 @@ img {
 .admin-tabs {
   display: inline-flex;
   gap: 4px;
+  max-width: 100%;
+  overflow-x: auto;
   padding: 4px;
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -1403,6 +1469,7 @@ img {
 }
 
 .admin-tab {
+  flex: 0 0 auto;
   min-width: 64px;
   min-height: 32px;
   border: 0;
@@ -1910,13 +1977,17 @@ img {
 .login-panel {
   display: grid;
   width: min(430px, 100%);
-  gap: 26px;
+  gap: 22px;
   padding: 28px;
   border: 1px solid var(--color-border);
   border-radius: 16px;
   background: rgba(254, 254, 251, 0.72);
   box-shadow: var(--shadow-whisper);
   backdrop-filter: blur(24px);
+}
+
+.login-back-link {
+  min-height: 32px;
 }
 
 .login-form {
@@ -1978,7 +2049,8 @@ img {
 
 @media (max-width: 900px) {
   .public-shell {
-    width: min(100% - 24px, 720px);
+    width: min(100%, 720px);
+    padding-inline: 24px;
   }
 
   .site-header,
@@ -1992,7 +2064,17 @@ img {
 
   .site-header {
     display: grid;
-    width: min(100% - 24px, 720px);
+    width: min(calc(100% - 48px), 720px);
+  }
+
+  .admin-shell {
+    width: min(100%, 720px);
+    margin: 0 auto;
+    padding: 14px 24px 28px;
+  }
+
+  .admin-main {
+    padding: 22px 0 0;
   }
 
   .site-header nav {
@@ -2013,11 +2095,14 @@ img {
   .admin-sidebar {
     position: static;
     min-height: auto;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
   }
 
   .admin-sidebar nav {
     flex-direction: row;
     flex-wrap: wrap;
+    overflow-x: auto;
   }
 
   .admin-sidebar nav a {
@@ -2041,13 +2126,23 @@ img {
 
 @media (max-width: 640px) {
   .public-shell {
-    width: min(100% - 20px, 520px);
+    width: min(100%, 520px);
+    padding-inline: 24px;
     padding-bottom: 136px;
   }
 
   .site-header {
     top: 10px;
-    width: min(100% - 20px, 520px);
+    width: min(calc(100% - 48px), 520px);
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .admin-shell {
+    width: min(100%, 520px);
+    padding-inline: 20px;
   }
 
   .brand {
@@ -2056,13 +2151,22 @@ img {
 
   .site-header nav {
     display: grid;
-    grid-template-columns: repeat(5, auto);
-    overflow-x: auto;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .site-header nav a {
+    justify-content: center;
+    min-width: 0;
+    padding: 0 6px;
+    font-size: 0.82rem;
   }
 
   .page-flow {
     gap: 44px;
-    padding: 86px 0 40px;
+    padding: 124px 0 40px;
   }
 
   .hero-section h1 {
@@ -2107,12 +2211,30 @@ img {
   }
 
   .post-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
+    grid-template-columns: 32px minmax(88px, 104px) minmax(0, 1fr);
+    gap: 10px;
+    min-height: 104px;
+    padding: 18px 0;
   }
 
   .post-row__index {
     font-size: 1rem;
+  }
+
+  .post-row__cover {
+    align-self: start;
+  }
+
+  .post-row h2 {
+    font-size: 1.05rem;
+  }
+
+  .post-row p {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 0.9rem;
   }
 
   .compact-row,
@@ -2121,7 +2243,56 @@ img {
     flex-direction: column;
   }
 
+  .content-row,
+  .admin-stack-list a,
+  .admin-stack-list button {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .content-row > small,
+  .content-row .status-badge,
+  .admin-stack-list a > small,
+  .admin-stack-list button > small {
+    justify-self: start;
+    margin-left: 10px;
+  }
+
+  .pagination-bar {
+    justify-content: flex-start;
+  }
+
+  .pagination-bar .text-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .pagination-bar > span {
+    width: 100%;
+    text-align: center;
+  }
+
   .admin-main {
-    padding: 20px;
+    padding: 20px 0 0;
+  }
+}
+
+@media (max-width: 380px) {
+  .public-shell {
+    padding-inline: 18px;
+  }
+
+  .admin-shell {
+    padding-inline: 14px;
+  }
+
+  .site-header {
+    width: calc(100% - 36px);
+  }
+
+  .site-header nav a {
+    gap: 4px;
+    padding: 0 4px;
+    font-size: 0.78rem;
   }
 }

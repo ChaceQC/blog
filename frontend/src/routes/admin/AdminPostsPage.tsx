@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Brackets, Eye, FilePlus2, Link2, Rocket, Save } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { ListPager } from '../../components/ListPager.tsx'
 import { MathHtml } from '../../components/MathHtml.tsx'
 import {
   createAdminPost,
@@ -34,6 +35,7 @@ import type {
 } from '../../features/content/types.ts'
 
 const emptyPosts: AdminPostItem[] = []
+const LIST_PAGE_SIZE = 8
 
 export function AdminPostsPage() {
   const { session } = useAuth()
@@ -46,12 +48,21 @@ export function AdminPostsPage() {
     slug: string
   } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [listPage, setListPage] = useState(0)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin-posts'],
     queryFn: listAdminPosts,
   })
   const posts = data?.items ?? emptyPosts
+  const safeListPage = Math.min(
+    listPage,
+    Math.max(0, Math.ceil(posts.length / LIST_PAGE_SIZE) - 1),
+  )
+  const visiblePosts = posts.slice(
+    safeListPage * LIST_PAGE_SIZE,
+    safeListPage * LIST_PAGE_SIZE + LIST_PAGE_SIZE,
+  )
   const selectedPost = useMemo(
     () => posts.find((post) => post.id === selectedId) ?? null,
     [posts, selectedId],
@@ -172,7 +183,7 @@ export function AdminPostsPage() {
             <p className="form-error">文章列表加载失败</p>
           ) : (
             <div className="content-list">
-              {posts.map((post) => (
+              {visiblePosts.map((post) => (
                 <button
                   className={post.id === selectedId ? 'content-row active' : 'content-row'}
                   key={post.id}
@@ -196,6 +207,14 @@ export function AdminPostsPage() {
               ) : null}
             </div>
           )}
+          <ListPager
+            page={safeListPage}
+            pageSize={LIST_PAGE_SIZE}
+            totalItems={posts.length}
+            isLoading={isLoading}
+            variant="admin"
+            onPageChange={setListPage}
+          />
         </section>
 
         <section className="admin-panel admin-panel--editor">

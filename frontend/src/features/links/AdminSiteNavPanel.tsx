@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigation, Save } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import { ListPager } from '../../components/ListPager.tsx'
 import {
   createAdminSiteNavItem,
   listAdminSiteNavItems,
@@ -15,6 +16,8 @@ import type {
   AdminSiteNavVisibility,
   SiteNavItemWritePayload,
 } from './types.ts'
+
+const LIST_PAGE_SIZE = 6
 
 type SiteNavForm = {
   title: string
@@ -42,11 +45,24 @@ export function AdminSiteNavPanel() {
   const [selectedSiteId, setSelectedSiteId] = useState<number | null>(null)
   const [siteDraftForm, setSiteDraftForm] = useState<SiteNavForm | null>(null)
   const [siteNotice, setSiteNotice] = useState<string | null>(null)
+  const [listPage, setListPage] = useState(0)
   const sitesQuery = useQuery({
     queryKey: ['admin-site-nav-items'],
     queryFn: listAdminSiteNavItems,
   })
   const sites = useMemo(() => sitesQuery.data?.items ?? [], [sitesQuery.data])
+  const safeListPage = Math.min(
+    listPage,
+    Math.max(0, Math.ceil(sites.length / LIST_PAGE_SIZE) - 1),
+  )
+  const visibleSites = useMemo(
+    () =>
+      sites.slice(
+        safeListPage * LIST_PAGE_SIZE,
+        safeListPage * LIST_PAGE_SIZE + LIST_PAGE_SIZE,
+      ),
+    [safeListPage, sites],
+  )
   const selectedSite = useMemo(
     () =>
       sites.find((site) => site.id === selectedSiteId) ?? sites[0] ?? null,
@@ -102,7 +118,7 @@ export function AdminSiteNavPanel() {
       </p>
       {sitesQuery.isError ? <p className="form-error">导航条目加载失败</p> : null}
       <div className="admin-stack-list">
-        {sites.map((site) => (
+        {visibleSites.map((site) => (
           <button
             className={site.id === selectedSite?.id ? 'active' : undefined}
             key={site.id}
@@ -121,6 +137,14 @@ export function AdminSiteNavPanel() {
           </button>
         ))}
       </div>
+      <ListPager
+        page={safeListPage}
+        pageSize={LIST_PAGE_SIZE}
+        totalItems={sites.length}
+        isLoading={sitesQuery.isLoading}
+        variant="admin"
+        onPageChange={setListPage}
+      />
       {!sitesQuery.isLoading && sites.length === 0 ? (
         <p className="empty-state">还没有导航条目。</p>
       ) : null}

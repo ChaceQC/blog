@@ -23,6 +23,13 @@ type SiteSettingForm = {
   musings: SiteMusing[]
   socialLinks: SiteSocialLink[]
 }
+type SettingSection = 'profile' | 'musings' | 'social'
+
+const settingSectionLabels = {
+  profile: '基础资料',
+  musings: '首页碎念',
+  social: '社交入口',
+} satisfies Record<SettingSection, string>
 
 const initialForm: SiteSettingForm = {
   title: siteSettings.title,
@@ -39,6 +46,7 @@ export function AdminSettingsPage() {
   const queryClient = useQueryClient()
   const [draftForm, setDraftForm] = useState<SiteSettingForm | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [activeSection, setActiveSection] = useState<SettingSection>('profile')
   const { data, isError, isLoading } = useQuery({
     queryKey: ['admin-settings'],
     queryFn: listAdminSettings,
@@ -108,101 +116,123 @@ export function AdminSettingsPage() {
             <small>{notice ?? (isLoading ? '加载中' : '正在使用')}</small>
           </div>
           {isError ? <p className="form-error">设置加载失败</p> : null}
+          <div className="admin-tabs" role="tablist" aria-label="站点资料分区">
+            {(Object.keys(settingSectionLabels) as SettingSection[]).map((section) => (
+              <button
+                aria-selected={activeSection === section}
+                className={activeSection === section ? 'admin-tab active' : 'admin-tab'}
+                key={section}
+                onClick={() => setActiveSection(section)}
+                role="tab"
+                type="button"
+              >
+                {settingSectionLabels[section]}
+              </button>
+            ))}
+          </div>
           <form className="content-form">
-            <div className="form-grid form-grid--two">
-              <label>
-                站点标题
-                <input
-                  onChange={(event) => updateForm('title', event.target.value)}
-                  value={form.title}
-                />
-              </label>
-              <label>
-                站点所有者
-                <input
-                  onChange={(event) => updateForm('owner', event.target.value)}
-                  value={form.owner}
-                />
-              </label>
-            </div>
-            <label>
-              头像 URL
-              <input
-                onChange={(event) => updateForm('avatarUrl', event.target.value)}
-                value={form.avatarUrl}
-              />
-            </label>
-            <label>
-              首页描述
-              <textarea
-                onChange={(event) => updateForm('description', event.target.value)}
-                rows={3}
-                value={form.description}
-              />
-            </label>
-            <label>
-              引文
-              <textarea
-                onChange={(event) => updateForm('quote', event.target.value)}
-                rows={2}
-                value={form.quote}
-              />
-            </label>
-            <div className="field-group">
-              <span className="field-label">首页碎念</span>
-              <div className="musing-editor-list">
-                {form.musings.slice(0, 2).map((musing, index) => (
-                  <div className="musing-editor" key={index}>
-                    <label>
-                      内容
-                      <textarea
-                        onChange={(event) =>
-                          updateMusing(index, 'content', event.target.value)
-                        }
-                        rows={2}
-                        value={musing.content}
-                      />
-                    </label>
-                    <label>
-                      日期
-                      <input
-                        onChange={(event) =>
-                          updateMusing(index, 'date', event.target.value)
-                        }
-                        value={musing.date}
-                      />
-                    </label>
-                  </div>
-                ))}
+            {activeSection === 'profile' ? (
+              <>
+                <div className="form-grid form-grid--two">
+                  <label>
+                    站点标题
+                    <input
+                      onChange={(event) => updateForm('title', event.target.value)}
+                      value={form.title}
+                    />
+                  </label>
+                  <label>
+                    站点所有者
+                    <input
+                      onChange={(event) => updateForm('owner', event.target.value)}
+                      value={form.owner}
+                    />
+                  </label>
+                </div>
+                <label>
+                  头像 URL
+                  <input
+                    onChange={(event) => updateForm('avatarUrl', event.target.value)}
+                    value={form.avatarUrl}
+                  />
+                </label>
+                <label>
+                  首页描述
+                  <textarea
+                    onChange={(event) => updateForm('description', event.target.value)}
+                    rows={3}
+                    value={form.description}
+                  />
+                </label>
+                <label>
+                  引文
+                  <textarea
+                    onChange={(event) => updateForm('quote', event.target.value)}
+                    rows={2}
+                    value={form.quote}
+                  />
+                </label>
+              </>
+            ) : null}
+            {activeSection === 'musings' ? (
+              <div className="field-group">
+                <span className="field-label">首页碎念</span>
+                <div className="musing-editor-list">
+                  {form.musings.slice(0, 2).map((musing, index) => (
+                    <div className="musing-editor" key={index}>
+                      <label>
+                        内容
+                        <textarea
+                          onChange={(event) =>
+                            updateMusing(index, 'content', event.target.value)
+                          }
+                          rows={2}
+                          value={musing.content}
+                        />
+                      </label>
+                      <label>
+                        日期
+                        <input
+                          onChange={(event) =>
+                            updateMusing(index, 'date', event.target.value)
+                          }
+                          value={musing.date}
+                        />
+                      </label>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="field-group">
-              <span className="field-label">首页社交入口</span>
-              <div className="musing-editor-list">
-                {form.socialLinks.map((link, index) => (
-                  <div className="social-link-editor" key={index}>
-                    <label>
-                      名称
-                      <input
-                        onChange={(event) =>
-                          updateSocialLink(index, 'label', event.target.value)
-                        }
-                        value={link.label}
-                      />
-                    </label>
-                    <label>
-                      URL
-                      <input
-                        onChange={(event) =>
-                          updateSocialLink(index, 'url', event.target.value)
-                        }
-                        value={link.url}
-                      />
-                    </label>
-                  </div>
-                ))}
+            ) : null}
+            {activeSection === 'social' ? (
+              <div className="field-group">
+                <span className="field-label">首页社交入口</span>
+                <div className="musing-editor-list">
+                  {form.socialLinks.map((link, index) => (
+                    <div className="social-link-editor" key={index}>
+                      <label>
+                        名称
+                        <input
+                          onChange={(event) =>
+                            updateSocialLink(index, 'label', event.target.value)
+                          }
+                          value={link.label}
+                        />
+                      </label>
+                      <label>
+                        URL
+                        <input
+                          onChange={(event) =>
+                            updateSocialLink(index, 'url', event.target.value)
+                          }
+                          value={link.url}
+                        />
+                      </label>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : null}
           </form>
         </section>
 

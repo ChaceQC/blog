@@ -1,9 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
 
+import { ListPager } from '../../components/ListPager.tsx'
 import { SiteGrid } from '../../features/sites/SiteGrid.tsx'
 import { listPublicSiteItems } from '../../features/sites/api.ts'
+import type { SiteItem } from '../../features/sites/types.ts'
+
+const PAGE_SIZE = 9
+const emptySites: SiteItem[] = []
 
 export function SitesPage() {
+  const [page, setPage] = useState(0)
   const {
     data: sitesData,
     isError,
@@ -12,7 +19,12 @@ export function SitesPage() {
     queryKey: ['public-site-items'],
     queryFn: () => listPublicSiteItems({ limit: 100 }),
   })
-  const sites = sitesData?.items ?? []
+  const sites = sitesData?.items ?? emptySites
+  const safePage = Math.min(page, Math.max(0, Math.ceil(sites.length / PAGE_SIZE) - 1))
+  const visibleSites = useMemo(
+    () => sites.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE),
+    [safePage, sites],
+  )
 
   return (
     <div className="page-flow page-flow--narrow">
@@ -31,7 +43,14 @@ export function SitesPage() {
         {!isLoading && !isError && sites.length === 0 ? (
           <p className="empty-state">还没有公开入口。</p>
         ) : null}
-        <SiteGrid sites={sites} />
+        <SiteGrid sites={visibleSites} />
+        <ListPager
+          page={safePage}
+          pageSize={PAGE_SIZE}
+          totalItems={sites.length}
+          isLoading={isLoading}
+          onPageChange={setPage}
+        />
       </section>
     </div>
   )

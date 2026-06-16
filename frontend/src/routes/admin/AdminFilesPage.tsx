@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { LockKeyhole, Search, UploadCloud } from 'lucide-react'
 import { useMemo, useState, type ChangeEvent } from 'react'
 
+import { ListPager } from '../../components/ListPager.tsx'
 import {
   deleteAdminFile,
   getAdminFileTemporaryUrl,
@@ -22,6 +23,7 @@ const visibilityLabels = {
   private: '私有',
 } satisfies Record<FileVisibility, string>
 const uploadMaxSizeBytes = 30 * 1024 * 1024
+const LIST_PAGE_SIZE = 8
 
 export function AdminFilesPage() {
   const { session } = useAuth()
@@ -34,6 +36,7 @@ export function AdminFilesPage() {
   const [altText, setAltText] = useState('')
   const [articleSlug, setArticleSlug] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
+  const [listPage, setListPage] = useState(0)
   const [temporaryUrls, setTemporaryUrls] = useState<
     Record<number, AdminFileTemporaryUrlResponse>
   >({})
@@ -58,6 +61,18 @@ export function AdminFilesPage() {
       })
     },
     [filesQuery.data, query],
+  )
+  const safeListPage = Math.min(
+    listPage,
+    Math.max(0, Math.ceil(files.length / LIST_PAGE_SIZE) - 1),
+  )
+  const visibleFiles = useMemo(
+    () =>
+      files.slice(
+        safeListPage * LIST_PAGE_SIZE,
+        safeListPage * LIST_PAGE_SIZE + LIST_PAGE_SIZE,
+      ),
+    [files, safeListPage],
   )
   const selectedFile =
     files.find((file) => file.id === selectedId) ?? files[0] ?? null
@@ -163,13 +178,16 @@ export function AdminFilesPage() {
           <label className="admin-search">
             <Search size={16} strokeWidth={1.8} aria-hidden="true" />
             <input
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value)
+                setListPage(0)
+              }}
               placeholder="搜索文件名、MIME 或 key"
               value={query}
             />
           </label>
           <div className="content-list">
-            {files.map((file) => (
+            {visibleFiles.map((file) => (
               <button
                 className={
                   file.id === selectedFile?.id ? 'content-row active' : 'content-row'
@@ -193,6 +211,14 @@ export function AdminFilesPage() {
               </button>
             ))}
           </div>
+          <ListPager
+            page={safeListPage}
+            pageSize={LIST_PAGE_SIZE}
+            totalItems={files.length}
+            isLoading={filesQuery.isLoading}
+            variant="admin"
+            onPageChange={setListPage}
+          />
           {!filesQuery.isLoading && files.length === 0 ? (
             <p className="empty-state">没有匹配的文件。</p>
           ) : null}

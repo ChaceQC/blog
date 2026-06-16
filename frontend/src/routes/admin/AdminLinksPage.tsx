@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import { ListPager } from '../../components/ListPager.tsx'
 import { StatusBadge } from '../../components/StatusBadge.tsx'
 import { AdminSiteNavPanel } from '../../features/links/AdminSiteNavPanel.tsx'
 import {
@@ -23,6 +24,8 @@ import type {
   AdminFriendLinkStatus,
   FriendLinkWritePayload,
 } from '../../features/links/types.ts'
+
+const LIST_PAGE_SIZE = 8
 
 const linkStatusLabels = {
   healthy: '通过',
@@ -56,11 +59,24 @@ export function AdminLinksPage() {
   const [selectedLinkId, setSelectedLinkId] = useState<number | null>(null)
   const [draftForm, setDraftForm] = useState<FriendLinkForm | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [listPage, setListPage] = useState(0)
   const linksQuery = useQuery({
     queryKey: ['admin-friend-links'],
     queryFn: listAdminFriendLinks,
   })
   const links = useMemo(() => linksQuery.data?.items ?? [], [linksQuery.data])
+  const safeListPage = Math.min(
+    listPage,
+    Math.max(0, Math.ceil(links.length / LIST_PAGE_SIZE) - 1),
+  )
+  const visibleLinks = useMemo(
+    () =>
+      links.slice(
+        safeListPage * LIST_PAGE_SIZE,
+        safeListPage * LIST_PAGE_SIZE + LIST_PAGE_SIZE,
+      ),
+    [links, safeListPage],
+  )
   const selectedLink = useMemo(
     () =>
       links.find((link) => link.id === selectedLinkId) ?? links[0] ?? null,
@@ -137,7 +153,7 @@ export function AdminLinksPage() {
           </div>
           {linksQuery.isError ? <p className="form-error">友链列表加载失败</p> : null}
           <div className="content-list">
-            {links.map((link) => (
+            {visibleLinks.map((link) => (
               <button
                 className={
                   link.id === selectedLink?.id ? 'content-row active' : 'content-row'
@@ -158,6 +174,14 @@ export function AdminLinksPage() {
               </button>
             ))}
           </div>
+          <ListPager
+            page={safeListPage}
+            pageSize={LIST_PAGE_SIZE}
+            totalItems={links.length}
+            isLoading={linksQuery.isLoading}
+            variant="admin"
+            onPageChange={setListPage}
+          />
           {!linksQuery.isLoading && links.length === 0 ? (
             <p className="empty-state">还没有待管理的友链。</p>
           ) : null}

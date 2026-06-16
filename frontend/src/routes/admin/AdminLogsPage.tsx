@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 
+import { ListPager } from '../../components/ListPager.tsx'
 import {
   listAccessLogs,
   listLoginLogs,
@@ -12,6 +13,8 @@ import type {
   LoginLogItem,
   SecurityEventItem,
 } from '../../features/logs/types.ts'
+
+const LIST_PAGE_SIZE = 10
 
 type LogTab = 'access' | 'login' | 'security'
 type LogRecord =
@@ -28,6 +31,7 @@ const tabLabels = {
 export function AdminLogsPage() {
   const [activeTab, setActiveTab] = useState<LogTab>('access')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const [listPage, setListPage] = useState(0)
   const accessLogsQuery = useQuery({
     queryKey: ['admin-access-logs'],
     queryFn: listAccessLogs,
@@ -58,8 +62,22 @@ export function AdminLogsPage() {
       item,
     }))
   }, [accessLogsQuery.data, activeTab, loginLogsQuery.data, securityEventsQuery.data])
+  const safeListPage = Math.min(
+    listPage,
+    Math.max(0, Math.ceil(records.length / LIST_PAGE_SIZE) - 1),
+  )
+  const visibleRecords = useMemo(
+    () =>
+      records.slice(
+        safeListPage * LIST_PAGE_SIZE,
+        safeListPage * LIST_PAGE_SIZE + LIST_PAGE_SIZE,
+      ),
+    [records, safeListPage],
+  )
   const selectedRecord =
-    records.find((record) => logKey(record) === selectedKey) ?? records[0] ?? null
+    records.find((record) => logKey(record) === selectedKey) ??
+    visibleRecords[0] ??
+    null
   const activeQuery = {
     access: accessLogsQuery,
     login: loginLogsQuery,
@@ -69,6 +87,7 @@ export function AdminLogsPage() {
   function switchTab(tab: LogTab) {
     setActiveTab(tab)
     setSelectedKey(null)
+    setListPage(0)
   }
 
   return (
@@ -100,7 +119,7 @@ export function AdminLogsPage() {
 
         <div className="log-browser">
           <div className="log-list" role="tabpanel">
-            {records.map((record) => (
+            {visibleRecords.map((record) => (
               <button
                 className={
                   logKey(record) === logKey(selectedRecord)
@@ -120,6 +139,17 @@ export function AdminLogsPage() {
             {!activeQuery.isLoading && records.length === 0 ? (
               <p className="empty-state">暂无{tabLabels[activeTab]}日志。</p>
             ) : null}
+            <ListPager
+              page={safeListPage}
+              pageSize={LIST_PAGE_SIZE}
+              totalItems={records.length}
+              isLoading={activeQuery.isLoading}
+              variant="admin"
+              onPageChange={(nextPage) => {
+                setListPage(nextPage)
+                setSelectedKey(null)
+              }}
+            />
           </div>
 
           <aside className="log-detail">

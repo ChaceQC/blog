@@ -1,9 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
 
+import { ListPager } from '../../components/ListPager.tsx'
 import { FriendLinkList } from '../../features/links/FriendLinkList.tsx'
 import { listPublicFriendLinks } from '../../features/links/api.ts'
+import type { FriendLink } from '../../features/links/types.ts'
+
+const PAGE_SIZE = 8
+const emptyLinks: FriendLink[] = []
 
 export function LinksPage() {
+  const [page, setPage] = useState(0)
   const {
     data: linksData,
     isError,
@@ -12,7 +19,12 @@ export function LinksPage() {
     queryKey: ['public-friend-links'],
     queryFn: () => listPublicFriendLinks({ limit: 100 }),
   })
-  const links = linksData?.items ?? []
+  const links = linksData?.items ?? emptyLinks
+  const safePage = Math.min(page, Math.max(0, Math.ceil(links.length / PAGE_SIZE) - 1))
+  const visibleLinks = useMemo(
+    () => links.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE),
+    [links, safePage],
+  )
 
   return (
     <div className="page-flow page-flow--narrow">
@@ -31,7 +43,14 @@ export function LinksPage() {
         {!isLoading && !isError && links.length === 0 ? (
           <p className="empty-state">还没有公开友链。</p>
         ) : null}
-        <FriendLinkList links={links} />
+        <FriendLinkList links={visibleLinks} />
+        <ListPager
+          page={safePage}
+          pageSize={PAGE_SIZE}
+          totalItems={links.length}
+          isLoading={isLoading}
+          onPageChange={setPage}
+        />
       </section>
     </div>
   )
