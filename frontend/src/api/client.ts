@@ -162,7 +162,7 @@ async function requestJson<T>(
   })
 
   if (!response.ok) {
-    throw new ApiError(response.statusText, response.status)
+    throw new ApiError(await readErrorMessage(response), response.status)
   }
 
   const payload = (await response.json()) as T | EncryptedApiResponse
@@ -173,6 +173,36 @@ async function requestJson<T>(
     return decryptEncryptedResponse<T>(payload, encryption.profile, encryption.session)
   }
   return payload as T
+}
+
+async function readErrorMessage(response: Response): Promise<string> {
+  try {
+    const payload = (await response.clone().json()) as {
+      detail?: unknown
+    }
+    if (typeof payload.detail === 'string') {
+      return payload.detail
+    }
+    if (Array.isArray(payload.detail)) {
+      return payload.detail
+        .map((item) => {
+          if (
+            typeof item === 'object' &&
+            item !== null &&
+            'msg' in item &&
+            typeof item.msg === 'string'
+          ) {
+            return item.msg
+          }
+          return null
+        })
+        .filter((item): item is string => item !== null)
+        .join('；') || response.statusText
+    }
+  } catch {
+    return response.statusText
+  }
+  return response.statusText
 }
 
 function jsonHeaders(

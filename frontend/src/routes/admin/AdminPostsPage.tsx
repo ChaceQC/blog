@@ -14,6 +14,14 @@ import {
   contentStatusLabels,
   postVisibilityLabels,
 } from '../../features/content/contentLabels.ts'
+import {
+  createEmptyPostForm,
+  formatPostSaveError,
+  normalizePostForm,
+  postToForm,
+  postToPreviewInput,
+  slugPattern,
+} from '../../features/content/postForm.ts'
 import { hasAdminPermission } from '../../features/auth/permissions.ts'
 import { useAuth } from '../../features/auth/useAuth.ts'
 
@@ -24,25 +32,14 @@ import type {
   PostVisibility,
 } from '../../features/content/types.ts'
 
-const emptyPostForm: PostFormPayload = {
-  title: '',
-  slug: '',
-  summary: '',
-  content_md: '',
-  status: 'draft',
-  visibility: 'public',
-  seo_title: '',
-  seo_description: '',
-}
 const emptyPosts: AdminPostItem[] = []
-const slugPattern = /^[a-z0-9][a-z0-9_-]*$/
 
 export function AdminPostsPage() {
   const { session } = useAuth()
   const queryClient = useQueryClient()
   const markdownRef = useRef<HTMLTextAreaElement>(null)
   const [selectedId, setSelectedId] = useState<number | 'new'>('new')
-  const [form, setForm] = useState<PostFormPayload>(emptyPostForm)
+  const [form, setForm] = useState<PostFormPayload | null>(null)
   const [previewInput, setPreviewInput] = useState<{
     content_md: string
     slug: string
@@ -58,6 +55,7 @@ export function AdminPostsPage() {
     () => posts.find((post) => post.id === selectedId) ?? null,
     [posts, selectedId],
   )
+  const currentForm = form ?? createEmptyPostForm(posts)
   const canWrite =
     session !== null && hasAdminPermission(session.user, 'post:write')
   const canPublish =
@@ -65,8 +63,8 @@ export function AdminPostsPage() {
   const canPreview =
     session !== null &&
     canWrite &&
-    slugPattern.test(form.slug.trim()) &&
-    form.content_md.trim().length > 0
+    slugPattern.test(currentForm.slug.trim()) &&
+    currentForm.content_md.trim().length > 0
   const previewQuery = useQuery({
     queryKey: [
       'admin-post-preview',
@@ -94,12 +92,12 @@ export function AdminPostsPage() {
 
     const timer = window.setTimeout(() => {
       setPreviewInput({
-        slug: form.slug.trim(),
-        content_md: form.content_md,
+        slug: currentForm.slug.trim(),
+        content_md: currentForm.content_md,
       })
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [canPreview, form.content_md, form.slug])
+  }, [canPreview, currentForm.content_md, currentForm.slug])
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -107,7 +105,7 @@ export function AdminPostsPage() {
         throw new Error('当前账号没有文章写入权限')
       }
 
-      const payload = normalizePostForm(form)
+      const payload = normalizePostForm(currentForm)
       if (selectedPost) {
         return updateAdminPost(selectedPost.id, payload, session.csrfToken)
       }
@@ -117,10 +115,11 @@ export function AdminPostsPage() {
       queryClient.invalidateQueries({ queryKey: ['admin-posts'] })
       setSelectedId(post.id)
       setForm(postToForm(post))
+      setPreviewInput(postToPreviewInput(post))
       setNotice('文章已保存')
     },
     onError: (error) => {
-      setNotice(error instanceof Error ? error.message : '保存失败')
+      setNotice(formatPostSaveError(error))
     },
   })
   const publishMutation = useMutation({
@@ -134,6 +133,7 @@ export function AdminPostsPage() {
       queryClient.invalidateQueries({ queryKey: ['admin-posts'] })
       setSelectedId(post.id)
       setForm(postToForm(post))
+      setPreviewInput(postToPreviewInput(post))
       setNotice('文章已发布')
     },
     onError: (error) => {
@@ -150,7 +150,8 @@ export function AdminPostsPage() {
           className="text-button admin-heading__action"
           onClick={() => {
             setSelectedId('new')
-            setForm(emptyPostForm)
+            setForm(null)
+            setPreviewInput(null)
             setNotice(null)
           }}
           type="button"
@@ -177,6 +178,7 @@ export function AdminPostsPage() {
                   onClick={() => {
                     setSelectedId(post.id)
                     setForm(postToForm(post))
+                    setPreviewInput(postToPreviewInput(post))
                     setNotice(null)
                   }}
                   type="button"
@@ -208,7 +210,7 @@ export function AdminPostsPage() {
               <label>
                 标题
                 <input
-                  value={form.title}
+                  value={currentForm.title}
                   onChange={(event) => updateForm('title', event.target.value)}
                   required
                 />
@@ -216,7 +218,7 @@ export function AdminPostsPage() {
               <label>
                 Slug
                 <input
-                  value={form.slug}
+                  value={currentForm.slug}
                   onChange={(event) => updateForm('slug', event.target.value)}
                   pattern="[a-z0-9][a-z0-9_\-]*"
                   required
@@ -227,7 +229,7 @@ export function AdminPostsPage() {
               <label>
                 状态
                 <select
-                  value={form.status}
+                  value={currentForm.status}
                   onChange={(event) =>
                     updateForm('status', event.target.value as ContentStatus)
                   }
@@ -242,7 +244,7 @@ export function AdminPostsPage() {
               <label>
                 可见性
                 <select
-                  value={form.visibility}
+                  value={currentForm.visibility}
                   onChange={(event) =>
                     updateForm('visibility', event.target.value as PostVisibility)
                   }
@@ -257,15 +259,31 @@ export function AdminPostsPage() {
               <label>
                 SEO 标题
                 <input
-                  value={form.seo_title ?? ''}
+                  value={currentForm.seo_title ?? ''}
                   onChange={(event) => updateForm('seo_title', event.target.value)}
                 />
               </label>
             </div>
             <label>
+              封面文件 ID（文件夹中可复制）
+              <input
+                min={1}
+                placeholder="可留空"
+                type="number"
+                value={currentForm.cover_file_id ?? ''}
+                onChange={(event) => {
+                  const value = event.target.value
+                  updateForm(
+                    'cover_file_id',
+                    value === '' ? null : Number(value),
+                  )
+                }}
+              />
+            </label>
+            <label>
               摘要
               <textarea
-                value={form.summary ?? ''}
+                value={currentForm.summary ?? ''}
                 onChange={(event) => updateForm('summary', event.target.value)}
                 rows={3}
               />
@@ -293,7 +311,7 @@ export function AdminPostsPage() {
               <textarea
                 aria-label="Markdown 正文"
                 ref={markdownRef}
-                value={form.content_md}
+                value={currentForm.content_md}
                 onChange={(event) => updateForm('content_md', event.target.value)}
                 rows={12}
                 required
@@ -302,7 +320,7 @@ export function AdminPostsPage() {
             <label>
               SEO 描述
               <textarea
-                value={form.seo_description ?? ''}
+                value={currentForm.seo_description ?? ''}
                 onChange={(event) => updateForm('seo_description', event.target.value)}
                 rows={2}
               />
@@ -357,16 +375,16 @@ export function AdminPostsPage() {
     key: Key,
     value: PostFormPayload[Key],
   ) {
-    setForm((current) => ({ ...current, [key]: value }))
+    setForm((current) => ({ ...(current ?? currentForm), [key]: value }))
   }
 
   function wrapMarkdownSelection(prefix: string, suffix: string, fallback: string) {
     const textarea = markdownRef.current
-    const start = textarea?.selectionStart ?? form.content_md.length
-    const end = textarea?.selectionEnd ?? form.content_md.length
-    const selectedText = form.content_md.slice(start, end) || fallback
+    const start = textarea?.selectionStart ?? currentForm.content_md.length
+    const end = textarea?.selectionEnd ?? currentForm.content_md.length
+    const selectedText = currentForm.content_md.slice(start, end) || fallback
     const snippet = `${prefix}${selectedText}${suffix}`
-    const nextContent = `${form.content_md.slice(0, start)}${snippet}${form.content_md.slice(end)}`
+    const nextContent = `${currentForm.content_md.slice(0, start)}${snippet}${currentForm.content_md.slice(end)}`
     updateForm('content_md', nextContent)
     window.requestAnimationFrame(() => {
       markdownRef.current?.focus()
@@ -377,31 +395,4 @@ export function AdminPostsPage() {
       )
     })
   }
-}
-
-function postToForm(post: AdminPostItem): PostFormPayload {
-  return {
-    title: post.title,
-    slug: post.slug,
-    summary: post.summary ?? '',
-    content_md: post.content_md,
-    status: post.status,
-    visibility: post.visibility,
-    seo_title: post.seo_title ?? '',
-    seo_description: post.seo_description ?? '',
-  }
-}
-
-function normalizePostForm(form: PostFormPayload): PostFormPayload {
-  return {
-    ...form,
-    summary: nullableText(form.summary),
-    seo_title: nullableText(form.seo_title),
-    seo_description: nullableText(form.seo_description),
-  }
-}
-
-function nullableText(value: string | null): string | null {
-  const trimmed = value?.trim() ?? ''
-  return trimmed === '' ? null : trimmed
 }

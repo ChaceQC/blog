@@ -26,6 +26,7 @@ class FakePost:
     author_id: int
     status: str
     visibility: str
+    cover_file_id: int | None
     word_count: int
     seo_title: str | None
     seo_description: str | None
@@ -50,6 +51,8 @@ class FakeContentRepository:
     def __init__(self) -> None:
         self.posts: list[FakePost] = []
         self.pages: list[FakePage] = []
+        self.file_ids: set[int] = set()
+        self.file_usages: dict[tuple[str, int], list[tuple[int, str]]] = {}
         self.commit_count = 0
 
     async def list_posts(self, *, limit: int, offset: int) -> list[FakePost]:
@@ -84,6 +87,18 @@ class FakeContentRepository:
         post = FakePost(id=len(self.posts) + 1, **payload)
         self.posts.append(post)
         return post
+
+    async def file_exists(self, file_id: int) -> bool:
+        return file_id in self.file_ids
+
+    async def replace_file_usages(
+        self,
+        *,
+        entity_type: str,
+        entity_id: int,
+        usages: list[tuple[int, str]],
+    ) -> None:
+        self.file_usages[(entity_type, entity_id)] = list(usages)
 
     async def list_pages(self, *, limit: int, offset: int) -> list[FakePage]:
         return self.pages[offset : offset + limit]
@@ -120,6 +135,7 @@ async def test_create_post_renders_safe_html_and_counts_words() -> None:
             author_id=1,
             status="draft",
             visibility="public",
+            cover_file_id=None,
             seo_title=None,
             seo_description=None,
         ),
@@ -142,6 +158,7 @@ async def test_create_post_rejects_duplicate_slug() -> None:
         author_id=1,
         status="draft",
         visibility="public",
+        cover_file_id=None,
         seo_title=None,
         seo_description=None,
     )
@@ -190,6 +207,7 @@ async def test_list_public_posts_only_returns_published_public_posts() -> None:
             author_id=1,
             status="published",
             visibility="public",
+            cover_file_id=None,
             seo_title=None,
             seo_description=None,
         ),
@@ -203,6 +221,7 @@ async def test_list_public_posts_only_returns_published_public_posts() -> None:
             author_id=1,
             status="published",
             visibility="hidden",
+            cover_file_id=None,
             seo_title=None,
             seo_description=None,
         ),
@@ -213,3 +232,61 @@ async def test_list_public_posts_only_returns_published_public_posts() -> None:
 
     assert [item.slug for item in posts] == ["public-post"]
     assert post.title == "公开文章"
+
+
+@pytest.mark.anyio
+async def test_create_post_records_cover_and_body_file_usages() -> None:
+    repository = FakeContentRepository()
+    repository.file_ids.update({3, 5})
+    service = ContentService(repository=repository)
+
+    post = await service.create_post(
+        CreatePostCommand(
+            title="带图文章",
+            slug="image-post",
+            summary=None,
+            content_md="![配图](/api/public/posts/image-post/files/5/render)",
+            author_id=1,
+            status="draft",
+            visibility="public",
+            cover_file_id=3,
+            seo_title=None,
+            seo_description=None,
+        ),
+    )
+
+    assert repository.file_usages[("post", post.id)] == [
+        (3, "cover"),
+        (5, "post_body"),
+    ]
+
+
+@pytest.mark.anyio
+async def test_update_post_replaces_file_usages() -> None:
+    repository = FakeContentRepository()
+    repository.file_ids.update({1, 2, 8})
+    service = ContentService(repository=repository)
+    post = await service.create_post(
+        CreatePostCommand(
+            title="旧文章",
+            slug="old-post",
+            summary=None,
+            content_md="![旧图](/api/public/posts/old-post/files/1/render)",
+            author_id=1,
+            status="draft",
+            visibility="public",
+            cover_file_id=2,
+            seo_title=None,
+            seo_description=None,
+        ),
+    )
+
+    await service.update_post(
+        post_id=post.id,
+        changes={
+            "cover_file_id": None,
+            "content_md": "![新图](/api/public/posts/old-post/files/8/render)",
+        },
+    )
+
+    assert repository.file_usages[("post", post.id)] == [(8, "post_body")]

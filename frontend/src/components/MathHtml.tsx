@@ -1,5 +1,5 @@
 import katex from 'katex'
-import { useEffect, useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 
 import { API_BASE_URL } from '../api/config.ts'
 
@@ -11,11 +11,12 @@ type MathHtmlProps = {
 export function MathHtml({ className, html }: MathHtmlProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = containerRef.current
     if (!container) {
       return
     }
+    container.innerHTML = html
 
     container
       .querySelectorAll<HTMLImageElement>('img[src^="/api/"], img[src^="api/"]')
@@ -44,7 +45,6 @@ export function MathHtml({ className, html }: MathHtmlProps) {
   return (
     <div
       className={className}
-      dangerouslySetInnerHTML={{ __html: html }}
       ref={containerRef}
     />
   )

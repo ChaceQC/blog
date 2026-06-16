@@ -743,6 +743,46 @@ img {
   margin: 0;
 }
 
+.post-prose em,
+.content-preview em {
+  font-style: italic;
+}
+
+.post-prose hr,
+.content-preview hr {
+  width: 100%;
+  height: 1px;
+  margin: 4px 0;
+  border: 0;
+  background: var(--color-border);
+}
+
+.post-prose table,
+.content-preview table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.94em;
+}
+
+.post-prose :where(th, td),
+.content-preview :where(th, td) {
+  min-width: 112px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.post-prose th,
+.content-preview th {
+  background: rgba(249, 248, 245, 0.72);
+  color: var(--color-neutral-10);
+  font-weight: 600;
+}
+
 .post-prose a {
   color: var(--color-accent);
   text-decoration: underline;

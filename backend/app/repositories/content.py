@@ -1,9 +1,10 @@
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.content import Page, Post
+from app.models.file import BlogFile, FileUsage
 
 
 class ContentRepository:
@@ -68,6 +69,7 @@ class ContentRepository:
         author_id: int,
         status: str,
         visibility: str,
+        cover_file_id: int | None,
         word_count: int,
         seo_title: str | None,
         seo_description: str | None,
@@ -81,6 +83,7 @@ class ContentRepository:
             author_id=author_id,
             status=status,
             visibility=visibility,
+            cover_file_id=cover_file_id,
             word_count=word_count,
             seo_title=seo_title,
             seo_description=seo_description,
@@ -88,6 +91,40 @@ class ContentRepository:
         self.session.add(post)
         await self.session.flush()
         return post
+
+    async def file_exists(self, file_id: int) -> bool:
+        result = await self.session.execute(
+            select(BlogFile.id).where(
+                BlogFile.id == file_id,
+                BlogFile.deleted_at.is_(None),
+                BlogFile.status == "active",
+            ),
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def replace_file_usages(
+        self,
+        *,
+        entity_type: str,
+        entity_id: int,
+        usages: Sequence[tuple[int, str]],
+    ) -> None:
+        await self.session.execute(
+            delete(FileUsage).where(
+                FileUsage.entity_type == entity_type,
+                FileUsage.entity_id == entity_id,
+            ),
+        )
+        for file_id, purpose in usages:
+            self.session.add(
+                FileUsage(
+                    file_id=file_id,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    purpose=purpose,
+                ),
+            )
+        await self.session.flush()
 
     async def list_pages(self, *, limit: int, offset: int) -> Sequence[Page]:
         result = await self.session.execute(

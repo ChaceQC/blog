@@ -78,6 +78,16 @@
 - 修复后台 Markdown 工具栏点击空白也插入图片语法的问题，将原先包裹按钮的标签结构改为普通字段组，只有点击链接或图片按钮才插入对应语法。
 - 修复开发环境前端渲染 `/api/...` 图片时错误请求前端端口的问题，`MathHtml` 会把相对 API 资源地址转换到配置中的后端 API 地址。
 - 使用本机真实 MySQL 运行库核对文件记录，确认文章引用的文件 `id=6` 指向 `public/2026/06/3d09695ad2e289b5a041f4c8.jpg`；因物理文件缺失导致后台预览 404，已从 `E:\文件\收藏图片\美图\140240924_p0_master1200.jpg` 恢复到上传目录。
+- 后台文章创建、更新和发布流程新增文件使用记录同步：`cover_file_id` 记录为 `cover`，Markdown 正文中的 `/api/public/posts/{slug}/files/{file_id}/render` 引用记录为 `post_body`。
+- 后台文章加密 API schema、前端类型和文章编辑表单已接入 `cover_file_id`，当前先以文件 ID 输入方式衔接现有文件管理页，后续再升级为文件选择器。
+- 后台文章页抽离表单默认值、slug 校验和表单转换工具到 `features/content/postForm.ts`，将页面文件从 407 行降到 391 行。
+- 修复实时预览 KaTeX 渲染后又被覆盖的问题：`MathHtml` 改为在 `useLayoutEffect` 中写入 HTML 并渲染公式，避免 React 后续状态重渲染再次覆盖已处理 DOM。
+- 后端 Markdown 渲染启用表格语法，并放行 sanitize 后的 `table`、`thead`、`tbody`、`tr`、`th`、`td` 标签；前台正文和后台预览补充分隔线、斜体和表格样式。
+- 修复新建文章默认 slug 为空导致保存体验差的问题：新建表单会按当前文章数生成 `post-N`，并跳过已有 slug。
+- 后台文件列表和详情显示文件 ID，详情支持复制 ID，封面文件 ID 输入现在有明确来源。
+- 前端 API client 会读取后端错误 `detail`，文章保存时将 slug 冲突、文件不存在和表单不完整映射为中文提示。
+- 将后台文件详情拆分到 `features/files/FileDetail.tsx`，`AdminFilesPage` 回落到 291 行；`AdminPostsPage` 保持 398 行。
+- 同步根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，标记公开文件栏已完成，并更新文件引用追踪与后续计划。
 
 ### 进行中
 
@@ -89,16 +99,16 @@
 - 当前限流器为单进程内存实现，适合 M1 单进程验证；生产多进程、多实例或横向扩展前，需要替换为 Redis 等共享存储适配器。
 - 应用层加密协商已改为数据库保存短期会话密钥；仍需补充过期会话定时清理和更多审计记录。
 - 公开文章、友链和站点目录已接入真实 Public API，但仍需补充更多端到端数据联调和公开空态视觉核验。
-- 文件管理已形成列表、上传、软删除、公开短时链接、文章正文图片渲染和后台签名预览最小闭环；公开文件栏、文章封面、正文图片引用追踪的结构化维护、私有文件鉴权下载和物理清理任务仍需继续补齐。
+- 文件管理已形成列表、上传、软删除、公开文件栏、公开短时链接、文章正文图片渲染、后台签名预览、文章封面和正文图片使用记录最小闭环；私有文件鉴权下载、更多使用场景引用追踪、封面选择器、前台封面展示和物理清理任务仍需继续补齐。
 - 本次已启动前后端和本机 MySQL 临时库完成真实登录、加密协商、文章创建、文章发布和页面创建联调；联调后按要求关闭前后端开发服务。
 - 本次按用户最新要求，完成可验证小步后自动 commit 并 push。
 
 ### 下一步
 
-- 继续补齐公开文件栏，只展示 `public_listed` 的公开文件，并让下载按钮按当前 session 生成短时签名链接。
-- 继续将文件管理接入文章封面、正文图片引用追踪的结构化维护和私有文件鉴权下载。
+- 继续将文件管理接入私有文件鉴权下载、更多使用场景引用追踪和物理清理任务。
+- 将文章封面从手填文件 ID 升级为后台文件选择器，并在前台列表与详情中展示封面。
 - 补充加密会话过期清理任务，并评估 Redis 限流适配器。
-- 使用真实 MySQL 运行库继续做“后台上传图片 -> 复制文章引用 -> 文章实时预览 -> 发布文章 -> 前台首页、列表、详情图片可见 -> 后台日志可查”的端到端联调。
+- 使用真实 MySQL 运行库继续做“后台上传图片 -> 复制文章引用 -> 设置封面 -> 文章实时预览 -> 发布文章 -> 前台首页、列表、详情图片可见 -> 公开文件栏下载 -> 后台日志可查”的端到端联调。
 
 ### 验证
 
@@ -165,6 +175,13 @@
 - 公开加密、文件访问与日志接入后已重新运行 `uv run pytest`，69 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 公开加密、文件访问与日志接入后已重新运行 `npm.cmd run lint`，通过。
 - 公开加密、文件访问与日志接入后已重新运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
+- 本次文章文件使用记录小步已运行 `uv run pytest tests\test_content_service.py tests\test_admin_content_api.py tests\test_admin_files_api.py`，20 个测试通过；仍存在 FastAPI TestClient 与 Starlette cookies 弃用警告。
+- 本次文章文件使用记录小步已运行 `npm.cmd run lint`，通过。
+- 本次实时预览覆盖修复后已运行 `npm.cmd run lint`，通过。
+- 本次实时预览覆盖修复后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
+- 本次 Markdown 表格、默认 slug、文件 ID 来源和保存错误提示修复后已运行 `uv run pytest tests\test_markdown_provider.py tests\test_content_service.py tests\test_admin_content_api.py tests\test_admin_files_api.py`，25 个测试通过；仍存在 FastAPI TestClient 与 Starlette cookies 弃用警告。
+- 本次 Markdown 表格、默认 slug、文件 ID 来源和保存错误提示修复后已运行 `npm.cmd run lint`，通过。
+- 本次 Markdown 表格、默认 slug、文件 ID 来源和保存错误提示修复后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - 文章实时预览、签名图片预览和站点资料接入后已重新运行 `uv run ruff check .`，通过。
 - 文章实时预览、签名图片预览和站点资料接入后已重新运行 `uv run pytest`，69 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 文章实时预览、签名图片预览和站点资料接入后已重新运行 `npm.cmd run lint`，通过。

@@ -11,6 +11,7 @@ export type AdminPostItem = {
   content_html: string
   status: ContentStatus
   visibility: PostVisibility
+  cover_file_id: number | null
   author_id: number
   word_count: number
   seo_title: string | null
@@ -59,6 +60,7 @@ export type PostFormPayload = {
   content_md: string
   status: ContentStatus
   visibility: PostVisibility
+  cover_file_id: number | null
   seo_title: string | null
   seo_description: string | null
 }

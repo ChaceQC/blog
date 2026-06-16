@@ -30,6 +30,7 @@ from app.schemas.content import (
 from app.schemas.encryption import EncryptedApiRequest, EncryptedApiResponse
 from app.services.auth import AuthenticatedUser
 from app.services.content import (
+    ContentFileNotFoundError,
     ContentNotFoundError,
     ContentSlugExistsError,
     CreatePageCommand,
@@ -101,12 +102,15 @@ async def create_post(
                 author_id=current_user.id,
                 status=post_payload.status,
                 visibility=post_payload.visibility,
+                cover_file_id=post_payload.cover_file_id,
                 seo_title=post_payload.seo_title,
                 seo_description=post_payload.seo_description,
             ),
         )
     except ContentSlugExistsError as exc:
         raise _slug_conflict("post slug already exists") from exc
+    except ContentFileNotFoundError as exc:
+        raise _not_found("file not found") from exc
 
     return await _content_response(
         AdminPostItem.model_validate(post),
@@ -193,6 +197,8 @@ async def update_post(
         raise _not_found("post not found") from exc
     except ContentSlugExistsError as exc:
         raise _slug_conflict("post slug already exists") from exc
+    except ContentFileNotFoundError as exc:
+        raise _not_found("file not found") from exc
 
     return await _content_response(
         AdminPostItem.model_validate(post),
@@ -214,6 +220,8 @@ async def publish_post(
         post = await service.publish_post(post_id)
     except ContentNotFoundError as exc:
         raise _not_found("post not found") from exc
+    except ContentFileNotFoundError as exc:
+        raise _not_found("file not found") from exc
 
     return await _content_response(
         AdminPostItem.model_validate(post),

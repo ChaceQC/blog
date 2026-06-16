@@ -1,3 +1,4 @@
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -12,6 +13,10 @@ class ContentNotFoundError(Exception):
 
 
 class ContentSlugExistsError(Exception):
+    pass
+
+
+class ContentFileNotFoundError(Exception):
     pass
 
 
@@ -37,10 +42,21 @@ class ContentRepositoryProtocol(Protocol):
         author_id: int,
         status: str,
         visibility: str,
+        cover_file_id: int | None,
         word_count: int,
         seo_title: str | None,
         seo_description: str | None,
     ) -> Post: ...
+
+    async def file_exists(self, file_id: int) -> bool: ...
+
+    async def replace_file_usages(
+        self,
+        *,
+        entity_type: str,
+        entity_id: int,
+        usages: Sequence[tuple[int, str]],
+    ) -> None: ...
 
     async def list_pages(self, *, limit: int, offset: int) -> Sequence[Page]: ...
 
@@ -76,6 +92,7 @@ class CreatePostCommand:
     author_id: int
     status: str
     visibility: str
+    cover_file_id: int | None
     seo_title: str | None
     seo_description: str | None
 
@@ -131,12 +148,14 @@ class ContentService:
             author_id=command.author_id,
             status=command.status,
             visibility=command.visibility,
+            cover_file_id=command.cover_file_id,
             word_count=count_words(command.content_md),
             seo_title=command.seo_title,
             seo_description=command.seo_description,
         )
         if command.status == "published":
             post.published_at = utc_now()
+        await self._sync_post_file_usages(post)
         await self.repository.commit()
         await self.repository.refresh(post)
         return post
@@ -156,6 +175,7 @@ class ContentService:
             "summary",
             "status",
             "visibility",
+            "cover_file_id",
             "seo_title",
             "seo_description",
         ):
@@ -169,6 +189,7 @@ class ContentService:
 
         if post.status == "published" and post.published_at is None:
             post.published_at = utc_now()
+        await self._sync_post_file_usages(post)
         await self.repository.commit()
         await self.repository.refresh(post)
         return post
@@ -177,6 +198,7 @@ class ContentService:
         post = await self.get_post(post_id)
         post.status = "published"
         post.published_at = utc_now()
+        await self._sync_post_file_usages(post)
         await self.repository.commit()
         await self.repository.refresh(post)
         return post
@@ -249,3 +271,45 @@ class ContentService:
         page = await self.repository.get_page_by_slug(slug)
         if page is not None and page.id != current_id:
             raise ContentSlugExistsError("page slug already exists")
+
+    async def _sync_post_file_usages(self, post: Post) -> None:
+        usages = _build_post_file_usages(
+            content_md=post.content_md,
+            cover_file_id=post.cover_file_id,
+        )
+        for file_id, _ in usages:
+            if not await self.repository.file_exists(file_id):
+                raise ContentFileNotFoundError("referenced file not found")
+        await self.repository.replace_file_usages(
+            entity_type="post",
+            entity_id=post.id,
+            usages=usages,
+        )
+
+
+def _build_post_file_usages(
+    *,
+    content_md: str,
+    cover_file_id: int | None,
+) -> list[tuple[int, str]]:
+    usages: list[tuple[int, str]] = []
+    if cover_file_id is not None:
+        usages.append((cover_file_id, "cover"))
+
+    for file_id in _extract_post_body_file_ids(content_md):
+        usages.append((file_id, "post_body"))
+
+    seen: set[tuple[int, str]] = set()
+    deduped: list[tuple[int, str]] = []
+    for usage in usages:
+        if usage not in seen:
+            seen.add(usage)
+            deduped.append(usage)
+    return deduped
+
+
+def _extract_post_body_file_ids(content_md: str) -> list[int]:
+    pattern = re.compile(
+        r"/?api/public/posts/[a-z0-9][a-z0-9_-]*/files/(?P<file_id>\d+)/render",
+    )
+    return [int(match.group("file_id")) for match in pattern.finditer(content_md)]

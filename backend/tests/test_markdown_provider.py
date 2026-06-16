@@ -8,6 +8,23 @@ def test_markdown_renderer_outputs_basic_markdown_html() -> None:
     assert "<p>正文</p>" in html
 
 
+def test_markdown_renderer_outputs_emphasis_table_and_hr() -> None:
+    html = MarkdownRenderer().render(
+        "*斜体*\n\n"
+        "---\n\n"
+        "First Header | Second Header | Third Header\n"
+        "------------ | ------------- | ------------\n"
+        "Content Cell | Content Cell | Content Cell",
+    )
+
+    assert "<em>斜体</em>" in html
+    assert "<hr>" in html
+    assert "<table>" in html
+    assert "<th>First Header</th>" in html
+    assert "<th>Third Header</th>" in html
+    assert "<td>Content Cell</td>" in html
+
+
 def test_markdown_renderer_keeps_latex_math_nodes() -> None:
     html = MarkdownRenderer().render("行内 $E=mc^2$\n\n$$\\int_0^1 x dx$$")
 

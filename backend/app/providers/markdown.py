@@ -23,6 +23,12 @@ ALLOWED_TAGS = {
     "pre",
     "span",
     "strong",
+    "table",
+    "tbody",
+    "td",
+    "th",
+    "thead",
+    "tr",
     "ul",
 }
 ALLOWED_ATTRIBUTES = {
@@ -38,8 +44,10 @@ MATH_CLASSES = {"math", "inline", "block"}
 
 class MarkdownRenderer:
     def __init__(self) -> None:
-        self._markdown = MarkdownIt("commonmark", {"html": False}).use(
-            dollarmath_plugin,
+        self._markdown = (
+            MarkdownIt("commonmark", {"html": False})
+            .enable("table")
+            .use(dollarmath_plugin)
         )
         self._cleaner = bleach.Cleaner(
             tags=ALLOWED_TAGS,

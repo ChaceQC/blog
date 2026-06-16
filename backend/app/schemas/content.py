@@ -15,6 +15,7 @@ class PostCreateRequest(BaseModel):
     content_md: str = Field(min_length=1)
     status: ContentStatus = "draft"
     visibility: PostVisibility = "public"
+    cover_file_id: int | None = Field(default=None, ge=1)
     seo_title: str | None = Field(default=None, max_length=255)
     seo_description: str | None = Field(default=None, max_length=500)
 
@@ -33,6 +34,7 @@ class PostUpdateRequest(BaseModel):
     content_md: str | None = Field(default=None, min_length=1)
     status: ContentStatus | None = None
     visibility: PostVisibility | None = None
+    cover_file_id: int | None = Field(default=None, ge=1)
     seo_title: str | None = Field(default=None, max_length=255)
     seo_description: str | None = Field(default=None, max_length=500)
 
@@ -61,6 +63,7 @@ class AdminPostItem(BaseModel):
     content_html: str
     status: str
     visibility: str
+    cover_file_id: int | None
     author_id: int
     word_count: int
     seo_title: str | None
