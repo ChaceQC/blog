@@ -71,6 +71,8 @@ uv run python -m app.cli --help
 uv run python -m app.cli cleanup-encryption-sessions
 uv run python -m app.cli cleanup-deleted-files --older-than-days 7 --limit 100
 uv run python -m app.cli cleanup-orphan-files --limit 1000
+$env:BLOG_TEST_REDIS_URL='redis://127.0.0.1:6379/15'
+uv run pytest tests/test_rate_limit_redis_integration.py
 ```
 
 前端：

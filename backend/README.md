@@ -20,6 +20,8 @@ uv run python -m app.cli --help
 uv run python -m app.cli cleanup-encryption-sessions
 uv run python -m app.cli cleanup-deleted-files --older-than-days 7 --limit 100
 uv run python -m app.cli cleanup-orphan-files --limit 1000
+$env:BLOG_TEST_REDIS_URL='redis://127.0.0.1:6379/15'
+uv run pytest tests/test_rate_limit_redis_integration.py
 ```
 
 本地端口、数据库连接、CORS 和上传目录都来自 `.env`，不要写死在代码里。
@@ -46,7 +48,7 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 - `GET /api/admin/login-logs`：后台登录日志，需要 `audit_log:read` 权限和 `sensitive-v1` 加密会话。
 - `GET /api/admin/security-events`：安全事件日志，需要 `audit_log:read` 权限和 `sensitive-v1` 加密会话。
 
-登录入口和加密协商入口已接入可配置限流，命中后返回 `429` 并写入 `security_events`。阈值通过 `BLOG_ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_MAX_ATTEMPTS` 和 `BLOG_ENCRYPTION_SESSION_RATE_LIMIT_WINDOW_SECONDS` 配置。限流后端通过 `BLOG_RATE_LIMIT_BACKEND` 配置，默认本地开发使用 `memory`，生产示例使用 `redis` 和 `BLOG_REDIS_URL=redis://redis:6379/0`。Redis 适配器使用 sorted set 与 Lua 脚本保证单次命中检查原子性；如果 Redis 连接异常，会按相同 key 回落到进程内限流器，避免入口完全失去保护。
+登录入口和加密协商入口已接入可配置限流，命中后返回 `429` 并写入 `security_events`。阈值通过 `BLOG_ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_MAX_ATTEMPTS` 和 `BLOG_ENCRYPTION_SESSION_RATE_LIMIT_WINDOW_SECONDS` 配置。限流后端通过 `BLOG_RATE_LIMIT_BACKEND` 配置，默认本地开发使用 `memory`，生产示例使用 `redis` 和 `BLOG_REDIS_URL=redis://redis:6379/0`。Redis 适配器使用 sorted set 与 Lua 脚本保证单次命中检查原子性，并显式使用 RESP2 以兼容 Redis 5 与 Redis 7；如果 Redis 连接异常，会按相同 key 回落到进程内限流器，避免入口完全失去保护。真实 Redis 集成测试默认跳过，设置 `BLOG_TEST_REDIS_URL` 后会验证后台登录和加密协商入口的 `429`、`Retry-After` 与安全事件记录。
 
 ## 后台维护任务
 

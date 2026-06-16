@@ -65,10 +65,13 @@
 - 新增 `deploy/systemd` 维护任务调度示例，包含过期加密会话清理、软删除文件清理和孤儿文件 dry-run 扫描的 service/timer。
 - 调度建议为：过期加密会话每小时清理；软删除文件每天 03:20 清理超过 7 天、无引用且路径安全的文件；孤儿文件每周日 04:10 只 dry-run 扫描，真实删除仍需人工确认后显式执行 `--delete`。
 - 同步更新根目录 `README.md`、后端 `README.md`、部署 `README.md` 和 `PROJECT_PLAN.md`，记录 systemd timer 安装方式、默认部署路径 `/opt/blog` 和孤儿文件人工删除要求。
+- 新增真实 Redis 集成测试 `tests/test_rate_limit_redis_integration.py`，默认未设置 `BLOG_TEST_REDIS_URL` 时跳过；设置后会验证后台加密协商入口和后台登录入口在 Redis 共享限流后端下返回 429、携带 `Retry-After` 并记录安全事件。
+- 将 Redis 客户端初始化显式设置为 RESP2 协议，兼容本次临时 Windows Redis 5 和生产 Docker Redis 7。
+- 由于 Docker Desktop daemon 未运行且本机 `wsl --update` 返回 403，本次改用一次性下载的 Windows Redis `v5.0.14.1` zip 在 `127.0.0.1:16379` 验证真实 Redis 集成测试；验证后已关闭 Redis 进程并删除临时目录。
 
 ### 进行中
 
-- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；软删除文件物理清理、孤儿文件清理、真实 MySQL 临时库闭环验证、Redis 共享限流适配器和维护任务 systemd timer 示例已完成，下一步切到真实 Redis 限流联调。
+- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；软删除文件物理清理、孤儿文件清理、真实 MySQL 临时库闭环验证、Redis 共享限流适配器、维护任务 systemd timer 示例和真实 Redis 限流联调已完成，下一步切到真实运行库的文件与文章发布链路验证。
 
 ### 阻塞与风险
 
@@ -78,12 +81,11 @@
 - 实际执行 `cleanup-deleted-files` 会删除当前配置数据库中的软删记录和本地物理文件；本次只跑服务层单元测试和 CLI 可见性检查，未在未确认目标库与上传目录的情况下直接运行清理命令。
 - `cleanup-orphan-files` 默认 dry-run 不删除文件；显式加 `--delete` 会删除当前配置上传目录中的孤儿文件，本次未在未确认目标库与上传目录的情况下执行真实删除。
 - 本次真实清理验证仅使用 `blog_codex_cleanup_verify`、`blog_codex_cleanup_cli_verify` 和对应临时上传目录，未触碰当前运行库 `blog_codex_runtime`；MySQL 对重复 `DROP DATABASE IF EXISTS` 输出过一次“database doesn't exist”提示，但最终复查临时库和临时目录均不存在。
-- Redis 共享限流已通过单元测试覆盖；本次未启动真实 Redis 服务做 HTTP 入口联调，下一步需要用 Docker Compose 私有 Redis 或本机 Redis 验证后台登录和加密协商入口真实 429、`Retry-After` 与安全事件记录。
 - systemd timer 示例默认 `WorkingDirectory=/opt/blog`，如果实际部署目录不同，安装前必须修改 `deploy/systemd/*.service`；孤儿文件 timer 只 dry-run，不自动执行 `--delete`。
+- Docker Desktop daemon 当前不可用，`wsl --update` 返回 403；本次已用临时 Windows Redis 完成真实 Redis 联调，后续若要验证 Docker Compose 私有 Redis，需要先修复 Docker/WSL 环境。
 
 ### 下一步
 
-- 使用真实 Redis 或 Docker Compose 私有 Redis 验证后台登录和加密协商入口限流在共享后端下的 429、`Retry-After` 与安全事件记录。
 - 使用真实 MySQL 运行库验证上传图片、选择封面、发布文章、前台封面展示、正文图片渲染、公开文件栏下载和后台访问日志查询。
 
 ### 验证
@@ -139,6 +141,15 @@
 - 维护任务 systemd 示例接入后已重新运行 `docker compose -f deploy\docker-compose.yml -f deploy\docker-compose.prod.yml config --quiet`，配置可展开。
 - 维护任务 systemd 示例接入后已重新运行 `git diff --check`，未发现空白或行尾问题。
 - 本机 Windows 环境没有 `systemd-analyze`，未能执行 systemd 原生 `verify`；已用文本结构检查覆盖示例文件关键字段，生产 Debian 上安装前仍建议运行 `systemd-analyze verify deploy/systemd/*.service deploy/systemd/*.timer`。
+- 真实 Redis 集成测试接入后已运行 `uv run ruff check .`，通过。
+- 未设置 `BLOG_TEST_REDIS_URL` 时已运行 `uv run pytest tests\test_rate_limit_redis_integration.py`，2 个测试按预期跳过；仍存在 FastAPI TestClient 上游弃用警告。
+- 已下载一次性 Windows Redis `v5.0.14.1` zip 到临时目录并启动在 `127.0.0.1:16379`，设置 `BLOG_TEST_REDIS_URL=redis://127.0.0.1:16379/15` 后运行 `uv run pytest tests\test_rate_limit_redis_integration.py`，2 个测试通过；仍存在 FastAPI TestClient 上游弃用警告。
+- 真实 Redis 集成测试结束后已确认没有 `redis-server` 遗留进程，临时目录 `%TEMP%\codex-blog-redis-verify` 不存在。
+- 已重新运行后端全量 `uv run pytest`，87 个测试通过、2 个真实 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI TestClient 与 per-request cookies 的上游弃用警告。
+- 真实 Redis 集成测试文档同步后已重新运行 `uv run ruff check .`，通过。
+- 真实 Redis 集成测试文档同步后已重新运行 `uv run pytest tests\test_rate_limit.py tests\test_rate_limit_redis_integration.py`，5 个测试通过、2 个真实 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI TestClient 上游弃用警告。
+- 真实 Redis 集成测试文档同步后已重新运行 `docker compose -f deploy\docker-compose.yml -f deploy\docker-compose.prod.yml config --quiet`，配置可展开。
+- 真实 Redis 集成测试文档同步后已重新运行 `git diff --check`，未发现空白或行尾问题。
 
 ## 2026-06-16
 
