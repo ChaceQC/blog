@@ -60,7 +60,7 @@ uv run python -m app.cli cleanup-orphan-files --limit 1000
 uv run python -m app.cli cleanup-orphan-files --limit 1000 --delete
 ```
 
-`cleanup-encryption-sessions` 会删除 `encryption_sessions` 中已过期的会话记录，并输出清理数量。`cleanup-deleted-files` 只清理已软删除、超过保留天数、没有 `file_usages` 引用且 object key 解析后仍位于 `BLOG_UPLOAD_ROOT` 内的本地文件；物理文件缺失时会清理对应数据库软删记录，路径不安全或仍有引用时会跳过。默认保留 7 天，单次最多扫描 100 条。`cleanup-orphan-files` 扫描 `BLOG_UPLOAD_ROOT` 下 `public` 与 `private` 目录中的本地文件，找出没有 active/deleted 数据库记录的孤儿文件；默认只 dry-run 汇总并展示示例，只有显式传入 `--delete` 才会删除，单次默认最多扫描 1000 个本地文件。后续友链健康检查和 sitemap 刷新也应沿用同一类维护任务入口。
+`cleanup-encryption-sessions` 会删除 `encryption_sessions` 中已过期的会话记录，并输出清理数量。`cleanup-deleted-files` 只清理已软删除、超过保留天数、没有 `file_usages` 引用且 object key 解析后仍位于 `BLOG_UPLOAD_ROOT` 内的本地文件；物理文件缺失时会清理对应数据库软删记录，路径不安全或仍有引用时会跳过。默认保留 7 天，单次最多扫描 100 条。`cleanup-orphan-files` 扫描 `BLOG_UPLOAD_ROOT` 下 `public` 与 `private` 目录中的本地文件，找出没有 active/deleted 数据库记录的孤儿文件；默认只 dry-run 汇总并展示示例，只有显式传入 `--delete` 才会删除，单次默认最多扫描 1000 个本地文件。生产部署可使用 `deploy/systemd` 中的 timer 示例：加密会话每小时清理、软删除文件每天清理、孤儿文件每周 dry-run 扫描。后续友链健康检查和 sitemap 刷新也应沿用同一类维护任务入口。
 
 ## 后台内容管理
 

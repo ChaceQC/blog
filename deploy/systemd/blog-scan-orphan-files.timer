@@ -1,0 +1,11 @@
+[Unit]
+Description=Run blog orphan file dry-run scan weekly
+
+[Timer]
+OnCalendar=Sun *-*-* 04:10:00
+Persistent=true
+RandomizedDelaySec=30m
+Unit=blog-scan-orphan-files.service
+
+[Install]
+WantedBy=timers.target

@@ -62,10 +62,13 @@
 - Redis 适配器在连接异常时会按同一限流 key 回落到进程内限流器，避免 Redis 短暂不可用导致后台登录或加密协商入口完全失去保护。
 - 补充 Redis 限流单元测试，覆盖共享窗口拦截和 Redis 异常时的内存降级。
 - 同步更新根目录 `README.md`、后端 `README.md`、`PROJECT_PLAN.md` 和环境变量示例，标记 Redis 共享限流适配器已接入。
+- 新增 `deploy/systemd` 维护任务调度示例，包含过期加密会话清理、软删除文件清理和孤儿文件 dry-run 扫描的 service/timer。
+- 调度建议为：过期加密会话每小时清理；软删除文件每天 03:20 清理超过 7 天、无引用且路径安全的文件；孤儿文件每周日 04:10 只 dry-run 扫描，真实删除仍需人工确认后显式执行 `--delete`。
+- 同步更新根目录 `README.md`、后端 `README.md`、部署 `README.md` 和 `PROJECT_PLAN.md`，记录 systemd timer 安装方式、默认部署路径 `/opt/blog` 和孤儿文件人工删除要求。
 
 ### 进行中
 
-- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；软删除文件物理清理、孤儿文件清理、真实 MySQL 临时库闭环验证和 Redis 共享限流适配器已完成，下一步补充维护任务定时调度建议与真实 Redis 限流联调。
+- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；软删除文件物理清理、孤儿文件清理、真实 MySQL 临时库闭环验证、Redis 共享限流适配器和维护任务 systemd timer 示例已完成，下一步切到真实 Redis 限流联调。
 
 ### 阻塞与风险
 
@@ -76,10 +79,10 @@
 - `cleanup-orphan-files` 默认 dry-run 不删除文件；显式加 `--delete` 会删除当前配置上传目录中的孤儿文件，本次未在未确认目标库与上传目录的情况下执行真实删除。
 - 本次真实清理验证仅使用 `blog_codex_cleanup_verify`、`blog_codex_cleanup_cli_verify` 和对应临时上传目录，未触碰当前运行库 `blog_codex_runtime`；MySQL 对重复 `DROP DATABASE IF EXISTS` 输出过一次“database doesn't exist”提示，但最终复查临时库和临时目录均不存在。
 - Redis 共享限流已通过单元测试覆盖；本次未启动真实 Redis 服务做 HTTP 入口联调，下一步需要用 Docker Compose 私有 Redis 或本机 Redis 验证后台登录和加密协商入口真实 429、`Retry-After` 与安全事件记录。
+- systemd timer 示例默认 `WorkingDirectory=/opt/blog`，如果实际部署目录不同，安装前必须修改 `deploy/systemd/*.service`；孤儿文件 timer 只 dry-run，不自动执行 `--delete`。
 
 ### 下一步
 
-- 补充维护任务定时调度配置建议，明确 `cleanup-encryption-sessions`、`cleanup-deleted-files`、`cleanup-orphan-files` 的 cron 或 systemd timer 示例和执行频率。
 - 使用真实 Redis 或 Docker Compose 私有 Redis 验证后台登录和加密协商入口限流在共享后端下的 429、`Retry-After` 与安全事件记录。
 - 使用真实 MySQL 运行库验证上传图片、选择封面、发布文章、前台封面展示、正文图片渲染、公开文件栏下载和后台访问日志查询。
 
@@ -132,6 +135,10 @@
 - Redis 限流适配器接入后已重新运行后端全量 `uv run pytest`，87 个测试通过；仍存在 FastAPI TestClient 与 per-request cookies 的上游弃用警告。
 - Redis 限流适配器接入后已运行 `docker compose -f deploy\docker-compose.yml -f deploy\docker-compose.prod.yml config --quiet`，配置可展开。
 - Redis 限流适配器接入后已运行 `git diff --check`，未发现空白或行尾问题。
+- 维护任务 systemd 示例接入后已运行文本结构检查，确认 3 个 service 与 3 个 timer 均包含必要 section、调度时间、`WorkingDirectory=/opt/blog` 和预期 CLI 命令，且孤儿文件扫描 service 未包含 `--delete`。
+- 维护任务 systemd 示例接入后已重新运行 `docker compose -f deploy\docker-compose.yml -f deploy\docker-compose.prod.yml config --quiet`，配置可展开。
+- 维护任务 systemd 示例接入后已重新运行 `git diff --check`，未发现空白或行尾问题。
+- 本机 Windows 环境没有 `systemd-analyze`，未能执行 systemd 原生 `verify`；已用文本结构检查覆盖示例文件关键字段，生产 Debian 上安装前仍建议运行 `systemd-analyze verify deploy/systemd/*.service deploy/systemd/*.timer`。
 
 ## 2026-06-16
 

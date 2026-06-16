@@ -1,0 +1,11 @@
+[Unit]
+Description=Run blog expired encryption session cleanup hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=5m
+Unit=blog-cleanup-encryption-sessions.service
+
+[Install]
+WantedBy=timers.target
