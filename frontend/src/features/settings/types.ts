@@ -24,4 +24,16 @@ export type PublicSiteProfile = {
   avatar_url: string
   description: string
   quote: string
+  musings: SiteMusing[]
+  social_links: SiteSocialLink[]
+}
+
+export type SiteMusing = {
+  content: string
+  date: string
+}
+
+export type SiteSocialLink = {
+  label: string
+  url: string
 }

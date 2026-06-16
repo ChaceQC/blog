@@ -36,5 +36,7 @@ class PublicSiteProfileResponse(BaseModel):
     avatar_url: str
     description: str
     quote: str
+    musings: list[dict[str, str]]
+    social_links: list[dict[str, str]]
 
     model_config = ConfigDict(extra="forbid")

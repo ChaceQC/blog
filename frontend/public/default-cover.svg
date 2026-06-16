@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" role="img" aria-label="Default article cover">
+  <rect width="960" height="640" fill="#fefefb"/>
+  <g opacity=".55">
+    <circle cx="188" cy="458" r="158" fill="#f0efeb"/>
+    <circle cx="704" cy="176" r="190" fill="#f5e7ea"/>
+    <circle cx="562" cy="498" r="132" fill="#edf2f7"/>
+  </g>
+  <g stroke="#c7d2e8" stroke-width="2" opacity=".72">
+    <path d="M178 0 144 128"/>
+    <path d="M310 70 276 198"/>
+    <path d="M470 18 436 146"/>
+    <path d="M696 66 662 194"/>
+    <path d="M826 0 792 128"/>
+    <path d="M120 344 86 472"/>
+    <path d="M364 326 330 454"/>
+    <path d="M596 306 562 434"/>
+    <path d="M818 342 784 470"/>
+  </g>
+  <g fill="none" stroke="#c56473" stroke-width="3" opacity=".55">
+    <path d="M352 326c58-44 176-44 234 0"/>
+    <path d="M352 326c58 44 176 44 234 0"/>
+  </g>
+  <text x="480" y="292" text-anchor="middle" font-family="Georgia, serif" font-size="42" fill="#403f3a">Writing</text>
+  <text x="480" y="350" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="18" letter-spacing="5" fill="#787670">QUIET NOTES</text>
+</svg>

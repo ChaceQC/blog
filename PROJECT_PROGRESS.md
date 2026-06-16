@@ -4,6 +4,16 @@
 
 ### 已完成
 
+- 按用户要求将首页“近期笔墨”限制为最多 3 篇。
+- 文章列表页改为每页 5 篇，超过 5 篇时显示上一页/下一页分页控件。
+- 首页“碎念”已并入 `site_profile.musings`，后台“站点资料”页可编辑两条碎念内容和日期。
+- 首页社交入口已并入 `site_profile.social_links`，后台“站点资料”页可编辑入口名称和 URL。
+- 新增前端默认文章封面 `frontend/public/default-cover.svg`，无封面文章在列表和详情页都会加载默认封面，保持文章列表对齐。
+- 新增后台图片缩略图接口 `/api/admin/files/{file_id}/thumbnail`，使用 Pillow 按需生成并缓存 360px 缩略图，封面选择器只加载缩略图，避免在后台列表中传输原图。
+- 优化后台文章封面选择器：增加文件名搜索、每页 8 张分页和缩略图预览，避免图片数量变多后产生过长选项列表。
+- 新增公开文章图片缩略图接口 `/api/public/posts/{slug}/files/{file_id}/thumbnail`，公开文章列表和详情页的封面 URL 改为带签名的缩略图地址，避免公开页加载封面原图。
+- 参考 `https://innei.in/` 调整公开展示：顶部悬浮导航、首页身份区进入动效、近期笔墨细线时间线、碎念/来信轻分隔、横向“笔耕不辍”写作轨迹、雨线背景微动和列表 hover 位移。
+- 将默认上传大小上限从 10MB 调整为 30MB，同步后端配置默认值、开发/部署环境示例和后台上传页提示；前端上传前会先拦截超过 30MB 的文件并显示中文提示。
 - 修复公开文章列表与详情的阅读时长统计口径：后端 `count_words` 改为同时统计中文字符和英文/数字词，公开文章响应会用正文实时统计兜底旧数据，避免历史 `word_count` 偏小导致页面一直显示 `1 分钟`。
 - 公开文章列表与详情响应新增 `cover_file_id` 与带签名的 `cover_image_url`，文章图片渲染接口允许公开文章封面文件走同一签名渲染路径。
 - 前台 `/posts` 与 `/posts/:slug` 已展示文章封面，保留无封面文章的原列表布局。
@@ -17,7 +27,7 @@
 
 ### 进行中
 
-- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环，后续继续补齐私有文件下载、清理任务、加密会话清理和真实 MySQL 运行库联调。
+- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；当前按用户要求继续推进前台展示与动效优化，参考 `https://innei.in/` 的首屏身份区、近期笔墨时间线、碎念/来信双栏、年度写作轨迹、轻量雨线背景和细微 hover/进入动效。
 
 ### 阻塞与风险
 
@@ -25,6 +35,7 @@
 
 ### 下一步
 
+- 继续按 `https://innei.in/` 对友链、站点目录、文件页和文章详情做细节动效与展示打磨。
 - 将文件管理继续接入私有文件鉴权下载、更多使用场景引用追踪和物理清理任务。
 - 补充加密会话过期清理任务，并评估 Redis 共享限流适配。
 - 使用真实 MySQL 运行库验证上传图片、选择封面、发布文章、前台封面展示、正文图片渲染、公开文件栏下载和后台访问日志查询。
@@ -36,6 +47,10 @@
 - 已运行 `npm.cmd run lint`，通过。
 - 已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - 已运行 `git diff --check`，未发现空白或行尾问题。
+- 上传上限调整后已重新运行 `uv run ruff check .`、`npm.cmd run lint` 和 `git diff --check`，均通过。
+- 缩略图接口和封面选择器分页优化后已重新运行 `uv run ruff check .`、`uv run pytest tests\test_admin_files_api.py tests\test_public_content_api.py`、`npm.cmd run lint` 和 `npm.cmd run build`，均通过；`npm.cmd run build` 仍存在 KaTeX 主 chunk 超过 500KB 的既有提示。
+- 公开页封面缩略图接入后已重新运行 `uv run ruff check .`、`uv run pytest tests\test_admin_files_api.py tests\test_public_content_api.py`、`npm.cmd run lint` 和 `npm.cmd run build`，均通过；`npm.cmd run build` 仍存在 KaTeX 主 chunk 超过 500KB 的既有提示。
+- 已使用本地真实运行后端解密请求 `GET /api/public/posts?limit=5&offset=0`，确认公开文章列表返回的 `cover_image_url` 为 `/api/public/posts/{slug}/files/{file_id}/thumbnail?...`；随后直接请求该公开缩略图地址返回 `200 image/jpeg`，示例响应大小约 25KB。
 - 已运行 `uv run ruff check .`，通过。
 - 已运行 `uv run pytest tests\test_admin_content_api.py tests\test_content_service.py tests\test_markdown_provider.py`，15 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 已运行 `npm.cmd run lint`，通过。

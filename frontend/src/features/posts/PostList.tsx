@@ -5,31 +5,30 @@ import { StatusBadge } from '../../components/StatusBadge.tsx'
 import {
   formatPostDate,
   getReadingMinutes,
-  publicApiAssetUrl,
+  postCoverUrl,
 } from './postMeta.ts'
 import type { PublicPostItem } from './types.ts'
 
 type PostListProps = {
   posts: PublicPostItem[]
+  startIndex?: number
 }
 
-export function PostList({ posts }: PostListProps) {
+export function PostList({ posts, startIndex = 0 }: PostListProps) {
   return (
     <div className="post-list">
       {posts.map((post, index) => (
         <article className="post-row" key={post.id}>
           <span className="post-row__index">
-            {String(index + 1).padStart(2, '0')}
+            {String(startIndex + index + 1).padStart(2, '0')}
           </span>
-          {post.cover_image_url ? (
-            <Link className="post-row__cover" to={`/posts/${post.slug}`}>
-              <img
-                alt={post.title}
-                loading="lazy"
-                src={publicApiAssetUrl(post.cover_image_url)}
-              />
-            </Link>
-          ) : null}
+          <Link className="post-row__cover" to={`/posts/${post.slug}`}>
+            <img
+              alt={post.title}
+              loading="lazy"
+              src={postCoverUrl(post)}
+            />
+          </Link>
           <div className="post-row__body">
             <div className="post-row__meta">
               <StatusBadge tone="published">已发布</StatusBadge>

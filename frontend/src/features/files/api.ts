@@ -3,6 +3,7 @@ import {
   apiGetEncrypted,
   apiPostFormEncrypted,
 } from '../../api/client.ts'
+import { API_BASE_URL } from '../../api/config.ts'
 
 import type {
   AdminFileItem,
@@ -70,4 +71,8 @@ export function getAdminFileTemporaryUrl(
     `/admin/files/${fileId}/temporary-url`,
     'content-v1',
   )
+}
+
+export function adminFileThumbnailUrl(fileId: number): string {
+  return `${API_BASE_URL}/admin/files/${fileId}/thumbnail`
 }

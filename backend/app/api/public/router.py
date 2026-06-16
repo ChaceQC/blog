@@ -258,11 +258,53 @@ def _site_profile_response(value: dict[str, object]) -> PublicSiteProfileRespons
             value.get("quote"),
             "「把想法放慢一点，让每一次发布都留下可以回看的纹理。」",
         ),
+        musings=_musings_value(value.get("musings")),
+        social_links=_social_links_value(value.get("social_links")),
     )
 
 
 def _string_value(value: object, fallback: str) -> str:
     return value if isinstance(value, str) and value else fallback
+
+
+def _musings_value(value: object) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+
+    musings: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        content = item.get("content")
+        date = item.get("date")
+        if isinstance(content, str) and content.strip():
+            musings.append(
+                {
+                    "content": content.strip(),
+                    "date": date.strip() if isinstance(date, str) else "",
+                },
+            )
+    return musings[:3]
+
+
+def _social_links_value(value: object) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+
+    links: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        label = item.get("label")
+        url = item.get("url")
+        if (
+            isinstance(label, str)
+            and label.strip()
+            and isinstance(url, str)
+            and url.strip()
+        ):
+            links.append({"label": label.strip(), "url": url.strip()})
+    return links[:6]
 
 
 def _public_post_item(
@@ -325,7 +367,7 @@ def _signed_cover_url(
         secret_key=secret_key,
     )
     return (
-        f"/api/public/posts/{post.slug}/files/{post.cover_file_id}/render"
+        f"/api/public/posts/{post.slug}/files/{post.cover_file_id}/thumbnail"
         f"?expires={access.expires}&token={access.token}"
     )
 

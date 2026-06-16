@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { Image } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { useMemo, useState } from 'react'
 
-import { listAdminFiles } from '../files/api.ts'
+import { adminFileThumbnailUrl, listAdminFiles } from '../files/api.ts'
 import type { AdminFileItem } from '../files/types.ts'
 
 type PostCoverPickerProps = {
@@ -10,16 +11,38 @@ type PostCoverPickerProps = {
   disabled?: boolean
 }
 
+const coverPageSize = 8
+
 export function PostCoverPicker({
   value,
   onChange,
   disabled = false,
 }: PostCoverPickerProps) {
+  const [query, setQuery] = useState('')
+  const [page, setPage] = useState(0)
   const filesQuery = useQuery({
     queryKey: ['admin-files'],
     queryFn: listAdminFiles,
   })
-  const imageFiles = (filesQuery.data?.items ?? []).filter(isCoverCandidate)
+  const imageFiles = useMemo(
+    () =>
+      (filesQuery.data?.items ?? [])
+        .filter(isCoverCandidate)
+        .filter((file) => {
+          const keyword = query.trim().toLowerCase()
+          return (
+            keyword.length === 0 ||
+            file.original_name.toLowerCase().includes(keyword) ||
+            file.mime_type.toLowerCase().includes(keyword)
+          )
+        }),
+    [filesQuery.data?.items, query],
+  )
+  const pageCount = Math.max(1, Math.ceil(imageFiles.length / coverPageSize))
+  const visibleFiles = imageFiles.slice(
+    page * coverPageSize,
+    page * coverPageSize + coverPageSize,
+  )
   const selectedFile = imageFiles.find((file) => file.id === value) ?? null
 
   return (
@@ -35,15 +58,26 @@ export function PostCoverPicker({
           }}
         >
           <option value="">不设置封面</option>
-          {imageFiles.map((file) => (
+          {imageFiles.slice(0, 100).map((file) => (
             <option key={file.id} value={file.id}>
               {file.original_name}
             </option>
           ))}
         </select>
       </label>
+      <label className="admin-search cover-picker__search">
+        <Search size={16} strokeWidth={1.8} aria-hidden="true" />
+        <input
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setPage(0)
+          }}
+          placeholder="搜索封面文件名"
+          value={query}
+        />
+      </label>
       <div className="cover-picker__list">
-        {imageFiles.map((file) => (
+        {visibleFiles.map((file) => (
           <button
             className={
               file.id === value
@@ -55,7 +89,12 @@ export function PostCoverPicker({
             onClick={() => onChange(file.id === value ? null : file.id)}
             type="button"
           >
-            <Image size={16} strokeWidth={1.8} aria-hidden="true" />
+            <img
+              alt=""
+              loading="eager"
+              src={adminFileThumbnailUrl(file.id)}
+              title={`${file.original_name} 缩略图`}
+            />
             <span>
               <strong>{file.original_name}</strong>
               <small>
@@ -67,6 +106,33 @@ export function PostCoverPicker({
           </button>
         ))}
       </div>
+      {imageFiles.length > coverPageSize ? (
+        <div className="cover-picker__pager">
+          <button
+            className="icon-button"
+            disabled={page === 0}
+            onClick={() => setPage((current) => Math.max(0, current - 1))}
+            type="button"
+            aria-label="上一页封面"
+          >
+            <ChevronLeft size={16} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+          <span>
+            {page + 1} / {pageCount}
+          </span>
+          <button
+            className="icon-button"
+            disabled={page >= pageCount - 1}
+            onClick={() =>
+              setPage((current) => Math.min(pageCount - 1, current + 1))
+            }
+            type="button"
+            aria-label="下一页封面"
+          >
+            <ChevronRight size={16} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
       {filesQuery.isError ? (
         <p className="form-error">封面列表暂时无法加载</p>
       ) : null}

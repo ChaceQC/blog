@@ -18,7 +18,7 @@ export function HomePage() {
     isLoading: isPostsLoading,
   } = useQuery({
     queryKey: ['public-posts', 'home'],
-    queryFn: () => listPublicPosts({ limit: 5 }),
+    queryFn: () => listPublicPosts({ limit: 3 }),
   })
   const {
     data: sitesData,
@@ -39,10 +39,17 @@ export function HomePage() {
         avatarUrl: siteProfile.avatar_url,
         description: siteProfile.description,
         quote: siteProfile.quote,
+        musings: (siteProfile.musings ?? []).length > 0
+          ? siteProfile.musings
+          : siteSettings.musings,
+        socialLinks: (siteProfile.social_links ?? []).length > 0
+          ? siteProfile.social_links
+          : siteSettings.socialLinks,
       }
     : siteSettings
   const featuredPosts = postsData?.items ?? []
   const featuredSites = sitesData?.items ?? []
+  const latestPost = featuredPosts[0] ?? null
   const socialIconMap = {
     GitHub: GitBranch,
     RSS: Rss,
@@ -69,7 +76,7 @@ export function HomePage() {
             </small>
           </div>
           <div className="social-strip" aria-label="社交链接">
-            {siteSettings.socialLinks.map((link) => (
+            {profile.socialLinks.map((link) => (
               <a href={link.url} key={link.label}>
                 {(() => {
                   const Icon =
@@ -136,10 +143,12 @@ export function HomePage() {
               <span>碎念</span>
             </div>
             <div className="musing-list">
-              <p>「先把字句放稳，页面自然会慢慢有自己的呼吸。」</p>
-              <small>2026年6月15日星期一</small>
-              <p>「UI 的留白不是空，是让内容有地方沉下来。」</p>
-              <small>2026年6月15日星期一</small>
+              {profile.musings.slice(0, 2).map((musing, index) => (
+                <div className="musing-item" key={`${musing.content}-${index}`}>
+                  <p>{musing.content}</p>
+                  {musing.date ? <small>{musing.date}</small> : null}
+                </div>
+              ))}
             </div>
           </div>
 
@@ -156,6 +165,31 @@ export function HomePage() {
           </div>
         </aside>
       </div>
+
+      <section className="writing-orbit" aria-label="写作轨迹">
+        <span>笔耕不辍</span>
+        <div className="writing-orbit__track">
+          {featuredPosts.map((post) => (
+            <Link
+              className="writing-orbit__dot"
+              key={post.id}
+              to={`/posts/${post.slug}`}
+            >
+              <span>{post.title}</span>
+            </Link>
+          ))}
+          <strong>今</strong>
+        </div>
+        <p>
+          {latestPost ? (
+            <>
+              近作 · <Link to={`/posts/${latestPost.slug}`}>{latestPost.title}</Link>
+            </>
+          ) : (
+            '近作整理中'
+          )}
+        </p>
+      </section>
 
       <section className="content-section">
         <div className="section-heading section-heading--stacked">

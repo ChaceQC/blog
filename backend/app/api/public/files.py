@@ -281,6 +281,94 @@ async def render_post_file(
     )
 
 
+@router.get("/posts/{slug}/files/{file_id}/thumbnail")
+async def thumbnail_post_file(
+    slug: str,
+    file_id: int,
+    request: Request,
+    content_service: PublicFileContentServiceDependency,
+    file_service: FileServiceDependency,
+    settings: SettingsDependency,
+    logs: LogServiceDependency,
+    token: ArticleImageToken = None,
+    expires: ArticleImageExpires = None,
+) -> FileResponse:
+    if token is None or expires is None or not verify_article_render_token(
+        token=token,
+        expires=expires,
+        post_slug=slug,
+        file_id=file_id,
+        secret_key=settings.secret_key,
+    ):
+        await _record_file_access(
+            logs,
+            request=request,
+            access_type="post_image_thumbnail",
+            status_code=status.HTTP_403_FORBIDDEN,
+            file_id=file_id,
+            detail_json={"slug": slug},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="invalid image access",
+        )
+
+    try:
+        post = await content_service.get_public_post_by_slug(slug)
+        thumbnail = await file_service.prepare_article_thumbnail(
+            file_id=file_id,
+            post_slug=slug,
+            post_cover_file_id=post.cover_file_id,
+            post_content_md=post.content_md,
+            post_content_html=post.content_html,
+            upload_root=settings.upload_root,
+        )
+    except (ContentNotFoundError, ManagedFileNotFoundError) as exc:
+        await _record_file_access(
+            logs,
+            request=request,
+            access_type="post_image_thumbnail",
+            status_code=status.HTTP_404_NOT_FOUND,
+            file_id=file_id,
+            detail_json={"slug": slug},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="file not found",
+        ) from exc
+    except FileAccessDeniedError as exc:
+        await _record_file_access(
+            logs,
+            request=request,
+            access_type="post_image_thumbnail",
+            status_code=status.HTTP_403_FORBIDDEN,
+            file_id=file_id,
+            detail_json={"slug": slug},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="file is not referenced by post",
+        ) from exc
+
+    await _record_file_access(
+        logs,
+        request=request,
+        access_type="post_image_thumbnail",
+        status_code=status.HTTP_200_OK,
+        file_id=file_id,
+        detail_json={
+            "slug": slug,
+            "filename": thumbnail.filename,
+            "media_type": thumbnail.media_type,
+        },
+    )
+    return FileResponse(
+        thumbnail.path,
+        media_type=thumbnail.media_type,
+        filename=thumbnail.filename,
+    )
+
+
 async def _record_file_access(
     logs: LogServiceDependency,
     *,

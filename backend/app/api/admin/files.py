@@ -237,6 +237,36 @@ async def preview_file(
     )
 
 
+@router.get("/files/{file_id}/thumbnail")
+async def thumbnail_file(
+    file_id: int,
+    _: FileUploaderDependency,
+    service: FileServiceDependency,
+    settings: SettingsDependency,
+) -> FileResponse:
+    try:
+        thumbnail = await service.prepare_admin_thumbnail(
+            file_id=file_id,
+            upload_root=settings.upload_root,
+        )
+    except ManagedFileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="file not found",
+        ) from exc
+    except FileAccessDeniedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="file is not thumbnailable",
+        ) from exc
+
+    return FileResponse(
+        thumbnail.path,
+        media_type=thumbnail.media_type,
+        filename=thumbnail.filename,
+    )
+
+
 async def _files_response(
     payload: AdminFileItem | AdminFileListResponse | AdminFileTemporaryUrlResponse,
     *,

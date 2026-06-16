@@ -1,4 +1,7 @@
 import { API_BASE_URL } from '../../api/config.ts'
+import type { PublicPostItem } from './types.ts'
+
+export const DEFAULT_POST_COVER_URL = '/default-cover.svg'
 
 const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
   year: 'numeric',
@@ -49,4 +52,10 @@ export function publicApiAssetUrl(value: string): string {
   const origin = API_BASE_URL.replace(/\/api$/, '')
   const path = value.startsWith('/') ? value : `/${value}`
   return `${origin}${path}`
+}
+
+export function postCoverUrl(post: Pick<PublicPostItem, 'cover_image_url'>): string {
+  return post.cover_image_url
+    ? publicApiAssetUrl(post.cover_image_url)
+    : DEFAULT_POST_COVER_URL
 }

@@ -167,6 +167,10 @@ class FakeSettingService:
                 "avatar_url": "https://example.com/avatar.png",
                 "description": "新的首页描述",
                 "quote": "新的引文",
+                "musings": [{"content": "后台碎念", "date": "2026年6月17日"}],
+                "social_links": [
+                    {"label": "GitHub", "url": "https://github.com/ChaceQC"},
+                ],
             },
         )
 
@@ -221,7 +225,7 @@ def test_public_posts_returns_published_post_list() -> None:
     assert "content_html" not in manager.payload["items"][0]
     assert manager.payload["items"][0]["word_count"] == 8
     assert (
-        "/api/public/posts/public-post/files/1/render?expires="
+        "/api/public/posts/public-post/files/1/thumbnail?expires="
         in str(manager.payload["items"][0]["cover_image_url"])
     )
     assert logs.items[0]["access_type"] == "public_posts_list"
@@ -254,7 +258,7 @@ def test_public_post_detail_returns_html_content() -> None:
     )
     assert manager.payload["word_count"] == 8
     assert (
-        "/api/public/posts/public-post/files/1/render?expires="
+        "/api/public/posts/public-post/files/1/thumbnail?expires="
         in str(manager.payload["cover_image_url"])
     )
     assert "token=" in str(manager.payload["content_html"])
@@ -283,6 +287,8 @@ def test_public_site_profile_returns_encrypted_setting() -> None:
     assert manager.payload is not None
     assert manager.payload["title"] == "恬妡的小屋"
     assert manager.payload["owner"] == "恬妡"
+    assert manager.payload["musings"][0]["content"] == "后台碎念"
+    assert manager.payload["social_links"][0]["label"] == "GitHub"
     assert logs.items[0]["access_type"] == "public_site_profile"
 
 

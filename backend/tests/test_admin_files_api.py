@@ -124,6 +124,41 @@ class FakeDownloadFileService:
             filename="cover.png",
         )
 
+    async def prepare_article_thumbnail(
+        self,
+        *,
+        file_id: int,
+        post_slug: str,
+        post_cover_file_id: int | None,
+        post_content_md: str,
+        post_content_html: str,
+        upload_root,
+    ) -> FileDownload:
+        assert file_id == 1
+        assert post_slug == "public-post"
+        assert post_cover_file_id == 1
+        assert "files/1/render" in post_content_md
+        assert upload_root
+        return FileDownload(
+            path=self.path,
+            media_type="image/jpeg",
+            filename="cover-thumb.jpg",
+        )
+
+    async def prepare_admin_thumbnail(
+        self,
+        *,
+        file_id: int,
+        upload_root,
+    ) -> FileDownload:
+        assert file_id == 1
+        assert upload_root
+        return FileDownload(
+            path=self.path,
+            media_type="image/jpeg",
+            filename="cover-thumb.jpg",
+        )
+
 
 class FakeDeniedDownloadFileService:
     async def prepare_public_download(self, **_: object) -> FileDownload:
@@ -369,6 +404,25 @@ def test_public_file_download_uses_temporary_token(tmp_path) -> None:
     assert logs.items[0]["entity_id"] == 1
 
 
+def test_admin_file_thumbnail_returns_small_preview(tmp_path) -> None:
+    file_path = tmp_path / "cover.jpg"
+    file_path.write_bytes(_png_bytes())
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_file_service] = (
+        lambda: FakeDownloadFileService(file_path)
+    )
+    client = TestClient(app)
+
+    try:
+        response = client.get("/api/admin/files/1/thumbnail")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.content == _png_bytes()
+
+
 def test_public_file_download_rejects_invalid_token() -> None:
     logs = FakeLogService()
     app.dependency_overrides[get_file_service] = lambda: FakeDeniedDownloadFileService()
@@ -424,6 +478,40 @@ def test_post_file_render_uses_article_image_endpoint(tmp_path) -> None:
         "filename": "cover.png",
         "media_type": "image/png",
     }
+
+
+def test_post_file_thumbnail_uses_article_image_endpoint(tmp_path) -> None:
+    file_path = tmp_path / "cover.jpg"
+    file_path.write_bytes(_png_bytes())
+    logs = FakeLogService()
+    app.dependency_overrides[get_file_service] = (
+        lambda: FakeDownloadFileService(file_path)
+    )
+    app.dependency_overrides[get_public_file_content_service] = (
+        lambda: FakePublicFileContentService()
+    )
+    app.dependency_overrides[get_log_service] = lambda: logs
+    client = TestClient(app)
+    settings = get_settings()
+    access = create_article_render_token(
+        post_slug="public-post",
+        file_id=1,
+        expires_seconds=settings.file_temporary_url_expire_seconds,
+        secret_key=settings.secret_key,
+    )
+
+    try:
+        response = client.get(
+            "/api/public/posts/public-post/files/1/thumbnail",
+            params={"expires": access.expires, "token": access.token},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.content == _png_bytes()
+    assert logs.items[0]["access_type"] == "post_image_thumbnail"
 
 
 def test_post_file_render_rejects_missing_image_token(tmp_path) -> None:

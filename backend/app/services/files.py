@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
+from PIL import Image, UnidentifiedImageError
+
 from app.core.auth import utc_now
 from app.core.storage import StorageProvider
 from app.models.file import BlogFile
@@ -331,6 +333,53 @@ class FileService:
             filename=file.original_name,
         )
 
+    async def prepare_article_thumbnail(
+        self,
+        *,
+        file_id: int,
+        post_slug: str,
+        post_cover_file_id: int | None,
+        post_content_md: str,
+        post_content_html: str,
+        upload_root: Path,
+        max_side: int = 360,
+    ) -> FileDownload:
+        file = await self.repository.get_file(file_id)
+        if file is None:
+            raise ManagedFileNotFoundError("file not found")
+        if (
+            file.visibility != "public"
+            or file.status != "active"
+            or not file.mime_type.startswith("image/")
+        ):
+            raise FileAccessDeniedError("file is not thumbnailable")
+        if not _article_render_reference_exists(
+            post_slug=post_slug,
+            file_id=file.id,
+            cover_file_id=post_cover_file_id,
+            content_md=post_content_md,
+            content_html=post_content_html,
+        ):
+            raise FileAccessDeniedError("file is not referenced by post")
+
+        source_path = _resolve_storage_path(upload_root, file.object_key)
+        if source_path is None or not source_path.is_file():
+            raise ManagedFileNotFoundError("stored file not found")
+
+        thumbnail_path = _thumbnail_path(upload_root, file)
+        if not thumbnail_path.is_file():
+            _create_thumbnail(
+                source_path=source_path,
+                target_path=thumbnail_path,
+                max_side=max_side,
+            )
+
+        return FileDownload(
+            path=thumbnail_path,
+            media_type="image/jpeg",
+            filename=f"{Path(file.original_name).stem}-thumb.jpg",
+        )
+
     async def prepare_admin_preview(
         self,
         *,
@@ -361,6 +410,41 @@ class FileService:
             path=path,
             media_type=file.mime_type,
             filename=file.original_name,
+        )
+
+    async def prepare_admin_thumbnail(
+        self,
+        *,
+        file_id: int,
+        upload_root: Path,
+        max_side: int = 360,
+    ) -> FileDownload:
+        file = await self.repository.get_file(file_id)
+        if file is None:
+            raise ManagedFileNotFoundError("file not found")
+        if file.status != "active" or not file.mime_type.startswith("image/"):
+            raise FileAccessDeniedError("file is not thumbnailable")
+
+        source_path = _resolve_storage_path(
+            upload_root,
+            file.object_key,
+            public_only=False,
+        )
+        if source_path is None or not source_path.is_file():
+            raise ManagedFileNotFoundError("stored file not found")
+
+        thumbnail_path = _thumbnail_path(upload_root, file)
+        if not thumbnail_path.is_file():
+            _create_thumbnail(
+                source_path=source_path,
+                target_path=thumbnail_path,
+                max_side=max_side,
+            )
+
+        return FileDownload(
+            path=thumbnail_path,
+            media_type="image/jpeg",
+            filename=f"{Path(file.original_name).stem}-thumb.jpg",
         )
 
     def _validate_size(self, data: bytes, max_size_bytes: int) -> None:
@@ -738,6 +822,27 @@ def _resolve_storage_path(
     except ValueError:
         return None
     return path
+
+
+def _thumbnail_path(upload_root: Path, file: BlogFile) -> Path:
+    return upload_root / ".thumbs" / f"{file.sha256[:32]}-360.jpg"
+
+
+def _create_thumbnail(
+    *,
+    source_path: Path,
+    target_path: Path,
+    max_side: int,
+) -> None:
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with Image.open(source_path) as image:
+            image.thumbnail((max_side, max_side))
+            if image.mode not in {"RGB", "L"}:
+                image = image.convert("RGB")
+            image.save(target_path, format="JPEG", quality=78, optimize=True)
+    except (OSError, UnidentifiedImageError) as exc:
+        raise ManagedFileNotFoundError("thumbnail generation failed") from exc
 
 
 def _article_render_reference_exists(

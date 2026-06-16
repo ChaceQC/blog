@@ -9,6 +9,10 @@ import {
 } from '../../features/settings/api.ts'
 import { siteSettings } from '../../features/settings/siteSettings.ts'
 import { useAuth } from '../../features/auth/useAuth.ts'
+import type {
+  SiteMusing,
+  SiteSocialLink,
+} from '../../features/settings/types.ts'
 
 type SiteSettingForm = {
   title: string
@@ -16,6 +20,8 @@ type SiteSettingForm = {
   avatarUrl: string
   description: string
   quote: string
+  musings: SiteMusing[]
+  socialLinks: SiteSocialLink[]
 }
 
 const initialForm: SiteSettingForm = {
@@ -24,6 +30,8 @@ const initialForm: SiteSettingForm = {
   avatarUrl: siteSettings.avatarUrl,
   description: siteSettings.description,
   quote: siteSettings.quote,
+  musings: siteSettings.musings,
+  socialLinks: siteSettings.socialLinks,
 }
 
 export function AdminSettingsPage() {
@@ -140,6 +148,61 @@ export function AdminSettingsPage() {
                 value={form.quote}
               />
             </label>
+            <div className="field-group">
+              <span className="field-label">首页碎念</span>
+              <div className="musing-editor-list">
+                {form.musings.slice(0, 2).map((musing, index) => (
+                  <div className="musing-editor" key={index}>
+                    <label>
+                      内容
+                      <textarea
+                        onChange={(event) =>
+                          updateMusing(index, 'content', event.target.value)
+                        }
+                        rows={2}
+                        value={musing.content}
+                      />
+                    </label>
+                    <label>
+                      日期
+                      <input
+                        onChange={(event) =>
+                          updateMusing(index, 'date', event.target.value)
+                        }
+                        value={musing.date}
+                      />
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="field-group">
+              <span className="field-label">首页社交入口</span>
+              <div className="musing-editor-list">
+                {form.socialLinks.map((link, index) => (
+                  <div className="social-link-editor" key={index}>
+                    <label>
+                      名称
+                      <input
+                        onChange={(event) =>
+                          updateSocialLink(index, 'label', event.target.value)
+                        }
+                        value={link.label}
+                      />
+                    </label>
+                    <label>
+                      URL
+                      <input
+                        onChange={(event) =>
+                          updateSocialLink(index, 'url', event.target.value)
+                        }
+                        value={link.url}
+                      />
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
           </form>
         </section>
 
@@ -159,9 +222,17 @@ export function AdminSettingsPage() {
             </span>
             <p>{form.description}</p>
             <small>{form.quote}</small>
+            <div className="musing-list settings-musings">
+              {form.musings.slice(0, 2).map((musing, index) => (
+                <div className="musing-item" key={`${musing.content}-${index}`}>
+                  <p>{musing.content}</p>
+                  <small>{musing.date}</small>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="admin-note-list">
-            {siteSettings.socialLinks.map((link) => (
+            {form.socialLinks.map((link) => (
               <p key={link.label}>
                 {link.label}：{link.url}
               </p>
@@ -179,6 +250,32 @@ export function AdminSettingsPage() {
   ) {
     setDraftForm((current) => ({ ...(current ?? form), [key]: value }))
   }
+
+  function updateMusing(
+    index: number,
+    key: keyof SiteMusing,
+    value: string,
+  ) {
+    setDraftForm((current) => {
+      const nextForm = current ?? form
+      const musings = [...nextForm.musings]
+      musings[index] = { ...musings[index], [key]: value }
+      return { ...nextForm, musings }
+    })
+  }
+
+  function updateSocialLink(
+    index: number,
+    key: keyof SiteSocialLink,
+    value: string,
+  ) {
+    setDraftForm((current) => {
+      const nextForm = current ?? form
+      const socialLinks = [...nextForm.socialLinks]
+      socialLinks[index] = { ...socialLinks[index], [key]: value }
+      return { ...nextForm, socialLinks }
+    })
+  }
 }
 
 function settingToForm(value: Record<string, unknown>): SiteSettingForm {
@@ -188,6 +285,8 @@ function settingToForm(value: Record<string, unknown>): SiteSettingForm {
     avatarUrl: stringValue(value.avatar_url, initialForm.avatarUrl),
     description: stringValue(value.description, initialForm.description),
     quote: stringValue(value.quote, initialForm.quote),
+    musings: musingsValue(value.musings),
+    socialLinks: socialLinksValue(value.social_links),
   }
 }
 
@@ -198,9 +297,64 @@ function formToSettingValue(form: SiteSettingForm): Record<string, unknown> {
     avatar_url: form.avatarUrl,
     description: form.description,
     quote: form.quote,
+    musings: form.musings
+      .map((musing) => ({
+        content: musing.content.trim(),
+        date: musing.date.trim(),
+      }))
+      .filter((musing) => musing.content.length > 0),
+    social_links: form.socialLinks
+      .map((link) => ({
+        label: link.label.trim(),
+        url: link.url.trim(),
+      }))
+      .filter((link) => link.label.length > 0 && link.url.length > 0),
   }
 }
 
 function stringValue(value: unknown, fallback: string): string {
   return typeof value === 'string' ? value : fallback
+}
+
+function musingsValue(value: unknown): SiteMusing[] {
+  if (!Array.isArray(value)) {
+    return initialForm.musings
+  }
+
+  const musings = value
+    .filter(
+      (item): item is Record<string, unknown> =>
+        typeof item === 'object' && item !== null,
+    )
+    .map((item) => ({
+      content: stringValue(item.content, ''),
+      date: stringValue(item.date, ''),
+    }))
+    .filter((musing) => musing.content.trim().length > 0)
+    .slice(0, 2)
+
+  while (musings.length < 2) {
+    musings.push({ content: '', date: '' })
+  }
+  return musings
+}
+
+function socialLinksValue(value: unknown): SiteSocialLink[] {
+  if (!Array.isArray(value)) {
+    return initialForm.socialLinks
+  }
+
+  const socialLinks = value
+    .filter(
+      (item): item is Record<string, unknown> =>
+        typeof item === 'object' && item !== null,
+    )
+    .map((item) => ({
+      label: stringValue(item.label, ''),
+      url: stringValue(item.url, ''),
+    }))
+    .filter((link) => link.label.trim().length > 0 && link.url.trim().length > 0)
+    .slice(0, 6)
+
+  return socialLinks.length > 0 ? socialLinks : initialForm.socialLinks
 }
