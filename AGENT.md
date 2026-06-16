@@ -37,6 +37,7 @@
 - 每次完成可验证改动后必须 commit。
 - 每次 commit 后必须 push 到 GitHub。
 - 提交前必须检查 `git status`，避免混入无关改动。
+- 提交前必须先检查本次改动是否影响 `README.md`、`PROJECT_PLAN.md`、`PROJECT_PROGRESS.md`、`AGENT.md` 或子目录 README；受影响文档未同步时，不得先提交代码。
 - 必须维护 `.gitignore`，禁止提交 `.env`、密钥、证书私钥、依赖目录、构建产物、上传文件和备份文件。
 - 应提交依赖锁文件，例如后端 `uv.lock`、前端 `package-lock.json`。
 - commit message 后续统一使用中文说明。

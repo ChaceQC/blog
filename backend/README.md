@@ -53,9 +53,10 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 - `GET /api/admin/posts/{id}`：后台文章详情，需要 `post:read` 权限。
 - `PATCH /api/admin/posts/{id}`：更新文章，需要 `post:write` 权限和 `X-CSRF-Token`。
 - `POST /api/admin/posts/{id}/publish`：发布文章，需要 `post:publish` 权限和 `X-CSRF-Token`。
+- `POST /api/admin/posts/preview`：实时渲染文章预览，需要 `post:write` 权限和 `X-CSRF-Token`，只返回渲染后的 HTML，不写入数据库。
 - `GET /api/admin/pages`、`GET /api/admin/pages/{id}`、`POST /api/admin/pages`、`PATCH /api/admin/pages/{id}`：后台页面管理，需要 `page:write` 权限，写操作需要 `X-CSRF-Token`。
 
-创建和更新请求体必须是 `content-v1` 加密信封，解密后再进行 Pydantic 字段校验。`content_html` 由 `markdown-it-py` 渲染 Markdown，`mdit-py-plugins` 保留行内与块级 LaTeX 公式节点，再由 `bleach` 统一执行 HTML sanitize。文章 Markdown 内图片应使用 `/api/public/posts/{slug}/files/{file_id}/render`，该接口会校验文章公开状态、文件公开状态、图片 MIME 和文章内容引用关系后返回图片，避免依赖临时下载链接渲染正文图片。
+创建、更新和预览请求体必须是 `content-v1` 加密信封，解密后再进行 Pydantic 字段校验。`content_html` 由 `markdown-it-py` 渲染 Markdown，`mdit-py-plugins` 保留行内与块级 LaTeX 公式节点，再由 `bleach` 统一执行 HTML sanitize。文章 Markdown 内图片应保存为 `/api/public/posts/{slug}/files/{file_id}/render` 稳定引用；公开文章详情会为实际 HTML 图片地址补上 `expires` 与 `token`，后台实时预览会改写为 `/api/admin/files/{id}/preview` 签名地址，裸访问渲染接口会被拒绝。
 
 ## 后台文件管理
 
@@ -64,9 +65,10 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 - `GET /api/admin/files`：文件列表，需要 `file:upload` 权限。
 - `POST /api/admin/files`：multipart 上传，需要 `file:upload` 权限和 `X-CSRF-Token`。
 - `GET /api/admin/files/{id}/temporary-url`：为公开文件生成短时访问链接，需要 `file:upload` 权限。
+- `GET /api/admin/files/{id}/preview`：为后台文章预览提供短时签名图片访问，不用于公开下载。
 - `DELETE /api/admin/files/{id}`：软删除文件，需要 `file:delete` 权限和 `X-CSRF-Token`。
 
-当前本地存储驱动会将文件写入 `BLOG_UPLOAD_ROOT`，但不会挂载静态目录，也不会为新文件写入 `/uploads/...` 公开 URL。公开文件栏下载通过后台加密接口按需生成短时签名链接，再由 `/api/public/files/{id}/download?token=...` 校验后返回文件；文章正文图片渲染使用专门的 `/api/public/posts/{slug}/files/{file_id}/render`。私有文件不生成公开访问链接。上传大小通过 `BLOG_UPLOAD_MAX_SIZE_BYTES` 配置，当前白名单支持 JPEG、PNG、GIF、WebP 和 PDF，并校验扩展名、MIME 与文件头；删除只标记为 `deleted`，后续由清理任务处理物理文件。短时链接有效期通过 `BLOG_FILE_TEMPORARY_URL_EXPIRE_SECONDS` 配置。公开内容读取、公开文件下载、文章图片渲染和后台短时链接生成都会写入 `access_logs`。
+当前本地存储驱动会将文件写入 `BLOG_UPLOAD_ROOT`，但不会挂载静态目录，也不会为新文件写入 `/uploads/...` 公开 URL。公开文件栏下载通过后台加密接口按需生成短时签名链接，再由 `/api/public/files/{id}/download?token=...` 校验后返回文件；文章正文图片渲染使用专门的 `/api/public/posts/{slug}/files/{file_id}/render?expires=...&token=...`，签名由公开文章详情或后台预览接口按场景颁发。私有文件不生成公开访问链接。上传大小通过 `BLOG_UPLOAD_MAX_SIZE_BYTES` 配置，当前白名单支持 JPEG、PNG、GIF、WebP 和 PDF，并校验扩展名、MIME 与文件头；删除只标记为 `deleted`，后续由清理任务处理物理文件。短时链接有效期通过 `BLOG_FILE_TEMPORARY_URL_EXPIRE_SECONDS` 配置。公开内容读取、公开文件下载、文章图片渲染和后台短时链接生成都会写入 `access_logs`。
 
 ## 初始管理员
 
