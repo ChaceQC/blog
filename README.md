@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-当前版本处于 `v0.1.0` 脚手架阶段，开发分支为 `dev`。M0 脚手架、生产部署骨架和初始 Alembic 迁移已完成，M1 已开始落地后台登录、当前用户接口、初始管理员创建命令、Cookie 会话、CSRF 防护、前端权限菜单、后台日志查询、后台文章与页面管理接口、后台文章与页面前端管理页、后台文件/友链/导航/设置界面入口、公开文章列表与详情读取链路、前台与后台 KaTeX 公式渲染，以及 `sensitive-v1` / `content-v1` 应用层加密协商基础。
+当前版本处于 `v0.1.0` 脚手架阶段，开发分支为 `dev`。M0 脚手架、生产部署骨架和初始 Alembic 迁移已完成，M1 已开始落地后台登录、当前用户接口、初始管理员创建命令、Cookie 会话、CSRF 防护、前端权限菜单、后台日志查询、后台文章与页面管理接口、后台文章与页面前端管理页、后台文件/友链/导航/设置界面入口、后台友链审核与导航读取接口、公开文章列表与详情读取链路、前台与后台 KaTeX 公式渲染，以及 `sensitive-v1` / `content-v1` 应用层加密协商基础。
 
 ## 技术栈
 
@@ -84,7 +84,7 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml co
 
 本地 MySQL 验证：
 
-Windows 本机安装 MySQL 8 时，可以用本地临时库验证真实迁移、初始管理员创建和后台认证流程。浏览器后台会话使用 HttpOnly Cookie 保存 Access Token 和 Refresh Token，前端只保留内存中的用户信息与 CSRF Token；写操作通过 `X-CSRF-Token` 校验。后台前端会通过 `/api/admin/encryption/sessions` 协商短期 P-256 ECDH 会话密钥，会话密钥保存到 `encryption_sessions` 数据表；登录、当前用户和刷新接口必须返回 `sensitive-v1` 加密信封，不再保留旧的明文 JSON 响应形态。登录和加密协商入口已有第一版可配置限流，命中会写入 `security_events`；当前限流器为单进程内存实现，生产多实例或多进程部署前需要替换为 Redis 等共享存储适配器。后台文章与页面管理接口的创建、更新请求和响应已接入 `content-v1` 加密信封，前端 `/admin` 总览和 `/admin/posts` 已读取真实后台文章数据，`/admin/pages` 已接入加密列表、创建和更新流程，后端生成的 `math inline/block` 节点会在前台文章详情与后台预览中用 KaTeX 渲染。后台 `/admin/files`、`/admin/links` 和 `/admin/settings` 已替换为独立管理界面，其中 `/admin/settings` 已通过 `sensitive-v1` 接入真实站点基础设置读取与保存接口；文件上传、友链审核和导航写入 API 仍需继续补齐。公开前台通过 `/api/public/posts` 与 `/api/public/posts/{slug}` 读取已发布且公开的文章，首页、文章列表页和文章详情页已切到真实 Public API。根目录 `auth.txt` 可保存本机 MySQL root 凭据供本地验证使用，该文件属于机密文件，已被 `.gitignore` 忽略，禁止提交。
+Windows 本机安装 MySQL 8 时，可以用本地临时库验证真实迁移、初始管理员创建和后台认证流程。浏览器后台会话使用 HttpOnly Cookie 保存 Access Token 和 Refresh Token，前端只保留内存中的用户信息与 CSRF Token；写操作通过 `X-CSRF-Token` 校验。后台前端会通过 `/api/admin/encryption/sessions` 协商短期 P-256 ECDH 会话密钥，会话密钥保存到 `encryption_sessions` 数据表；登录、当前用户和刷新接口必须返回 `sensitive-v1` 加密信封，不再保留旧的明文 JSON 响应形态。登录和加密协商入口已有第一版可配置限流，命中会写入 `security_events`；当前限流器为单进程内存实现，生产多实例或多进程部署前需要替换为 Redis 等共享存储适配器。后台文章与页面管理接口的创建、更新请求和响应已接入 `content-v1` 加密信封，前端 `/admin` 总览和 `/admin/posts` 已读取真实后台文章数据，`/admin/pages` 已接入加密列表、创建和更新流程，后端生成的 `math inline/block` 节点会在前台文章详情与后台预览中用 KaTeX 渲染。后台 `/admin/files`、`/admin/links` 和 `/admin/settings` 已替换为独立管理界面，其中 `/admin/settings` 已通过 `sensitive-v1` 接入真实站点基础设置读取与保存接口，`/admin/links` 已通过 `content-v1` 接入友链列表、审核状态更新和导航条目读取；文件上传、友链创建编辑和导航写入 API 仍需继续补齐。公开前台通过 `/api/public/posts` 与 `/api/public/posts/{slug}` 读取已发布且公开的文章，首页、文章列表页和文章详情页已切到真实 Public API。根目录 `auth.txt` 可保存本机 MySQL root 凭据供本地验证使用，该文件属于机密文件，已被 `.gitignore` 忽略，禁止提交。
 
 建议只操作临时库，例如 `blog_codex_migration_test`：创建临时库后临时设置 `BLOG_DATABASE_URL`，运行 `uv run alembic upgrade head`、`uv run python -m app.cli create-admin ...`，验证完成后运行 `uv run alembic downgrade base` 并删除临时库。
 

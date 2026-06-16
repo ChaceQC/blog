@@ -16,11 +16,13 @@ from app.policies.auth import AuthPolicy
 from app.repositories.auth import AuthRepository
 from app.repositories.content import ContentRepository
 from app.repositories.encryption import EncryptionSessionRepository
+from app.repositories.links import LinkRepository
 from app.repositories.logs import LogRepository
 from app.repositories.settings import SettingRepository
 from app.services.auth import AuthenticatedUser, AuthenticationError, AuthService
 from app.services.content import ContentService
 from app.services.encryption import EncryptionSessionManager
+from app.services.links import LinkService
 from app.services.logs import LogService
 from app.services.rate_limit import RateLimitService
 from app.services.settings import SettingService
@@ -51,6 +53,13 @@ def get_content_service(session: SessionDependency) -> ContentService:
 
 
 ContentServiceDependency = Annotated[ContentService, Depends(get_content_service)]
+
+
+def get_link_service(session: SessionDependency) -> LinkService:
+    return LinkService(repository=LinkRepository(session))
+
+
+LinkServiceDependency = Annotated[LinkService, Depends(get_link_service)]
 
 
 def get_encryption_session_manager(

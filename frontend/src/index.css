@@ -791,6 +791,10 @@ img {
   color: var(--color-warning);
 }
 
+.status-badge--rejected {
+  color: var(--color-error);
+}
+
 .compact-row,
 .site-tile {
   border-bottom: 1px solid var(--color-border);

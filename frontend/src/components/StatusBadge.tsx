@@ -1,4 +1,4 @@
-type StatusTone = 'draft' | 'published' | 'pending' | 'healthy'
+type StatusTone = 'draft' | 'published' | 'pending' | 'healthy' | 'rejected'
 
 type StatusBadgeProps = {
   tone: StatusTone
