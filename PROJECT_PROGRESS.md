@@ -54,10 +54,13 @@
 - 文件 Repository 补充 active/deleted object key 查询，`FileService` 返回扫描文件数、已登记文件数、孤儿文件数、删除数、跳过数和孤儿 object key 示例。
 - 补充孤儿文件清理测试，覆盖 dry-run 不删除、显式删除仅处理非登记托管文件、扫描上限生效。
 - 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，标记孤儿文件清理任务已完成，并将下一步调整为真实 MySQL 临时库与临时上传目录闭环验证。
+- 使用本机真实 MySQL 临时库 `blog_codex_cleanup_verify` 和临时上传目录 `backend/var/codex-cleanup-verify` 验证服务层文件清理闭环：Alembic 迁移到 head、上传公开图片、软删除并清理物理文件、制造孤儿文件、dry-run 不删除、显式删除孤儿文件。
+- 使用本机真实 MySQL 临时库 `blog_codex_cleanup_cli_verify` 和临时上传目录 `backend/var/codex-cleanup-cli-verify` 验证 CLI 文件清理闭环：`cleanup-deleted-files` 删除 1 条软删记录和 1 个物理文件，`cleanup-orphan-files` dry-run 只汇总 1 个孤儿文件，`cleanup-orphan-files --delete` 删除 1 个孤儿文件。
+- 两轮真实库验证结束后均删除临时数据库和临时上传目录；已确认 `blog_codex_cleanup_cli_verify` 不存在，`backend/var/codex-cleanup-cli-verify` 不存在。
 
 ### 进行中
 
-- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；软删除文件物理清理和孤儿文件清理任务已接入，下一步切到真实 MySQL 临时库与临时上传目录闭环验证。
+- M1 内容管理继续推进，文章封面选择与前台展示已形成第一版闭环；软删除文件物理清理、孤儿文件清理和真实 MySQL 临时库闭环验证已完成，下一步切到 Redis 共享限流适配器评估与实现。
 
 ### 阻塞与风险
 
@@ -66,11 +69,12 @@
 - 后台文件下载接口返回文件流，不走 `content-v1` 加密信封；安全边界依赖后台 HttpOnly Cookie 或 Bearer Token 鉴权、`file:upload` 权限和后端路径校验。
 - 实际执行 `cleanup-deleted-files` 会删除当前配置数据库中的软删记录和本地物理文件；本次只跑服务层单元测试和 CLI 可见性检查，未在未确认目标库与上传目录的情况下直接运行清理命令。
 - `cleanup-orphan-files` 默认 dry-run 不删除文件；显式加 `--delete` 会删除当前配置上传目录中的孤儿文件，本次未在未确认目标库与上传目录的情况下执行真实删除。
+- 本次真实清理验证仅使用 `blog_codex_cleanup_verify`、`blog_codex_cleanup_cli_verify` 和对应临时上传目录，未触碰当前运行库 `blog_codex_runtime`；MySQL 对重复 `DROP DATABASE IF EXISTS` 输出过一次“database doesn't exist”提示，但最终复查临时库和临时目录均不存在。
 
 ### 下一步
 
-- 补充真实 MySQL 临时库和临时上传目录验证，确认上传、软删除、`cleanup-deleted-files`、`cleanup-orphan-files` dry-run 与显式删除可以串成闭环。
-- 文件清理闭环验证完成后，再评估 Redis 共享限流适配器，替换或扩展当前单进程内存限流器。
+- 评估并实现 Redis 共享限流适配器，替换或扩展当前单进程内存限流器，优先覆盖后台登录和加密协商入口。
+- Redis 限流适配器完成后，补充配置示例、单元测试和无 Redis 时的本地降级策略验证。
 - 使用真实 MySQL 运行库验证上传图片、选择封面、发布文章、前台封面展示、正文图片渲染、公开文件栏下载和后台访问日志查询。
 
 ### 验证
@@ -114,6 +118,9 @@
 - 已重新运行 `uv run python -m app.cli --help`，确认 `cleanup-orphan-files` 子命令已注册。
 - 已重新运行 `git diff --check`，未发现空白或行尾问题。
 - 已重新运行后端全量 `uv run pytest`，85 个测试通过；仍存在 FastAPI TestClient 与 per-request cookies 的上游弃用警告。
+- 已使用本机真实 MySQL 临时库 `blog_codex_cleanup_verify` 运行 Alembic 迁移和服务层文件清理闭环，确认软删除清理扫描 1 条、删除记录 1 条、删除物理文件 1 个；孤儿 dry-run 扫描 2 个、孤儿 1 个、删除 0 个；孤儿显式删除扫描 2 个、孤儿 1 个、删除 1 个。
+- 已使用本机真实 MySQL 临时库 `blog_codex_cleanup_cli_verify` 运行 Alembic 迁移和 CLI 文件清理闭环，确认 `cleanup-deleted-files`、`cleanup-orphan-files` dry-run、`cleanup-orphan-files --delete` 均按预期输出和修改临时上传目录。
+- 已确认 CLI 验证结束后 `blog_codex_cleanup_cli_verify` 临时库不存在，`backend/var/codex-cleanup-cli-verify` 临时上传目录不存在。
 
 ## 2026-06-16
 
