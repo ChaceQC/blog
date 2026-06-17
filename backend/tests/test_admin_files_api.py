@@ -45,6 +45,9 @@ class FakeFileService:
         assert offset == 0
         return [_file_item(public_listed=True)]
 
+    async def count_public_files(self) -> int:
+        return 1
+
     async def delete_file(self, file_id: int) -> object:
         assert file_id == 1
         return _file_item(status="deleted")
@@ -369,6 +372,7 @@ def test_public_file_list_uses_public_encryption_session() -> None:
     assert response.status_code == 200
     assert response.json()["profile"] == "content-v1"
     assert manager.payload is not None
+    assert manager.payload["total"] == 1
     assert manager.payload["items"][0]["original_name"] == "cover.png"
     assert "object_key" not in manager.payload["items"][0]
     assert logs.items[0]["access_type"] == "public_files_list"

@@ -13,6 +13,11 @@ import type {
   PublicFileListResponse,
 } from './types.ts'
 
+type PublicFileListOptions = {
+  limit?: number
+  offset?: number
+}
+
 export function listAdminFiles(): Promise<AdminFileListResponse> {
   return apiGetEncrypted<AdminFileListResponse>('/admin/files', 'content-v1')
 }
@@ -37,10 +42,24 @@ export function uploadAdminFile(
   })
 }
 
-export function listPublicFiles(): Promise<PublicFileListResponse> {
-  return apiGetEncrypted<PublicFileListResponse>('/public/files', 'content-v1', {
-    encryptionScope: 'public',
-  })
+export function listPublicFiles(
+  options: PublicFileListOptions = {},
+): Promise<PublicFileListResponse> {
+  const params = new URLSearchParams()
+  if (options.limit !== undefined) {
+    params.set('limit', String(options.limit))
+  }
+  if (options.offset !== undefined) {
+    params.set('offset', String(options.offset))
+  }
+  const query = params.toString()
+  return apiGetEncrypted<PublicFileListResponse>(
+    `/public/files${query ? `?${query}` : ''}`,
+    'content-v1',
+    {
+      encryptionScope: 'public',
+    },
+  )
 }
 
 export function getPublicFileTemporaryUrl(

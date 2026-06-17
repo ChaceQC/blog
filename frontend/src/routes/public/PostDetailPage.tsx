@@ -81,12 +81,6 @@ export function PostDetailPage() {
           </div>
         ) : null}
       </header>
-      <figure className="post-detail__cover">
-        <img
-          alt={post.title}
-          src={postCoverUrl(post)}
-        />
-      </figure>
       <MathHtml
         className="post-prose"
         html={post.content_html}

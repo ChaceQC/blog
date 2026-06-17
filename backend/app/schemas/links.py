@@ -48,6 +48,7 @@ class PublicFriendLinkItem(BaseModel):
 
 class PublicFriendLinkListResponse(BaseModel):
     items: list[PublicFriendLinkItem]
+    total: int = Field(ge=0)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -169,6 +170,7 @@ class PublicSiteNavItem(BaseModel):
 
 class PublicSiteNavItemListResponse(BaseModel):
     items: list[PublicSiteNavItem]
+    total: int = Field(ge=0)
 
     model_config = ConfigDict(extra="forbid")
 

@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { type FormEvent, useMemo, useState } from 'react'
+import { type FormEvent, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import { ListPager } from '../../components/ListPager.tsx'
 import { FriendLinkList } from '../../features/links/FriendLinkList.tsx'
@@ -22,7 +23,8 @@ const emptyApplicationForm = {
 }
 
 export function LinksPage() {
-  const [page, setPage] = useState(0)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const page = parsePage(searchParams.get('page'))
   const [applicationForm, setApplicationForm] = useState(emptyApplicationForm)
   const [applicationNotice, setApplicationNotice] = useState<string | null>(null)
   const {
@@ -30,15 +32,12 @@ export function LinksPage() {
     isError,
     isLoading,
   } = useQuery({
-    queryKey: ['public-friend-links'],
-    queryFn: () => listPublicFriendLinks({ limit: 100 }),
+    queryKey: ['public-friend-links', page],
+    queryFn: () =>
+      listPublicFriendLinks({ limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
   })
   const links = linksData?.items ?? emptyLinks
-  const safePage = Math.min(page, Math.max(0, Math.ceil(links.length / PAGE_SIZE) - 1))
-  const visibleLinks = useMemo(
-    () => links.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE),
-    [links, safePage],
-  )
+  const totalLinks = linksData?.total ?? 0
   const applicationMutation = useMutation({
     mutationFn: submitPublicFriendLinkApplication,
     onSuccess: () => {
@@ -67,17 +66,17 @@ export function LinksPage() {
         <div className="section-heading section-heading--stacked">
           <small>BOOKMARKS</small>
           <span>朋友们</span>
-          <small>{isLoading ? '加载中' : `${links.length} 个站点`}</small>
+          <small>{isLoading ? '加载中' : `第 ${page + 1} 页`}</small>
         </div>
         {isError ? <p className="empty-state">友链暂时不可用。</p> : null}
-        {!isLoading && !isError && links.length === 0 ? (
+        {!isLoading && !isError && totalLinks === 0 ? (
           <p className="empty-state">还没有公开友链。</p>
         ) : null}
-        <FriendLinkList links={visibleLinks} />
+        <FriendLinkList links={links} />
         <ListPager
-          page={safePage}
+          page={page}
           pageSize={PAGE_SIZE}
-          totalItems={links.length}
+          totalItems={totalLinks}
           isLoading={isLoading}
           onPageChange={setPage}
         />
@@ -165,9 +164,29 @@ export function LinksPage() {
       rss_url: nullableText(applicationForm.rssUrl),
     })
   }
+
+  function setPage(nextPage: number) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (nextPage <= 0) {
+        next.delete('page')
+      } else {
+        next.set('page', String(nextPage + 1))
+      }
+      return next
+    })
+  }
 }
 
 function nullableText(value: string): string | null {
   const trimmed = value.trim()
   return trimmed ? trimmed : null
+}
+
+function parsePage(value: string | null) {
+  const page = Number.parseInt(value ?? '1', 10)
+  if (Number.isNaN(page) || page < 1) {
+    return 0
+  }
+  return page - 1
 }

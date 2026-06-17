@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import { ListPager } from '../../components/ListPager.tsx'
 import { usePageSeo } from '../../features/seo/usePageSeo.ts'
@@ -7,26 +7,24 @@ import { SiteGrid } from '../../features/sites/SiteGrid.tsx'
 import { listPublicSiteItems } from '../../features/sites/api.ts'
 import type { SiteItem } from '../../features/sites/types.ts'
 
-const PAGE_SIZE = 9
+const PAGE_SIZE = 6
 const pageDescription = '把常用入口收在一页，需要的时候不用到处翻。'
 const emptySites: SiteItem[] = []
 
 export function SitesPage() {
-  const [page, setPage] = useState(0)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const page = parsePage(searchParams.get('page'))
   const {
     data: sitesData,
     isError,
     isLoading,
   } = useQuery({
-    queryKey: ['public-site-items'],
-    queryFn: () => listPublicSiteItems({ limit: 100 }),
+    queryKey: ['public-site-items', page],
+    queryFn: () =>
+      listPublicSiteItems({ limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
   })
   const sites = sitesData?.items ?? emptySites
-  const safePage = Math.min(page, Math.max(0, Math.ceil(sites.length / PAGE_SIZE) - 1))
-  const visibleSites = useMemo(
-    () => sites.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE),
-    [safePage, sites],
-  )
+  const totalSites = sitesData?.total ?? 0
   usePageSeo({
     title: '站点目录',
     description: pageDescription,
@@ -45,21 +43,41 @@ export function SitesPage() {
         <div className="section-heading section-heading--stacked">
           <small>DIRECTORY</small>
           <span>入口</span>
-          <small>{isLoading ? '加载中' : `${sites.length} 个入口`}</small>
+          <small>{isLoading ? '加载中' : `第 ${page + 1} 页`}</small>
         </div>
         {isError ? <p className="empty-state">站点目录暂时不可用。</p> : null}
-        {!isLoading && !isError && sites.length === 0 ? (
+        {!isLoading && !isError && totalSites === 0 ? (
           <p className="empty-state">还没有公开入口。</p>
         ) : null}
-        <SiteGrid sites={visibleSites} />
+        <SiteGrid sites={sites} />
         <ListPager
-          page={safePage}
+          page={page}
           pageSize={PAGE_SIZE}
-          totalItems={sites.length}
+          totalItems={totalSites}
           isLoading={isLoading}
           onPageChange={setPage}
         />
       </section>
     </div>
   )
+
+  function setPage(nextPage: number) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (nextPage <= 0) {
+        next.delete('page')
+      } else {
+        next.set('page', String(nextPage + 1))
+      }
+      return next
+    })
+  }
+}
+
+function parsePage(value: string | null) {
+  const page = Number.parseInt(value ?? '1', 10)
+  if (Number.isNaN(page) || page < 1) {
+    return 0
+  }
+  return page - 1
 }

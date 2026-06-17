@@ -60,5 +60,6 @@ class PublicFileItem(BaseModel):
 
 class PublicFileListResponse(BaseModel):
     items: list[PublicFileItem]
+    total: int = Field(ge=0)
 
     model_config = ConfigDict(extra="forbid")

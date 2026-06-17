@@ -33,6 +33,13 @@ class ContentRepositoryProtocol(Protocol):
         tag_slug: str | None = None,
     ) -> Sequence[Post]: ...
 
+    async def count_public_posts(
+        self,
+        *,
+        category_slug: str | None = None,
+        tag_slug: str | None = None,
+    ) -> int: ...
+
     async def list_public_feed_posts(self, *, limit: int) -> Sequence[Post]: ...
 
     async def list_public_categories(
@@ -187,6 +194,17 @@ class ContentService:
         return await self.repository.list_public_posts(
             limit=limit,
             offset=offset,
+            category_slug=category_slug,
+            tag_slug=tag_slug,
+        )
+
+    async def count_public_posts(
+        self,
+        *,
+        category_slug: str | None = None,
+        tag_slug: str | None = None,
+    ) -> int:
+        return await self.repository.count_public_posts(
             category_slug=category_slug,
             tag_slug=tag_slug,
         )

@@ -87,7 +87,8 @@ uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 
 公开分类、标签和文章读取接口使用 public scope `content-v1` 加密响应，调用方需要先协商 `/api/public/encryption/sessions` 并携带 `X-Encryption-Session`：
 
-- `GET /api/public/posts`：返回已公开且已到发布时间的文章列表，支持通过 `category={slug}` 和 `tag={slug}` 按分类、标签筛选。
+- `GET /api/public/posts`：返回已公开且已到发布时间的文章列表，支持通过 `category={slug}` 和 `tag={slug}` 按分类、标签筛选；列表响应包含 `items` 和 `total`，供前台直接显示总页数。
+- `GET /api/public/friend-links`、`GET /api/public/site-items` 和 `GET /api/public/files`：公开友链、站点目录和公开文件列表响应同样包含 `items` 和 `total`，前台分页不需要额外多取一条记录判断下一页。
 - `GET /api/public/categories`：返回已公开且已到发布时间文章使用到的分类，包含 `id`、`name`、`slug` 和 `post_count`。
 - `GET /api/public/categories/{slug}`：返回单个公开分类归档信息；分类不存在或没有公开文章时返回 404。
 - `GET /api/public/tags`：返回已公开且已到发布时间文章使用到的标签，包含 `id`、`name`、`slug` 和 `post_count`。

@@ -1,4 +1,12 @@
-import { ArrowRight, GitBranch, Mail, Rss, Send } from 'lucide-react'
+import {
+  ArrowRight,
+  GitBranch,
+  Link2,
+  Mail,
+  Rss,
+  Send,
+  Video,
+} from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
@@ -51,11 +59,6 @@ export function HomePage() {
   const featuredPosts = postsData?.items ?? []
   const featuredSites = sitesData?.items ?? []
   const latestPost = featuredPosts[0] ?? null
-  const socialIconMap = {
-    GitHub: GitBranch,
-    RSS: Rss,
-    Email: Mail,
-  }
   usePageSeo({
     title: profile.title,
     description: profile.description,
@@ -84,21 +87,20 @@ export function HomePage() {
             </small>
           </div>
           <div className="social-strip" aria-label="社交链接">
-            {profile.socialLinks.map((link) => (
-              <a href={link.url} key={link.label}>
-                {(() => {
-                  const Icon =
-                    socialIconMap[link.label as keyof typeof socialIconMap]
+            {profile.socialLinks.map((link) => {
+              const Icon = resolveSocialIcon(link)
 
-                  return Icon ? (
-                    <Icon size={16} strokeWidth={1.6} aria-hidden="true" />
-                  ) : (
-                    link.label
-                  )
-                })()}
-                <span className="sr-only">{link.label}</span>
-              </a>
-            ))}
+              return (
+                <a
+                  href={link.url}
+                  key={`${link.label}-${link.url}`}
+                  title={link.label}
+                >
+                  <Icon size={16} strokeWidth={1.6} aria-hidden="true" />
+                  <span className="sr-only">{link.label}</span>
+                </a>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -237,4 +239,35 @@ export function HomePage() {
       </section>
     </div>
   )
+}
+
+type SocialLinkLike = {
+  label: string
+  url: string
+}
+
+function resolveSocialIcon(link: SocialLinkLike) {
+  const signal = `${link.label} ${link.url}`.toLowerCase()
+
+  if (signal.includes('github')) {
+    return GitBranch
+  }
+  if (
+    signal.includes('rss') ||
+    signal.includes('feed') ||
+    signal.includes('/atom')
+  ) {
+    return Rss
+  }
+  if (signal.includes('mail') || signal.includes('@')) {
+    return Mail
+  }
+  if (
+    signal.includes('bilibili') ||
+    signal.includes('youtube') ||
+    signal.includes('video')
+  ) {
+    return Video
+  }
+  return Link2
 }

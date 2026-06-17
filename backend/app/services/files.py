@@ -133,6 +133,8 @@ class FileRepositoryProtocol(Protocol):
         offset: int,
     ) -> Sequence[BlogFile]: ...
 
+    async def count_public_listed_files(self) -> int: ...
+
     async def get_file(self, file_id: int) -> BlogFile | None: ...
 
     async def get_file_by_sha256(self, sha256: str) -> BlogFile | None: ...
@@ -194,6 +196,9 @@ class FileService:
                 offset=offset,
             ),
         )
+
+    async def count_public_files(self) -> int:
+        return await self.repository.count_public_listed_files()
 
     async def upload_file(self, command: UploadFileCommand) -> FileWithUsage:
         self._validate_size(command.data, command.max_size_bytes)

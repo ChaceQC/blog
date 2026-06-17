@@ -48,6 +48,17 @@ class FileRepository:
         )
         return result.scalars().all()
 
+    async def count_public_listed_files(self) -> int:
+        result = await self.session.execute(
+            select(func.count(BlogFile.id)).where(
+                BlogFile.deleted_at.is_(None),
+                BlogFile.visibility == "public",
+                BlogFile.public_listed.is_(True),
+                BlogFile.status == "active",
+            ),
+        )
+        return int(result.scalar_one())
+
     async def get_file(self, file_id: int) -> BlogFile | None:
         result = await self.session.execute(
             select(BlogFile).where(

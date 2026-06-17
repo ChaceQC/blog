@@ -84,6 +84,7 @@ export type FriendLink = {
 
 export type PublicFriendLinkListResponse = {
   items: FriendLink[]
+  total: number
 }
 
 export type PublicFriendLinkApplicationPayload = {

@@ -60,15 +60,15 @@ export function PublicPostArchivePage({ taxonomy }: PublicPostArchivePageProps) 
     queryKey: ['public-posts', 'archive', page, categorySlug, tagSlug],
     queryFn: () =>
       listPublicPosts({
-        limit: PAGE_SIZE + 1,
+        limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
         categorySlug,
         tagSlug,
       }),
   })
 
-  const posts = (postsQuery.data?.items ?? []).slice(0, PAGE_SIZE)
-  const hasNextPage = (postsQuery.data?.items.length ?? 0) > PAGE_SIZE
+  const posts = postsQuery.data?.items ?? []
+  const totalPosts = postsQuery.data?.total ?? 0
   const categories = categoriesQuery.data?.items ?? []
   const tags = tagsQuery.data?.items ?? []
   const activeCategory =
@@ -158,7 +158,7 @@ export function PublicPostArchivePage({ taxonomy }: PublicPostArchivePageProps) 
         <ListPager
           page={page}
           pageSize={PAGE_SIZE}
-          totalItems={page * PAGE_SIZE + posts.length + (hasNextPage ? 1 : 0)}
+          totalItems={totalPosts}
           isLoading={postsQuery.isLoading}
           onPageChange={setPage}
         />

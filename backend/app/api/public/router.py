@@ -254,6 +254,10 @@ async def list_public_posts(
         category_slug=category_slug,
         tag_slug=tag_slug,
     )
+    total = await service.count_public_posts(
+        category_slug=category_slug,
+        tag_slug=tag_slug,
+    )
     response = await encrypted_response(
         PublicPostListResponse(
             items=[
@@ -264,6 +268,7 @@ async def list_public_posts(
                 )
                 for post in posts
             ],
+            total=total,
         ),
         request=request,
         manager=encryption_manager,
@@ -279,6 +284,7 @@ async def list_public_posts(
             "limit": limit,
             "offset": offset,
             "count": len(posts),
+            "total": total,
             "category": category_slug,
             "tag": tag_slug,
         },
@@ -380,9 +386,11 @@ async def list_public_friend_links(
     offset: int = Query(default=0, ge=0),
 ):
     links = await service.list_public_friend_links(limit=limit, offset=offset)
+    total = await service.count_public_friend_links()
     response = await encrypted_response(
         PublicFriendLinkListResponse(
             items=[PublicFriendLinkItem.model_validate(link) for link in links],
+            total=total,
         ),
         request=request,
         manager=encryption_manager,
@@ -394,7 +402,12 @@ async def list_public_friend_links(
         access_type="public_friend_links_list",
         status_code=status.HTTP_200_OK,
         entity_type="friend_link",
-        detail_json={"limit": limit, "offset": offset, "count": len(links)},
+        detail_json={
+            "limit": limit,
+            "offset": offset,
+            "count": len(links),
+            "total": total,
+        },
     )
     return response
 
@@ -471,9 +484,11 @@ async def list_public_site_items(
     offset: int = Query(default=0, ge=0),
 ):
     items = await service.list_public_site_nav_items(limit=limit, offset=offset)
+    total = await service.count_public_site_nav_items()
     response = await encrypted_response(
         PublicSiteNavItemListResponse(
             items=[PublicSiteNavItem.model_validate(item) for item in items],
+            total=total,
         ),
         request=request,
         manager=encryption_manager,
@@ -485,7 +500,12 @@ async def list_public_site_items(
         access_type="public_site_items_list",
         status_code=status.HTTP_200_OK,
         entity_type="site_nav_item",
-        detail_json={"limit": limit, "offset": offset, "count": len(items)},
+        detail_json={
+            "limit": limit,
+            "offset": offset,
+            "count": len(items),
+            "total": total,
+        },
     )
     return response
 
@@ -565,7 +585,7 @@ def _social_links_value(value: object) -> list[dict[str, str]]:
             and url.strip()
         ):
             links.append({"label": label.strip(), "url": url.strip()})
-    return links[:6]
+    return links[:12]
 
 
 def _public_post_item(

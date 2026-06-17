@@ -46,4 +46,5 @@ export type PublicFileItem = {
 
 export type PublicFileListResponse = {
   items: PublicFileItem[]
+  total: number
 }

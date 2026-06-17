@@ -145,6 +145,17 @@ class FakePublicContentService:
             ),
         ]
 
+    async def count_public_posts(
+        self,
+        *,
+        category_slug: str | None = None,
+        tag_slug: str | None = None,
+    ) -> int:
+        if category_slug is not None or tag_slug is not None:
+            assert category_slug == "category-a"
+            assert tag_slug == "fastapi"
+        return 1
+
     async def list_public_categories(
         self,
         *,
@@ -227,6 +238,9 @@ class FakePublicLinkService:
             ),
         ]
 
+    async def count_public_friend_links(self) -> int:
+        return 1
+
     async def list_public_site_nav_items(
         self,
         *,
@@ -249,6 +263,9 @@ class FakePublicLinkService:
                 sort_order=0,
             ),
         ]
+
+    async def count_public_site_nav_items(self) -> int:
+        return 1
 
     async def create_friend_link(self, command: CreateFriendLinkCommand) -> object:
         assert command.group_id is None
@@ -403,6 +420,7 @@ def test_public_posts_returns_published_post_list() -> None:
     assert response.status_code == 200
     assert response.json()["profile"] == "content-v1"
     assert manager.payload is not None
+    assert manager.payload["total"] == 1
     assert manager.payload["items"][0]["slug"] == "public-post"
     assert "content_html" not in manager.payload["items"][0]
     assert manager.payload["items"][0]["word_count"] == 8
@@ -437,11 +455,13 @@ def test_public_posts_accept_category_and_tag_filters() -> None:
     assert response.status_code == 200
     assert response.json()["profile"] == "content-v1"
     assert manager.payload is not None
+    assert manager.payload["total"] == 1
     assert manager.payload["items"][0]["slug"] == "public-post"
     assert logs.items[0]["detail_json"] == {
         "limit": 2,
         "offset": 0,
         "count": 1,
+        "total": 1,
         "category": "category-a",
         "tag": "fastapi",
     }
@@ -706,6 +726,7 @@ def test_public_friend_links_return_encrypted_list() -> None:
     assert response.status_code == 200
     assert response.json()["profile"] == "content-v1"
     assert manager.payload is not None
+    assert manager.payload["total"] == 1
     assert manager.payload["items"][0]["name"] == "ChaceQC"
     assert logs.items[0]["access_type"] == "public_friend_links_list"
 
@@ -768,5 +789,6 @@ def test_public_site_items_return_encrypted_list() -> None:
     assert response.status_code == 200
     assert response.json()["profile"] == "content-v1"
     assert manager.payload is not None
+    assert manager.payload["total"] == 1
     assert manager.payload["items"][0]["title"] == "GitHub 仓库"
     assert logs.items[0]["access_type"] == "public_site_items_list"

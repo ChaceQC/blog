@@ -117,6 +117,7 @@ class PublicPostDetail(PublicPostItem):
 
 class PublicPostListResponse(BaseModel):
     items: list[PublicPostItem]
+    total: int = Field(ge=0)
 
     model_config = ConfigDict(extra="forbid")
 

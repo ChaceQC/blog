@@ -55,9 +55,11 @@ async def list_public_files(
     offset: int = Query(default=0, ge=0),
 ) -> EncryptedApiResponse:
     files = await service.list_public_files(limit=limit, offset=offset)
+    total = await service.count_public_files()
     response = await encrypted_response(
         PublicFileListResponse(
             items=[PublicFileItem.model_validate(file) for file in files],
+            total=total,
         ),
         request=request,
         manager=encryption_manager,
@@ -71,7 +73,12 @@ async def list_public_files(
         file_id=0,
         entity_type="file",
         entity_id=None,
-        detail_json={"limit": limit, "offset": offset, "count": len(files)},
+        detail_json={
+            "limit": limit,
+            "offset": offset,
+            "count": len(files),
+            "total": total,
+        },
     )
     return response
 

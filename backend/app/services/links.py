@@ -43,6 +43,8 @@ class LinkRepositoryProtocol(Protocol):
         offset: int,
     ) -> Sequence[tuple[FriendLink, str | None]]: ...
 
+    async def count_public_friend_links(self) -> int: ...
+
     async def get_friend_link(self, link_id: int) -> FriendLink | None: ...
 
     async def create_friend_link(
@@ -71,6 +73,8 @@ class LinkRepositoryProtocol(Protocol):
         limit: int,
         offset: int,
     ) -> Sequence[tuple[SiteNavItem, str | None, str | None]]: ...
+
+    async def count_public_site_nav_items(self) -> int: ...
 
     async def get_site_nav_item(self, item_id: int) -> SiteNavItem | None: ...
 
@@ -186,6 +190,9 @@ class LinkService:
             for link, group_name in rows
         ]
 
+    async def count_public_friend_links(self) -> int:
+        return await self.repository.count_public_friend_links()
+
     async def review_friend_link(
         self,
         *,
@@ -288,6 +295,9 @@ class LinkService:
             )
             for item, group_name, group_slug in rows
         ]
+
+    async def count_public_site_nav_items(self) -> int:
+        return await self.repository.count_public_site_nav_items()
 
     async def create_site_nav_item(
         self,

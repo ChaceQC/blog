@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save, SlidersHorizontal } from 'lucide-react'
+import { Plus, Save, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import {
@@ -206,7 +206,17 @@ export function AdminSettingsPage() {
             ) : null}
             {activeSection === 'social' ? (
               <div className="field-group">
-                <span className="field-label">首页社交入口</span>
+                <div className="field-label-row">
+                  <span className="field-label">首页社交入口</span>
+                  <button
+                    className="text-button text-button--muted"
+                    onClick={addSocialLink}
+                    type="button"
+                  >
+                    <Plus size={15} strokeWidth={1.8} aria-hidden="true" />
+                    添加入口
+                  </button>
+                </div>
                 <div className="musing-editor-list">
                   {form.socialLinks.map((link, index) => (
                     <div className="social-link-editor" key={index}>
@@ -228,8 +238,19 @@ export function AdminSettingsPage() {
                           value={link.url}
                         />
                       </label>
+                      <button
+                        aria-label={`删除 ${link.label || '社交入口'}`}
+                        className="icon-button social-link-editor__remove"
+                        onClick={() => removeSocialLink(index)}
+                        type="button"
+                      >
+                        <Trash2 size={16} strokeWidth={1.8} aria-hidden="true" />
+                      </button>
                     </div>
                   ))}
+                  {form.socialLinks.length === 0 ? (
+                    <p className="empty-state">还没有社交入口。</p>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -306,6 +327,26 @@ export function AdminSettingsPage() {
       return { ...nextForm, socialLinks }
     })
   }
+
+  function addSocialLink() {
+    setDraftForm((current) => {
+      const nextForm = current ?? form
+      return {
+        ...nextForm,
+        socialLinks: [...nextForm.socialLinks, { label: '', url: '' }],
+      }
+    })
+  }
+
+  function removeSocialLink(index: number) {
+    setDraftForm((current) => {
+      const nextForm = current ?? form
+      return {
+        ...nextForm,
+        socialLinks: nextForm.socialLinks.filter((_, itemIndex) => itemIndex !== index),
+      }
+    })
+  }
 }
 
 function settingToForm(value: Record<string, unknown>): SiteSettingForm {
@@ -338,7 +379,8 @@ function formToSettingValue(form: SiteSettingForm): Record<string, unknown> {
         label: link.label.trim(),
         url: link.url.trim(),
       }))
-      .filter((link) => link.label.length > 0 && link.url.length > 0),
+      .filter((link) => link.label.length > 0 && link.url.length > 0)
+      .slice(0, 12),
   }
 }
 
@@ -384,7 +426,7 @@ function socialLinksValue(value: unknown): SiteSocialLink[] {
       url: stringValue(item.url, ''),
     }))
     .filter((link) => link.label.trim().length > 0 && link.url.trim().length > 0)
-    .slice(0, 6)
+    .slice(0, 12)
 
   return socialLinks.length > 0 ? socialLinks : initialForm.socialLinks
 }

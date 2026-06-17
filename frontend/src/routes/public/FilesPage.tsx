@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Download } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import { ListPager } from '../../components/ListPager.tsx'
 import {
@@ -15,22 +16,19 @@ const pageDescription = '公开发布的附件会显示在这里。'
 const emptyFiles: PublicFileItem[] = []
 
 export function FilesPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const page = parsePage(searchParams.get('page'))
   const [notice, setNotice] = useState<string | null>(null)
-  const [page, setPage] = useState(0)
   const filesQuery = useQuery({
-    queryKey: ['public-files'],
-    queryFn: listPublicFiles,
+    queryKey: ['public-files', page],
+    queryFn: () => listPublicFiles({ limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
   })
   const temporaryUrlMutation = useMutation({
     mutationFn: getPublicFileTemporaryUrl,
     onError: () => setNotice('下载链接暂时无法生成。'),
   })
   const files = filesQuery.data?.items ?? emptyFiles
-  const safePage = Math.min(page, Math.max(0, Math.ceil(files.length / PAGE_SIZE) - 1))
-  const visibleFiles = useMemo(
-    () => files.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE),
-    [files, safePage],
-  )
+  const totalFiles = filesQuery.data?.total ?? 0
   usePageSeo({
     title: '文件',
     description: pageDescription,
@@ -60,15 +58,15 @@ export function FilesPage() {
         <div className="section-heading section-heading--stacked">
           <small>列表</small>
           <span>公开文件</span>
-          <small>{filesQuery.isLoading ? '加载中' : `${files.length} 个文件`}</small>
+          <small>{filesQuery.isLoading ? '加载中' : `第 ${page + 1} 页`}</small>
         </div>
         {notice ? <p className="empty-state">{notice}</p> : null}
         {filesQuery.isError ? <p className="empty-state">文件列表暂时不可用。</p> : null}
-        {!filesQuery.isLoading && !filesQuery.isError && files.length === 0 ? (
+        {!filesQuery.isLoading && !filesQuery.isError && totalFiles === 0 ? (
           <p className="empty-state">还没有公开文件。</p>
         ) : null}
         <div className="compact-list">
-          {visibleFiles.map((file) => (
+          {files.map((file) => (
             <button
               className="compact-row"
               disabled={temporaryUrlMutation.isPending}
@@ -89,15 +87,27 @@ export function FilesPage() {
           ))}
         </div>
         <ListPager
-          page={safePage}
+          page={page}
           pageSize={PAGE_SIZE}
-          totalItems={files.length}
+          totalItems={totalFiles}
           isLoading={filesQuery.isLoading}
           onPageChange={setPage}
         />
       </section>
     </div>
   )
+
+  function setPage(nextPage: number) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (nextPage <= 0) {
+        next.delete('page')
+      } else {
+        next.set('page', String(nextPage + 1))
+      }
+      return next
+    })
+  }
 }
 
 function formatFileSize(sizeBytes: number): string {
@@ -115,4 +125,12 @@ function formatDate(value: string): string {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value))
+}
+
+function parsePage(value: string | null) {
+  const page = Number.parseInt(value ?? '1', 10)
+  if (Number.isNaN(page) || page < 1) {
+    return 0
+  }
+  return page - 1
 }

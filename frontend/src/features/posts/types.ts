@@ -21,6 +21,7 @@ export type PublicPostDetail = PublicPostItem & {
 
 export type PublicPostListResponse = {
   items: PublicPostItem[]
+  total: number
 }
 
 export type PublicTaxonomyItem = {

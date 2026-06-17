@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.link import FriendLink, FriendLinkGroup
@@ -42,6 +42,12 @@ class LinkRepository:
             .offset(offset),
         )
         return result.all()
+
+    async def count_public_friend_links(self) -> int:
+        result = await self.session.execute(
+            select(func.count(FriendLink.id)).where(FriendLink.status == "healthy"),
+        )
+        return int(result.scalar_one())
 
     async def list_healthy_friend_links_for_check(
         self,
@@ -122,6 +128,14 @@ class LinkRepository:
             .offset(offset),
         )
         return result.all()
+
+    async def count_public_site_nav_items(self) -> int:
+        result = await self.session.execute(
+            select(func.count(SiteNavItem.id)).where(
+                SiteNavItem.visibility == "public",
+            ),
+        )
+        return int(result.scalar_one())
 
     async def get_site_nav_item(self, item_id: int) -> SiteNavItem | None:
         result = await self.session.execute(

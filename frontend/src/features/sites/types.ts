@@ -13,4 +13,5 @@ export type SiteItem = {
 
 export type PublicSiteNavItemListResponse = {
   items: SiteItem[]
+  total: number
 }
