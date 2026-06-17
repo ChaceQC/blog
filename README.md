@@ -242,6 +242,17 @@ uv run python scripts/verify_runtime_publish_flow.py
 
 该脚本需要本地后端和前端已启动，会覆盖后台加密登录、上传公开图片、文章预览、创建发布文章、公开文章读取、分类/标签稳定路由、sitemap、公开文件下载和访问日志查询。默认会归档测试文章。
 
+公开页大数量分页与移动端溢出回归：
+
+```powershell
+cd backend
+$env:PYTHONUTF8='1'
+$env:BLOG_VERIFY_FRONTEND_URL='http://127.0.0.1:15173'
+uv run python scripts/verify_public_page_pagination.py
+```
+
+该脚本同样需要本地后端和前端已启动，会在当前后端配置指向的运行库中写入带随机前缀的临时友链、站点目录和公开文件，使用 Playwright/Edge 检查 `/links?page=2`、`/sites?page=2`、`/files?page=2` 在桌面与移动端视口下的分页状态和横向溢出，并在结束时清理临时数据。浏览器通道可通过 `BLOG_VERIFY_BROWSER_CHANNEL` 调整，默认 `msedge`。
+
 ## 生产部署
 
 生产目标环境为 Linux Debian。推荐部署目录为 `/opt/blog`，以下命令假设代码已位于该目录。

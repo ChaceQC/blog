@@ -4,6 +4,9 @@
 
 ### 已完成
 
+- 新增公开页分页与移动端密度回归脚本 `backend/scripts/verify_public_page_pagination.py`：脚本会向当前后端配置的运行库写入随机前缀临时友链、站点目录和公开文件，使用 Playwright/Edge 检查 `/links?page=2`、`/sites?page=2`、`/files?page=2` 在桌面和移动端视口下的分页状态与横向溢出，最后清理临时数据。
+- 后端开发依赖补充 `playwright>=1.56.0`，用于运行公开页浏览器级回归脚本；脚本默认使用本机 `msedge` 通道，不下载或提交浏览器二进制。
+- 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，记录公开页分页回归脚本的启动前提、环境变量和下一步推进方向。
 - 公开文章、友链、站点目录和文件列表接口补充 `total` 总数；前台友链页、站点目录页和文件页改为按真实总数显示 `第 n / m 页`，不再通过多取一条记录猜测是否存在下一页。
 - 文章正文页移除可见封面区，只保留正文内容；封面仍可作为列表缩略图和分享元信息使用。
 - 后台站点资料的社交入口支持添加和删除，保存、回读和公开资料接口统一最多保留 12 条；首页社交入口全部改为与邮箱一致的细线图标展示，未知平台使用柔和链接图标兜底。
@@ -145,7 +148,7 @@
 
 ### 进行中
 
-- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目、RSS/sitemap/robots.txt 初版、生产 Nginx SEO 出口反代、公开页面 canonical/Open Graph 基线、公开文章列表分类标签展示、公开分类/标签聚合接口、前台归档筛选入口、分类/标签独立公开路由、真实运行库回归脚本和公开友链/站点/文件页服务端分页已形成基础闭环；下一步把公开友链、站点目录和文件页分页行为纳入脚本级回归。
+- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目、RSS/sitemap/robots.txt 初版、生产 Nginx SEO 出口反代、公开页面 canonical/Open Graph 基线、公开文章列表分类标签展示、公开分类/标签聚合接口、前台归档筛选入口、分类/标签独立公开路由、真实运行库回归脚本、公开友链/站点/文件页服务端分页和公开页分页移动端回归脚本已形成基础闭环；下一步把后台管理页的大数量分页与移动端溢出纳入脚本级检查。
 
 ### 阻塞与风险
 
@@ -166,13 +169,22 @@
 - 生产 Nginx 已补充根级 SEO 文件反代规则；后续如果改为静态预渲染或 CDN 缓存，需要同步检查这些路径是否仍返回后端生成内容或等价静态文件。
 - 当前 canonical 与 Open Graph 由 React 客户端运行时写入，能改善浏览器内分享状态，但对不执行 JavaScript 的搜索引擎或社交抓取器仍不如 SSR/SSG；后续若 SEO 要求提高，需要评估预渲染或服务端渲染。
 - 分类/标签稳定 URL 已纳入真实运行库 HTTP 验证脚本；脚本默认还会请求前端 `15173`，如果只启动后端而未启动前端，需通过 `BLOG_VERIFY_FRONTEND_URL` 指向可访问的前端站点，或先启动前端开发服务。
+- 公开页分页回归脚本会向当前配置数据库写入临时友链、站点目录和公开文件；脚本已在 `finally` 中清理随机前缀数据，但如果进程被系统强杀，需用输出的 `prefix` 检查并手动清理残留记录。
+- 公开页分页回归脚本默认使用 Playwright 的 `msedge` 通道；若运行环境没有 Edge，需要通过 `BLOG_VERIFY_BROWSER_CHANNEL` 指向可用 Chromium 通道，或先安装对应浏览器运行时。
 
 ### 下一步
 
-- 扩展公开页回归验证：在真实运行库 HTTP 脚本或独立前端检查中增加 `/links?page=2`、`/sites?page=2`、`/files?page=2` 的可访问性、无横向溢出和分页状态断言。
+- 扩展后台管理页回归验证：对后台文章、文件、友链和导航管理页加入大数量分页、移动端无横向溢出和分页状态断言，避免后台列表继续在数据变多时退化。
 
 ### 验证
 
+- 公开页分页回归脚本新增后已运行 `uv run ruff check scripts\verify_public_page_pagination.py`，通过。
+- 公开页分页回归脚本新增后已运行 `uv run python scripts\verify_public_page_pagination.py --help`，通过。
+- 已启动本地后端 `uv run python main.py` 和前端 `npm.cmd run dev -- --host 127.0.0.1 --port 15173`，运行 `uv run python scripts\verify_public_page_pagination.py` 通过；脚本输出 `/links?page=2` 桌面/移动端均为 `第 2 / 3 页`，`/sites?page=2` 桌面/移动端均为 `第 2 / 3 页`，`/files?page=2` 桌面/移动端均为 `第 2 / 2 页`，所有视口 `scroll_width` 等于 `client_width`，`remaining_seed_rows` 为 0。
+- 公开页分页回归脚本新增后已运行后端全量 `uv run ruff check .`，通过。
+- 公开页分页回归脚本新增后已运行后端全量 `uv run pytest`，101 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 和 cookies 相关上游弃用警告。
+- 公开页分页回归脚本新增后已运行 `npm.cmd run lint`，通过。
+- 公开页分页回归脚本新增后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - 前台友链/站点/文件页服务端分页接入后已运行 `npm.cmd run lint`，通过。
 - 前台友链/站点/文件页服务端分页接入后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - 前台友链/站点/文件页服务端分页接入后已启动本地前后端，通过浏览器检查 `/links`、`/sites`、`/files` 均加载完成且无横向溢出；验证结束后已关闭本次启动的服务，并确认 `18080`、`15173`、`14173` 均未监听。

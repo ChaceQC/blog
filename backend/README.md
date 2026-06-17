@@ -150,6 +150,8 @@ Windows 本机安装 MySQL 8 时，可以使用临时库验证真实迁移和认
 
 真实运行库 HTTP 闭环验证可使用 `scripts/verify_runtime_publish_flow.py`。脚本需要本地后端服务已通过 `uv run python main.py` 启动，并通过 `BLOG_VERIFY_ADMIN_USERNAME` 与 `BLOG_VERIFY_ADMIN_PASSWORD` 提供后台管理员凭据；分类/标签稳定路由检查还需要前端服务已启动，前端地址可通过 `BLOG_VERIFY_FRONTEND_URL` 配置，默认 `http://127.0.0.1:15173`。它会按真实接口协商 `sensitive-v1` / `content-v1` 加密会话，完成后台登录、公开图片上传、文章实时预览、创建并发布文章、分类、标签、SEO 信息、未来定时文章不提前公开、公开列表和详情封面缩略图、分类/标签详情、分类/标签筛选、sitemap 分类/标签 URL、前端分类/标签稳定路由、正文图片渲染、公开文件栏下载、后台鉴权下载和访问日志查询；默认验证完成后把测试文章归档，传入 `--keep-published` 可保留公开状态。
 
+公开页分页与移动端密度回归可使用 `scripts/verify_public_page_pagination.py`。脚本需要本地后端和前端服务已启动，默认检查 `BLOG_VERIFY_FRONTEND_URL` 或 `http://127.0.0.1:15173`，并使用 `BLOG_VERIFY_BROWSER_CHANNEL` 或默认 `msedge` 启动 Playwright Chromium 通道。脚本会在当前数据库中写入随机前缀临时友链、站点目录和公开文件，检查 `/links?page=2`、`/sites?page=2`、`/files?page=2` 在桌面和移动端视口下均能显示第二页分页条且无横向溢出，最后清理临时数据并输出 `remaining_seed_rows`。
+
 ## 部署目标
 
 生产部署环境为 Linux Debian，使用 Docker Compose、Nginx、MySQL 和私有容器网络。公网只允许 Nginx 暴露 `80/443`。
