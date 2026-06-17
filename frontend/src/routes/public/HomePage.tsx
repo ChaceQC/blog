@@ -199,7 +199,7 @@ export function HomePage() {
         </div>
         <div className="gateway-list">
           {featuredSites.map((site) => (
-            <a href={site.url} key={site.id}>
+            <a href={site.url} key={site.id} rel="noreferrer" target="_blank">
               <Send size={15} strokeWidth={1.7} aria-hidden="true" />
               <span>
                 <strong>{site.title}</strong>

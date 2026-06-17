@@ -12,7 +12,6 @@ import { useAuth } from '../auth/useAuth.ts'
 
 import type {
   AdminSiteNavItem,
-  AdminSiteNavOpenTarget,
   AdminSiteNavVisibility,
   SiteNavItemWritePayload,
 } from './types.ts'
@@ -24,7 +23,6 @@ type SiteNavForm = {
   url: string
   iconUrl: string
   description: string
-  openTarget: AdminSiteNavOpenTarget
   visibility: AdminSiteNavVisibility
   sortOrder: number
 }
@@ -34,7 +32,6 @@ const emptySiteForm: SiteNavForm = {
   url: '',
   iconUrl: '',
   description: '',
-  openTarget: 'blank',
   visibility: 'public',
   sortOrder: 0,
 }
@@ -174,39 +171,22 @@ export function AdminSiteNavPanel() {
               value={siteForm.description}
             />
           </label>
-          <div className="form-grid form-grid--two">
-            <label>
-              打开方式
-              <select
-                onChange={(event) =>
-                  updateSiteForm(
-                    'openTarget',
-                    event.target.value as AdminSiteNavOpenTarget,
-                  )
-                }
-                value={siteForm.openTarget}
-              >
-                <option value="blank">新窗口</option>
-                <option value="self">当前页</option>
-              </select>
-            </label>
-            <label>
-              可见性
-              <select
-                onChange={(event) =>
-                  updateSiteForm(
-                    'visibility',
-                    event.target.value as AdminSiteNavVisibility,
-                  )
-                }
-                value={siteForm.visibility}
-              >
-                <option value="public">公开</option>
-                <option value="hidden">隐藏</option>
-                <option value="private">后台可见</option>
-              </select>
-            </label>
-          </div>
+          <label>
+            可见性
+            <select
+              onChange={(event) =>
+                updateSiteForm(
+                  'visibility',
+                  event.target.value as AdminSiteNavVisibility,
+                )
+              }
+              value={siteForm.visibility}
+            >
+              <option value="public">公开</option>
+              <option value="hidden">隐藏</option>
+              <option value="private">后台可见</option>
+            </select>
+          </label>
           <div className="form-grid form-grid--two">
             <label>
               图标 URL
@@ -259,7 +239,6 @@ function siteToForm(site: AdminSiteNavItem): SiteNavForm {
     url: site.url,
     iconUrl: site.icon_url ?? '',
     description: site.description ?? '',
-    openTarget: site.open_target,
     visibility: site.visibility,
     sortOrder: site.sort_order,
   }
@@ -276,7 +255,7 @@ function siteFormToPayload(
     icon_url: emptyToNull(form.iconUrl),
     description: emptyToNull(form.description),
     tags_json: site?.tags_json ?? null,
-    open_target: form.openTarget,
+    open_target: 'blank',
     visibility: form.visibility,
     sort_order: Number.isFinite(form.sortOrder) ? form.sortOrder : 0,
   }

@@ -10,7 +10,13 @@ export function SiteGrid({ sites }: SiteGridProps) {
   return (
     <div className="site-grid">
       {sites.map((site) => (
-        <a className="site-tile" href={site.url} key={site.id}>
+        <a
+          className="site-tile"
+          href={site.url}
+          key={site.id}
+          rel="noreferrer"
+          target="_blank"
+        >
           <span>
             <strong>{site.title}</strong>
             <small>{site.group_name ?? site.group_slug ?? '入口'}</small>

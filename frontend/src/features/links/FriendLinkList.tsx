@@ -10,7 +10,13 @@ export function FriendLinkList({ links }: FriendLinkListProps) {
   return (
     <div className="compact-list">
       {links.map((link) => (
-        <a className="compact-row" href={link.url} key={link.id}>
+        <a
+          className="compact-row"
+          href={link.url}
+          key={link.id}
+          rel="noreferrer"
+          target="_blank"
+        >
           <span>
             <strong>{link.name}</strong>
             <small>{link.description ?? link.group_name ?? '常去看看'}</small>
