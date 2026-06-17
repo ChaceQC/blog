@@ -4,6 +4,8 @@
 
 ### 已完成
 
+- 重写根目录 `README.md`：移除当前阶段流水账和过长功能状态描述，改为面向开发者的项目架构、本地开发、配置、数据库迁移、验证、生产部署、运维任务、备份恢复和文档分工说明。
+- 明确 `README.md` 与 `PROJECT_PROGRESS.md` 的职责边界：README 维护稳定开发与部署入口，具体实现进展、风险和下一步继续放在进度记录中。
 - 新增公开分类接口 `GET /api/public/categories`，使用 public scope `content-v1` 加密响应，按已公开且已到发布时间的文章聚合分类并返回 `id`、`name`、`slug` 和 `post_count`。
 - 新增公开标签接口 `GET /api/public/tags`，使用同一公开文章过滤口径聚合标签并返回公开文章数量，避免草稿、私密文章和未到点定时文章进入前台归档数据。
 - `ContentRepository` 收敛公开文章过滤条件，公开文章列表、详情、RSS/sitemap feed、分类聚合和标签聚合复用同一发布可见性规则。
@@ -141,10 +143,11 @@
 
 ### 下一步
 
-- 前台归档筛选入口：在文章列表或归档页读取 `GET /api/public/categories` 和 `GET /api/public/tags`，并补充按分类、标签筛选公开文章的接口参数与 UI 状态。
+- 检查 `deploy/README.md` 与根目录 `README.md` 的部署说明是否存在重复或冲突，必要时将 `deploy/README.md` 调整为只保留部署目录内文件说明和补充细节。
 
 ### 验证
 
+- README 开发者文档重写后已运行 `git diff --check`，未发现空白或行尾问题。
 - 公开分类与标签接口接入后已运行 `uv run ruff check .`，通过。
 - 公开分类与标签接口接入后已运行 `uv run pytest tests\test_public_content_api.py tests\test_content_service.py`，20 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 公开分类与标签接口接入后已运行后端全量 `uv run pytest`，96 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 相关上游弃用警告。

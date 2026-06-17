@@ -1,54 +1,94 @@
 # 个人博客系统
 
-这是一个自托管个人博客与轻量 CMS 项目。系统面向公网部署设计，包含支持 Markdown 与 LaTeX 公式的文章发布、文件管理、友链、小网站导航和后台管理能力。
+自托管个人博客与轻量 CMS。系统面向公网部署设计，包含文章发布、页面管理、文件管理、友链、小网站导航、后台管理、公开订阅和基础运维任务。
 
-## 当前阶段
+## 架构概览
 
-当前版本处于 `v0.1.0` 脚手架阶段，开发分支为 `dev`。M0 脚手架、生产部署骨架和初始 Alembic 迁移已完成，M1 已落地后台登录、当前用户接口、初始管理员创建命令、Cookie 会话、CSRF 防护、前端权限菜单、后台日志查询、后台文章与页面管理接口、后台文件上传与管理接口、后台友链/导航/设置接口、公开文章列表与详情读取链路、公开分类与标签聚合接口、公开站点资料读取、公开文件栏、RSS、sitemap、robots.txt 初版、公开页面 canonical 与 Open Graph 元信息基线、前台与后台 KaTeX 公式渲染，以及 `sensitive-v1` / `content-v1` 应用层加密协商基础。后台文章编辑已支持不保存草稿也能通过真实 API 更新 HTML 预览，文章保存时会同步记录封面文件和正文图片引用；文章封面已可在后台从公开图片文件中搜索和分页选择，选择器只加载后台缩略图，并在前台文章列表与详情中展示，公开页封面 URL 也会使用带签名的缩略图地址，无封面文章会加载默认封面。文章发布核心字段已补齐：后台可填写定时发布时间、分类、标签、SEO 标题、SEO 描述和 SEO 关键词，后端会自动维护分类/标签关联；公开文章列表与详情会返回并展示分类和标签，公开分类与标签接口会按已公开且已到发布时间的文章统计 `post_count`，文章详情会写入浏览器标题、description、keywords、canonical 与基础 `og:*`，文章列表、友链、文件和站点目录也已补充可分享标题与描述；`/rss.xml`、`/sitemap.xml` 和 `/robots.txt` 会基于 `BLOG_PUBLIC_BASE_URL` 输出公开 SEO 入口。首页“近期笔墨”最多展示 3 篇，文章列表页已支持每页 5 篇分页；公开友链、站点目录、公开文件以及后台文章、页面、文件、友链、导航和日志列表已开始采用分页浏览；后台站点资料页已改为分区标签，减少新增字段直接向页面底部堆积。首页碎念和社交入口已可通过后台站点资料维护。后台登录和加密协商入口限流已支持单进程内存与 Redis 共享后端，Redis 不可用时会按同一规则本地降级。后台维护任务已开始形成独立入口，当前可通过 CLI 清理过期应用层加密会话、已软删除且无引用的本地文件、默认 dry-run 扫描本地孤儿文件，并可检查已通过友链的 HTTP 状态；生产部署已提供 systemd timer 示例用于定时调度这些任务；后台文件详情已支持通过后台鉴权下载公开或私有文件。
+```text
+Internet
+  -> Nginx 80/443
+    -> React 静态资源
+    -> FastAPI Public API
+    -> FastAPI Admin API
+        -> Service Layer
+        -> Repository Layer
+        -> MySQL 8
+        -> Redis 可选
+        -> Local Storage
+```
 
-公开 `/links` 已提供友链申请表单，提交到 `/api/public/friend-links/applications` 的请求体使用 public scope `content-v1` 加密；后端会按配置限流，固定创建 `pending` 友链并写入访问日志，后台审核通过后才进入公开友链列表。
+生产环境只允许 Nginx 暴露 `80/443`。后端、MySQL、Redis 和原始上传目录都应位于内网或 Docker 私有网络中，不直接暴露公网。
 
 ## 技术栈
 
 - 后端：Python 3.12、FastAPI、SQLAlchemy 2、Alembic、uv。
-- 前端：React、TypeScript、Vite、npm、Yohaku 设计系统 token。
+- 前端：React、TypeScript、Vite、npm。
 - 数据库：MySQL 8。
-- 缓存：Redis，可选启用。
-- 部署：Linux Debian、Docker Compose、Nginx、Let's Encrypt。
-- 开发环境：Windows 11。
+- 缓存与限流：Redis 可选，本地默认内存后端。
+- 部署：Linux Debian、Docker Compose、Nginx、Let's Encrypt 或云厂商证书。
+- 开发环境：Windows 11，文件读写和终端统一使用 UTF-8。
 
 ## 目录结构
 
 ```text
-backend/              后端 FastAPI 工程
-frontend/             前端 React 工程
-deploy/               Debian 生产部署配置
+backend/              FastAPI 后端工程
+  app/api/            Public API 与 Admin API
+  app/services/       业务用例和领域规则
+  app/repositories/   数据库访问
+  app/models/         SQLAlchemy 模型
+  app/schemas/        Pydantic DTO
+  app/core/           配置、数据库、认证、日志、安全基础设施
+  app/tasks/          后台维护任务
+  migrations/         Alembic 迁移
+  tests/              后端测试
+
+frontend/             React 前端工程
+  src/app/            路由和应用入口
+  src/routes/         前台和后台页面
+  src/features/       posts、files、links、sites、settings 等业务模块
+  src/api/            请求客户端和加密 API 封装
+
+deploy/               生产部署配置
+  docker-compose.yml
+  docker-compose.prod.yml
+  nginx/
+  env/
+  scripts/
+  systemd/
+
 AGENT.md              开发协作规则
-PROJECT_PLAN.md       项目计划书
-PROJECT_PROGRESS.md   项目进度记录
-README.md             项目总览文档
+PROJECT_PLAN.md       项目计划书和架构设计
+PROJECT_PROGRESS.md   实现进度、验证记录和下一步
 ```
 
 ## 本地开发
 
-本地开发服务避免使用常见端口。端口、API 地址、数据库连接、CORS、Trusted Host、上传目录等配置必须来自独立配置文件或环境变量。
+本地开发避免使用常见端口。前端默认 `15173`，前端预览默认 `14173`，后端默认 `18080`。端口、数据库连接、CORS、Trusted Host、上传目录和 API 地址都必须来自配置文件或环境变量。
 
-- 前端默认端口：`15173`，配置文件为 `frontend/config/development.json`。
-- 前端预览端口：`14173`，配置文件为 `frontend/config/development.json`。
-- 后端默认端口：`18080`，配置文件为 `backend/.env`。
-- 后端本地启动统一使用 `uv run python main.py`，不要直接用系统 Python 或全局 Python 启动。
-- 浏览器联调或接口验证结束后，关闭本次启动的前端、后端或预览服务，并确认相关端口不再监听。
-
-后端：
+### 后端
 
 ```powershell
 cd backend
 uv sync
 Copy-Item .env.example .env
+$env:PYTHONUTF8='1'
 uv run python main.py
 ```
 
-前端：
+后端本地启动必须在 `backend` 目录使用 `uv run python main.py`，不要直接使用系统 Python 或全局 Python。
+
+常用命令：
+
+```powershell
+cd backend
+$env:PYTHONUTF8='1'
+uv run ruff check .
+uv run pytest
+uv run alembic upgrade head --sql
+uv run python -m app.cli --help
+```
+
+### 前端
 
 ```powershell
 cd frontend
@@ -56,64 +96,215 @@ npm install
 npm run dev
 ```
 
-前台 UI 以 Innei/Yohaku 的个人站视觉语言为基线：纸面背景、Pure 中性色、梅色 accent、底部浮动导航、serif 标题、细分隔线列表和低对比内容模块。`@yohaku/design-system` 作为设计契约依赖，运行时样式在 `frontend/src/index.css` 中镜像 Yohaku token，避免当前非 Tailwind 构建链直接处理 `@theme` 规则产生警告。
-
-## 验证命令
-
-后端：
-
-```powershell
-cd backend
-uv run ruff check .
-uv run pytest
-$env:PYTHONUTF8='1'
-uv run alembic upgrade head --sql
-uv run alembic downgrade 20260615_0002:20260615_0001 --sql
-uv run python -m app.cli --help
-uv run python -m app.cli cleanup-encryption-sessions
-uv run python -m app.cli cleanup-deleted-files --older-than-days 7 --limit 100
-uv run python -m app.cli cleanup-orphan-files --limit 1000
-uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
-$env:BLOG_TEST_REDIS_URL='redis://127.0.0.1:6379/15'
-uv run pytest tests/test_rate_limit_redis_integration.py
-$env:BLOG_VERIFY_ADMIN_USERNAME='admin'
-$env:BLOG_VERIFY_ADMIN_PASSWORD='你的本地后台管理员密码'
-uv run python scripts/verify_runtime_publish_flow.py
-```
-
-前端：
+常用命令：
 
 ```powershell
 cd frontend
-npm run lint
-npm run build
+npm.cmd run lint
+npm.cmd run build
 ```
 
-部署配置：
+### 联调约束
+
+浏览器联调、接口联调或端到端验证结束后，关闭本次启动的前端、后端或预览服务，并确认 `15173`、`18080`、`14173` 等端口不再由本项目进程监听。
+
+## 配置
+
+后端本地配置来自 `backend/.env`，模板为 `backend/.env.example`。生产配置来自 `deploy/env/*.env`，模板为 `deploy/env/*.env.example`。
+
+关键配置包括：
+
+- `BLOG_DATABASE_URL`：MySQL 连接串。
+- `BLOG_SECRET_KEY`：应用密钥，生产必须使用强随机值。
+- `BLOG_PUBLIC_BASE_URL`：公网 HTTPS 基础地址，用于生成 RSS、sitemap、robots.txt 和签名 URL。
+- `BLOG_UPLOAD_ROOT`：上传文件存储目录。
+- `BLOG_RATE_LIMIT_BACKEND`：限流后端，支持 `memory` 和 `redis`。
+- `BLOG_REDIS_URL`：Redis 连接串，生产示例为 `redis://redis:6379/0`。
+
+真实 `.env`、密钥、证书私钥、备份文件和上传文件不得提交到 Git。
+
+## 数据库迁移
+
+迁移由 Alembic 管理。连接真实数据库前先确认 `BLOG_DATABASE_URL` 指向目标库。
+
+```powershell
+cd backend
+$env:PYTHONUTF8='1'
+uv run alembic upgrade head
+```
+
+开发验证建议使用临时库，例如 `blog_codex_migration_test`。验证完成后再删除临时库，避免污染真实运行数据。
+
+## 初始管理员
+
+数据库迁移完成后创建初始后台管理员：
+
+```powershell
+cd backend
+$env:PYTHONUTF8='1'
+uv run python -m app.cli create-admin --username admin --email admin@example.com --display-name 管理员
+```
+
+省略 `--password` 时会交互式输入密码。生产环境不要把密码写入命令历史。
+
+## 验证
+
+后端基础验证：
+
+```powershell
+cd backend
+$env:PYTHONUTF8='1'
+uv run ruff check .
+uv run pytest
+```
+
+前端基础验证：
+
+```powershell
+cd frontend
+npm.cmd run lint
+npm.cmd run build
+```
+
+部署配置验证：
 
 ```powershell
 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet
 ```
 
-本地 MySQL 验证：
+真实运行库 HTTP 闭环验证：
 
-Windows 本机安装 MySQL 8 时，可以用本地临时库验证真实迁移、初始管理员创建和后台认证流程。浏览器后台会话使用 HttpOnly Cookie 保存 Access Token 和 Refresh Token，前端只保留内存中的用户信息与 CSRF Token；写操作通过 `X-CSRF-Token` 校验。后台前端会通过 `/api/admin/encryption/sessions` 协商短期 P-256 ECDH 会话密钥，会话密钥保存到 `encryption_sessions` 数据表；登录、当前用户、刷新和后台日志接口必须返回 `sensitive-v1` 加密信封，不再保留旧的明文 JSON 响应形态。登录和加密协商入口已有可配置限流，命中会写入 `security_events`；限流后端通过 `BLOG_RATE_LIMIT_BACKEND` 在 `memory` 与 `redis` 间切换，生产示例使用 `BLOG_REDIS_URL=redis://redis:6379/0`，Redis 连接异常时会回落到进程内限流器。公开内容读取、RSS、sitemap、robots.txt、公开文件下载、文章图片渲染、后台短时链接生成和后台文件下载会写入 `access_logs`，后台“日志”页可查看详情。后台文章与页面管理接口的创建、更新请求和响应已接入 `content-v1` 加密信封，前端 `/admin` 总览和 `/admin/posts` 已读取真实后台文章数据，`/admin/pages` 已接入加密列表、创建和更新流程；后台文章预览通过 `POST /api/admin/posts/preview` 走真实 Markdown 渲染和 HTML sanitize，但不写入数据库。文章创建、更新和发布会把 `cover_file_id` 与正文中的 `/api/public/posts/{slug}/files/{file_id}/render` 图片引用同步写入 `file_usages`，供后台文件列表统计和后续清理任务使用；文章也支持保存分类、标签、SEO 标题、SEO 描述、SEO 关键词和定时发布时间，`status=scheduled` 且 `published_at` 未到时不会进入公开列表、详情、分类聚合或标签聚合。`/rss.xml`、`/sitemap.xml` 和 `/robots.txt` 不要求应用层加密会话，直接输出搜索引擎与订阅客户端可读取的文本；URL 由 `BLOG_PUBLIC_BASE_URL` 生成，生产 Nginx 已对这三个根级路径做精确反代。后端生成的 `math inline/block` 节点会在前台文章详情与后台预览中用 KaTeX 渲染。后台 `/admin/files` 已通过 `content-v1` 接入文件列表、上传、软删除和短时访问链接生成接口，上传限制通过 `BLOG_UPLOAD_MAX_SIZE_BYTES` 配置，当前白名单支持 JPEG、PNG、GIF、WebP 和 PDF；文件详情可复制文章 Markdown 引用，也可通过后台鉴权直接下载公开或私有文件。`cleanup-deleted-files` 维护命令会按保留天数清理已软删除、无 `file_usages` 引用且路径安全的本地文件，并删除对应数据库记录；`cleanup-orphan-files` 会扫描 `BLOG_UPLOAD_ROOT` 下 `public` 和 `private` 目录中没有 active/deleted 数据库记录的本地文件，默认只 dry-run 输出汇总，显式加 `--delete` 才会删除。文章正文图片使用 `/api/public/posts/{slug}/files/{file_id}/render` 稳定引用，公开文章详情会为实际图片响应补上 `expires` 与 `token`，后台预览则使用 `/api/admin/files/{id}/preview` 短时签名链接，不依赖静态目录或临时下载链接。`/admin/settings` 已通过 `sensitive-v1` 接入真实站点基础设置读取与保存接口，公开首页、公开布局品牌、后台布局品牌和页面标题会读取 `/api/public/settings/site-profile`。`/admin/links` 已通过 `content-v1` 接入友链列表、创建、编辑、审核状态更新和导航条目读取、创建、编辑。公开前台通过 `/api/public/encryption/sessions` 协商 public scope 会话，文章、分类、标签、友链、站点目录、站点资料和公开文件栏读取接口均使用 `content-v1` 加密响应；公开文件不挂载静态目录，公开文件栏下载由后台按需生成带签名和过期时间的 `/api/public/files/{id}/download` 访问链接，私有文件只能通过后台鉴权下载。`backend/scripts/verify_runtime_publish_flow.py` 可在真实运行库和本地后端服务上执行 HTTP 级闭环验证，覆盖后台加密登录、上传公开图片、实时预览、创建并发布文章、分类、标签、SEO 信息、未来定时文章不提前公开、公开列表和详情封面缩略图、正文图片渲染、公开文件栏下载、后台鉴权下载和后台访问日志查询；脚本默认验证后归档测试文章，可传 `--keep-published` 保留公开状态。根目录 `auth.txt` 可保存本机 MySQL root 凭据供本地验证使用，该文件属于机密文件，已被 `.gitignore` 忽略，禁止提交。
+```powershell
+cd backend
+$env:PYTHONUTF8='1'
+$env:BLOG_VERIFY_ADMIN_USERNAME='admin'
+$env:BLOG_VERIFY_ADMIN_PASSWORD='你的本地后台管理员密码'
+uv run python scripts/verify_runtime_publish_flow.py
+```
 
-建议只操作临时库，例如 `blog_codex_migration_test`：创建临时库后临时设置 `BLOG_DATABASE_URL`，运行 `uv run alembic upgrade head`、`uv run python -m app.cli create-admin ...`，验证完成后运行 `uv run alembic downgrade base` 并删除临时库。
+该脚本需要本地后端已启动，会覆盖后台加密登录、上传公开图片、文章预览、创建发布文章、公开文章读取、公开文件下载和访问日志查询。默认会归档测试文章。
 
-## 部署边界
+## 生产部署
 
-生产部署目标为 Linux Debian。公网只允许 Nginx 暴露 `80/443`，后端、MySQL、Redis 和原始上传目录不直接暴露公网。
+生产目标环境为 Linux Debian。推荐部署目录为 `/opt/blog`，以下命令假设代码已位于该目录。
 
-真实环境变量文件、密钥、证书和备份文件不得提交到 Git。提交模板文件时使用 `.env.example`。
+### 1. 准备环境
 
-## 文档维护
+安装 Docker Engine、Docker Compose plugin、Git 和基础工具：
 
-实现、重构、测试、部署配置或规则变化时，必须实时更新相关文档：
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl gnupg git
+```
 
-- `README.md`：项目总览、启动方式、目录结构和当前阶段。
-- `PROJECT_PLAN.md`：架构、里程碑、部署方式、安全策略和协作规范。
-- `PROJECT_PROGRESS.md`：已完成事项、进行中事项、风险、下一步和验证结果；每完成一个可验证任务后，必须明确写出紧接着要推进的下一个具体任务。
-- `AGENT.md`：长期协作规则和硬性约束。
+按 Docker 官方文档安装 Docker Engine 后，确认：
 
-不要把临时方案写成最终方案；临时实现必须标明原因和后续处理。
+```bash
+docker --version
+docker compose version
+```
+
+### 2. 准备配置
+
+```bash
+cd /opt/blog
+cp deploy/env/backend.env.example deploy/env/backend.env
+cp deploy/env/mysql.env.example deploy/env/mysql.env
+cp deploy/env/nginx.env.example deploy/env/nginx.env
+```
+
+至少修改以下内容：
+
+- `deploy/env/backend.env`：`BLOG_SECRET_KEY`、`BLOG_DATABASE_URL`、`BLOG_PUBLIC_BASE_URL`、CORS、Trusted Host、Cookie 安全配置、上传目录、Redis 配置。
+- `deploy/env/mysql.env`：MySQL root 密码、业务库、业务账号和密码。
+- `deploy/env/nginx.env`：域名、证书路径和反向代理相关配置。
+
+生产 `BLOG_PUBLIC_BASE_URL` 必须使用公网 HTTPS 地址，例如 `https://example.com`。
+
+### 3. 启动服务
+
+```bash
+cd /opt/blog
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build
+```
+
+查看状态：
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml ps
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml logs -f backend
+```
+
+### 4. 执行迁移
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml exec -T backend uv run alembic upgrade head
+```
+
+### 5. 创建管理员
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml exec backend uv run python -m app.cli create-admin --username admin --email admin@example.com --display-name 管理员
+```
+
+### 6. 检查公网入口
+
+确认以下地址返回正常：
+
+```bash
+curl -I https://example.com/
+curl -I https://example.com/api/public/status
+curl -I https://example.com/rss.xml
+curl -I https://example.com/sitemap.xml
+curl https://example.com/robots.txt
+```
+
+公网安全组只放行 `80/tcp` 和 `443/tcp`。不要将 MySQL `3306`、Redis `6379` 或后端内部端口暴露到公网。
+
+## 运维任务
+
+后台维护任务通过 CLI 执行，不开放公开 HTTP 入口。
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml exec -T backend uv run python -m app.cli cleanup-encryption-sessions
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml exec -T backend uv run python -m app.cli cleanup-deleted-files --older-than-days 7 --limit 100
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml exec -T backend uv run python -m app.cli cleanup-orphan-files --limit 1000
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml exec -T backend uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
+```
+
+`cleanup-orphan-files` 默认只 dry-run。确认输出后，才可显式追加 `--delete` 删除孤儿文件。
+
+systemd timer 示例位于 `deploy/systemd/`，默认假设项目路径为 `/opt/blog`：
+
+```bash
+sudo cp deploy/systemd/*.service deploy/systemd/*.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now blog-cleanup-encryption-sessions.timer
+sudo systemctl enable --now blog-cleanup-deleted-files.timer
+sudo systemctl enable --now blog-scan-orphan-files.timer
+sudo systemctl enable --now blog-check-friend-links.timer
+systemctl list-timers 'blog-*'
+```
+
+## 备份与恢复
+
+脚本位于 `deploy/scripts/`：
+
+- `backup_mysql.sh`：备份 MySQL。
+- `restore_mysql.sh`：恢复 MySQL。
+- `renew_cert.sh`：证书续期示例。
+
+生产环境至少需要备份：
+
+- MySQL 数据库。
+- `BLOG_UPLOAD_ROOT` 对应的上传文件目录。
+- 生产环境变量、证书和部署版本信息。
+
+备份文件应加密保存到服务器外部位置，并定期做恢复演练。
+
+## 文档分工
+
+- `README.md`：开发者入口、架构、本地开发、验证和部署说明。
+- `PROJECT_PLAN.md`：项目计划、里程碑、架构原则和长期设计。
+- `PROJECT_PROGRESS.md`：每次实现、重构、测试和部署调整的进度记录。
+- `AGENT.md`：协作规则和硬性约束。
