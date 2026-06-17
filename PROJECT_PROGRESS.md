@@ -12,6 +12,10 @@
 - 新增公开小网站导航跳转入口 `GET /api/public/site-items/{item_id}/visit`：仅公开条目可访问，后端原子递增 `site_nav_items.click_count` 后记录 `public_site_item_visit` 访问日志，并 302 跳转到真实 URL；隐藏、私有或不存在的条目返回 404。
 - 前台站点目录卡片改为使用公开跳转入口，点击会进入后端计数链路，同时按条目 `open_target` 决定当前页或新标签打开。
 - 补充公开站点跳转接口测试，覆盖点击计数跳转成功、访问日志写入和缺失条目 404；同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md` 的小网站导航与公开 API 说明。
+- 扩展真实运行库 HTTP 闭环脚本 `backend/scripts/verify_runtime_publish_flow.py` 的 M4 覆盖：新增公开友链申请、后台友链分组分配、审核通过/拒绝、公开友链展示与拒绝项排除、小网站导航分组/条目创建、图标/标签/打开方式公开展示、公开跳转 302 与点击统计，以及 `/links`、`/sites` 的桌面和移动端 Playwright 页面检查。
+- 使用真实 MySQL 临时库 `blog_codex_m4_verify_20260617203644` 和临时上传目录 `backend/var/m4-verify-20260617203644` 跑通 M4 增强后的闭环脚本，输出包含 `approved_friend_link_id=1`、`rejected_friend_link_id=2`、`site_item_id=1`，并检查 `/links`、`/sites` 的 desktop/mobile 路由。
+- M4 真实库验收结束后已关闭本次启动的后端 `18080` 与前端 `15173` 服务，确认 `18080`、`15173`、`14173` 均未监听；已删除临时数据库 `blog_codex_m4_verify_20260617203644` 和临时上传目录 `backend/var/m4-verify-20260617203644`。
+- 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，将真实运行库脚本覆盖范围扩展到 M4，并把下一步推进方向调整为 M5 上线前安全、部署和运维验收。
 - 扩展真实运行库 HTTP 闭环脚本 `backend/scripts/verify_runtime_publish_flow.py`：在原有文章发布、分类/标签、封面缩略图、正文图片渲染、公开文件短链、后台下载和访问日志覆盖基础上，新增后台创建公开页面、公开页面详情、RSS、sitemap、robots.txt、前端文章/页面 SEO 元信息、私有文件不进公开列表、后台私有文件鉴权下载、文件引用追踪、后台文章/文件列表大数量分页和桌面/移动端无横向溢出检查。
 - 按用户要求创建真实 MySQL 临时库 `blog_codex_m2m3_verify_20260617184907`，迁移到 Alembic head，创建一次性后台管理员 `codex_m2m3_verify`，启动本地后端 `18080` 与前端 `15173` 后运行增强后的真实运行库闭环脚本通过；脚本输出 `post_id=12`、`post_slug=runtime-flow-verify-5617afdd`、`page_id=3`、`page_slug=runtime-flow-verify-page-1896bdf8`、`file_id=24`、`private_file_id=25`，并检查 `/admin/posts`、`/admin/files` 的 desktop/mobile 分页。
 - 在同一真实临时库运行公开页分页与移动端溢出回归脚本 `backend/scripts/verify_public_page_pagination.py` 通过；脚本临时前缀为 `codex_public_pages_d056f63e`，`/links?page=2`、`/sites?page=2`、`/files?page=2` 在桌面和移动端均显示第二页分页条，`scroll_width` 等于 `client_width`，`remaining_seed_rows` 为 0。
@@ -167,7 +171,7 @@
 
 ### 进行中
 
-- M1 认证与后台框架已完成；M2 文章与页面、M3 文件管理已完成真实 MySQL 临时库闭环验收。M4 已补齐公开友链申请、友链健康检查、友链/导航分组管理、小网站导航图标/标签编辑和点击统计，下一步进入真实运行库验收。
+- M1 认证与后台框架已完成；M2 文章与页面、M3 文件管理、M4 友链与小网站跳转已完成真实 MySQL 临时库闭环验收。当前进入 M5 上线前安全、部署和运维验收。
 
 ### 阻塞与风险
 
@@ -179,7 +183,7 @@
 - 本次真实清理验证仅使用 `blog_codex_cleanup_verify`、`blog_codex_cleanup_cli_verify` 和对应临时上传目录，未触碰当前运行库 `blog_codex_runtime`；MySQL 对重复 `DROP DATABASE IF EXISTS` 输出过一次“database doesn't exist”提示，但最终复查临时库和临时目录均不存在。
 - systemd timer 示例默认 `WorkingDirectory=/opt/blog`，如果实际部署目录不同，安装前必须修改 `deploy/systemd/*.service`；孤儿文件 timer 只 dry-run，不自动执行 `--delete`。
 - Docker Desktop daemon 当前不可用，`wsl --update` 返回 403；本次已用临时 Windows Redis 完成真实 Redis 联调，后续若要验证 Docker Compose 私有 Redis，需要先修复 Docker/WSL 环境。
-- 真实运行库闭环验证会创建一篇测试文章和一个公开上传文件；脚本默认会把测试文章归档，但上传文件与访问日志会保留，后续如需清理应先确认是否仍被 `file_usages` 引用。
+- 真实运行库闭环验证会创建测试文章、页面、上传文件、友链申请和导航数据；脚本默认会把测试文章和页面归档、把验证友链改为拒绝并隐藏验证导航分组/条目，但上传文件与访问日志会保留，后续如需清理应先确认是否仍被 `file_usages` 引用。
 - 本次运行库验证中复用了同一张验证图片文件 `file_id=10`；验证文章已归档，但验证图片和访问日志保留，后续文件清理前需要确认引用状态。
 - 公开友链申请入口已接入应用限流，但公开加密会话协商仍会先发生；若后续遇到明显垃圾申请，需要继续评估验证码、黑名单或更细粒度的 URL 去重策略。
 - `check-friend-links` 会访问外部站点，可能受网络波动、对方反爬、HEAD 支持不完整或临时 5xx 影响；本任务只记录状态码和失败，不自动修改人工审核状态。
@@ -188,14 +192,14 @@
 - `/rss.xml`、`/sitemap.xml` 与 `/robots.txt` 的绝对链接依赖 `BLOG_PUBLIC_BASE_URL`，生产部署前必须确认该值为公网 HTTPS 域名。
 - 生产 Nginx 已补充根级 SEO 文件反代规则；后续如果改为静态预渲染或 CDN 缓存，需要同步检查这些路径是否仍返回后端生成内容或等价静态文件。
 - 当前 canonical 与 Open Graph 由 React 客户端运行时写入，能改善浏览器内分享状态，但对不执行 JavaScript 的搜索引擎或社交抓取器仍不如 SSR/SSG；后续若 SEO 要求提高，需要评估预渲染或服务端渲染。
-- 分类/标签稳定 URL 已纳入真实运行库 HTTP 验证脚本；脚本默认还会请求前端 `15173`，如果只启动后端而未启动前端，需通过 `BLOG_VERIFY_FRONTEND_URL` 指向可访问的前端站点，或先启动前端开发服务。
+- 分类/标签稳定 URL、公开友链页和公开站点目录页已纳入真实运行库 HTTP 验证脚本；脚本默认还会请求前端 `15173`，如果只启动后端而未启动前端，需通过 `BLOG_VERIFY_FRONTEND_URL` 指向可访问的前端站点，或先启动前端开发服务。
 - 公开页分页回归脚本会向当前配置数据库写入临时友链、站点目录和公开文件；脚本已在 `finally` 中清理随机前缀数据，但如果进程被系统强杀，需用输出的 `prefix` 检查并手动清理残留记录。
 - 公开页分页回归脚本默认使用 Playwright 的 `msedge` 通道；若运行环境没有 Edge，需要通过 `BLOG_VERIFY_BROWSER_CHANNEL` 指向可用 Chromium 通道，或先安装对应浏览器运行时。
 
 ### 下一步
 
-- M4 真实运行库验收：创建临时库和临时上传目录，覆盖友链申请、后台分组选择、审核通过/拒绝、公开展示、站点导航图标/标签展示、点击统计和移动端布局。
-- M4 脚本化验收：将友链审核链路和站点导航点击统计补入真实运行库 HTTP 验证脚本，验证完成后清理临时账号、临时数据和本次启动的前后端服务。
+- M5 上线前安全验收：复查 HTML sanitize、安全响应头、CORS、Trusted Host、Cookie、CSRF、限流和敏感日志，确认公网部署默认不暴露 MySQL、Redis、后端调试端口或私有上传目录。
+- M5 部署与运维验收：复查 Docker Compose、Nginx、环境变量示例、systemd 维护任务、MySQL 备份恢复和上传文件备份恢复脚本，形成可执行的 Debian 上线前检查清单。
 
 ### 验证
 
@@ -217,6 +221,13 @@
 - 已在真实临时库运行增强后的 `uv run python scripts\verify_runtime_publish_flow.py --timeout 30`，通过；覆盖后台创建页面、公开页面访问、文章发布、分类/标签、RSS、sitemap、robots.txt、前端 SEO 元信息、公开/私有文件访问、文件引用追踪、后台文章/文件列表分页和访问日志。
 - 已在真实临时库运行 `uv run python scripts\verify_public_page_pagination.py --timeout 30`，通过；`/links?page=2`、`/sites?page=2`、`/files?page=2` 在 desktop/mobile 视口均无横向溢出，临时种子数据清理后 `remaining_seed_rows` 为 0。
 - 真实库验收结束后已停止本次启动的后端与前端服务，确认 `18080`、`15173`、`14173` 均未监听；已删除临时数据库与临时上传目录。
+- M4 友链/导航脚本扩展后已运行 `uv run ruff check scripts\verify_runtime_publish_flow.py`，通过。
+- M4 友链/导航脚本扩展后已运行 `uv run python scripts\verify_runtime_publish_flow.py --help`，通过。
+- 已创建真实 MySQL 临时库 `blog_codex_m4_verify_20260617203644`，设置临时上传目录 `backend/var/m4-verify-20260617203644`，迁移到 Alembic head，并创建一次性后台管理员 `codex_m4_verify_20260617203644`。
+- 已在真实临时库运行 M4 增强后的 `uv run python scripts\verify_runtime_publish_flow.py --timeout 30`，通过；输出包含 `post_id=1`、`post_slug=runtime-flow-verify-b1ec6808`、`page_id=1`、`page_slug=runtime-flow-verify-page-924f64e4`、`file_id=1`、`private_file_id=2`、`approved_friend_link_id=1`、`rejected_friend_link_id=2`、`site_item_id=1`。
+- 本次 M4 真实库验收检查了 `/links:desktop`、`/sites:desktop`、`/links:mobile`、`/sites:mobile`，访问日志类型包含 `public_friend_link_application`、`public_friend_links_list`、`public_site_items_list` 和 `public_site_item_visit`。
+- M4 真实库验收结束后已停止本次启动的后端与前端服务，确认 `18080`、`15173`、`14173` 均未监听；已删除临时数据库 `blog_codex_m4_verify_20260617203644` 和临时上传目录 `backend/var/m4-verify-20260617203644`。
+- 本次 M4 脚本与文档收口后已运行 `git diff --check`，未发现空白或行尾问题；并再次确认 `18080`、`15173`、`14173` 均未监听。
 - 本次 M2/M3 验收脚本与文档更新后已运行后端全量 `uv run ruff check .`，通过。
 - 本次 M2/M3 验收脚本与文档更新后已运行后端全量 `uv run pytest`，104 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 和 cookies 相关上游弃用警告。
 - 本次 M2/M3 验收脚本与文档更新后已运行 `npm.cmd run lint`，通过。

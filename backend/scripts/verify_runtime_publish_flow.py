@@ -41,14 +41,28 @@ class RuntimeVerifyResult:
     page_slug: str
     file_id: int
     private_file_id: int
+    approved_friend_link_id: int
+    rejected_friend_link_id: int
+    site_item_id: int
     category_slug: str
     tag_slug: str
+    checked_public_routes: list[str]
     checked_admin_routes: list[str]
     checked_access_types: list[str]
 
 
 class RuntimeVerifyError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class M4RuntimeVerifyResult:
+    approved_friend_link_id: int
+    rejected_friend_link_id: int
+    friend_link_group_id: int
+    site_group_id: int
+    site_item_id: int
+    checked_public_routes: list[str]
 
 
 class RuntimeApiClient:
@@ -259,6 +273,25 @@ class RuntimeApiClient:
             profile="content-v1",
         )
 
+    def public_encrypted_post(
+        self,
+        path: str,
+        *,
+        session: EncryptionSession,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        response = self.client.post(
+            path,
+            headers={"X-Encryption-Session": session.id},
+            json=self.encrypt(payload, session=session, profile="content-v1"),
+        )
+        _raise_for_status(response, f"POST {path} 失败")
+        return self.decrypt(
+            response.json(),
+            session=session,
+            profile="content-v1",
+        )
+
     def encrypted_patch(
         self,
         path: str,
@@ -456,6 +489,17 @@ def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
         )
 
         public_session = api.create_session("public")
+        m4_result = _verify_m4_links_and_sites(
+            api=api,
+            admin_session=admin_session,
+            public_session=public_session,
+            csrf_token=csrf_token,
+            slug_prefix=args.slug_prefix,
+            run_token=run_token,
+            frontend_url=args.frontend_url,
+            browser_channel=args.browser_channel,
+            timeout_seconds=args.timeout,
+        )
         public_list = api.encrypted_get(
             "/api/public/posts?limit=5&offset=0",
             session=public_session,
@@ -678,6 +722,10 @@ def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
             "public_category_detail",
             "public_tags_list",
             "public_tag_detail",
+            "public_friend_link_application",
+            "public_friend_links_list",
+            "public_site_items_list",
+            "public_site_item_visit",
         }
         missing = sorted(expected - access_types)
         if missing:
@@ -709,6 +757,30 @@ def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
                     csrf_token=csrf_token,
                     payload={"status": "archived"},
                 )
+            api.encrypted_patch(
+                f"/api/admin/friend-links/{m4_result.approved_friend_link_id}",
+                session=admin_session,
+                csrf_token=csrf_token,
+                payload={"status": "rejected"},
+            )
+            api.encrypted_patch(
+                f"/api/admin/friend-links/{m4_result.rejected_friend_link_id}",
+                session=admin_session,
+                csrf_token=csrf_token,
+                payload={"status": "rejected"},
+            )
+            api.encrypted_patch(
+                f"/api/admin/site-items/{m4_result.site_item_id}",
+                session=admin_session,
+                csrf_token=csrf_token,
+                payload={"visibility": "hidden"},
+            )
+            api.encrypted_patch(
+                f"/api/admin/site-groups/{m4_result.site_group_id}",
+                session=admin_session,
+                csrf_token=csrf_token,
+                payload={"visibility": "hidden"},
+            )
         for extra_file_id in extra_file_ids:
             api.encrypted_delete(
                 f"/api/admin/files/{extra_file_id}",
@@ -728,8 +800,12 @@ def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
             page_slug=page_slug,
             file_id=file_id,
             private_file_id=private_file_id,
+            approved_friend_link_id=m4_result.approved_friend_link_id,
+            rejected_friend_link_id=m4_result.rejected_friend_link_id,
+            site_item_id=m4_result.site_item_id,
             category_slug=category_slug,
             tag_slug=tag_slug,
+            checked_public_routes=m4_result.checked_public_routes,
             checked_admin_routes=admin_route_checks,
             checked_access_types=sorted(expected),
         )
@@ -739,7 +815,7 @@ def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="验证真实运行库的上传、文章发布、公开访问和日志闭环",
+        description="验证真实运行库的内容发布、文件、友链、导航和日志闭环",
     )
     parser.add_argument(
         "--base-url",
@@ -776,7 +852,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--keep-published",
         dest="archive_after_verify",
         action="store_false",
-        help="验证完成后保留文章 published 状态，默认归档验证文章",
+        help="验证完成后保留文章和页面 published 状态，默认归档验证文章和页面",
     )
     parser.set_defaults(archive_after_verify=True)
     return parser
@@ -801,8 +877,12 @@ def main() -> None:
                 "page_slug": result.page_slug,
                 "file_id": result.file_id,
                 "private_file_id": result.private_file_id,
+                "approved_friend_link_id": result.approved_friend_link_id,
+                "rejected_friend_link_id": result.rejected_friend_link_id,
+                "site_item_id": result.site_item_id,
                 "category_slug": result.category_slug,
                 "tag_slug": result.tag_slug,
+                "checked_public_routes": result.checked_public_routes,
                 "checked_admin_routes": result.checked_admin_routes,
                 "checked_access_types": result.checked_access_types,
             },
@@ -888,6 +968,210 @@ def _seed_admin_pagination_data(
     return post_ids, file_ids
 
 
+def _verify_m4_links_and_sites(
+    *,
+    api: RuntimeApiClient,
+    admin_session: EncryptionSession,
+    public_session: EncryptionSession,
+    csrf_token: str,
+    slug_prefix: str,
+    run_token: str,
+    frontend_url: str,
+    browser_channel: str,
+    timeout_seconds: float,
+) -> M4RuntimeVerifyResult:
+    friend_group_slug = f"{slug_prefix}-friends-{run_token}"
+    site_group_slug = f"{slug_prefix}-sites-{run_token}"
+    approved_name = f"运行库验收友链通过 {run_token}"
+    rejected_name = f"运行库验收友链拒绝 {run_token}"
+    site_title = f"运行库验收导航 {run_token}"
+    site_url = f"https://{run_token}.sites.example.test/tools"
+    site_icon_url = f"{frontend_url.rstrip('/')}/default-cover.svg"
+
+    friend_group = api.encrypted_post(
+        "/api/admin/friend-link-groups",
+        session=admin_session,
+        csrf_token=csrf_token,
+        payload={
+            "name": "运行库验收友链分组",
+            "slug": friend_group_slug,
+            "sort_order": 0,
+        },
+    )
+    friend_group_id = int(friend_group["id"])
+    approved_application = api.public_encrypted_post(
+        "/api/public/friend-links/applications",
+        session=public_session,
+        payload={
+            "name": approved_name,
+            "url": f"https://{run_token}.approved-friend.example.test",
+            "avatar_url": None,
+            "description": "M4 真实运行库验收通过友链",
+            "rss_url": f"https://{run_token}.approved-friend.example.test/rss.xml",
+        },
+    )
+    rejected_application = api.public_encrypted_post(
+        "/api/public/friend-links/applications",
+        session=public_session,
+        payload={
+            "name": rejected_name,
+            "url": f"https://{run_token}.rejected-friend.example.test",
+            "avatar_url": None,
+            "description": "M4 真实运行库验收拒绝友链",
+            "rss_url": None,
+        },
+    )
+    approved_friend_link_id = int(approved_application["id"])
+    rejected_friend_link_id = int(rejected_application["id"])
+    if approved_application.get("status") != "pending":
+        raise RuntimeVerifyError("公开友链申请没有创建 pending 状态")
+    if rejected_application.get("status") != "pending":
+        raise RuntimeVerifyError("公开拒绝友链申请没有创建 pending 状态")
+
+    api.encrypted_patch(
+        f"/api/admin/friend-links/{approved_friend_link_id}",
+        session=admin_session,
+        csrf_token=csrf_token,
+        payload={"group_id": friend_group_id, "sort_order": 0},
+    )
+    approved_link = api.encrypted_patch(
+        f"/api/admin/friend-links/{approved_friend_link_id}/review",
+        session=admin_session,
+        csrf_token=csrf_token,
+        payload={"status": "healthy"},
+    )
+    rejected_link = api.encrypted_patch(
+        f"/api/admin/friend-links/{rejected_friend_link_id}/review",
+        session=admin_session,
+        csrf_token=csrf_token,
+        payload={"status": "rejected"},
+    )
+    if approved_link.get("status") != "healthy":
+        raise RuntimeVerifyError("后台友链审核通过后状态不正确")
+    if rejected_link.get("status") != "rejected":
+        raise RuntimeVerifyError("后台友链审核拒绝后状态不正确")
+
+    admin_links = api.encrypted_get(
+        "/api/admin/friend-links?limit=100&offset=0",
+        session=admin_session,
+        profile="content-v1",
+    )
+    admin_approved = _find_item_by_id(
+        admin_links,
+        item_id=approved_friend_link_id,
+        label="后台友链列表",
+    )
+    if admin_approved.get("group_id") != friend_group_id:
+        raise RuntimeVerifyError("后台友链列表没有保留审核分组")
+
+    public_links = api.encrypted_get(
+        "/api/public/friend-links?limit=100&offset=0",
+        session=public_session,
+        profile="content-v1",
+    )
+    public_approved = _find_item_by_id(
+        public_links,
+        item_id=approved_friend_link_id,
+        label="公开友链列表",
+    )
+    if public_approved.get("group_name") != "运行库验收友链分组":
+        raise RuntimeVerifyError("公开友链列表没有展示后台分组")
+    if any(
+        item.get("id") == rejected_friend_link_id
+        for item in public_links.get("items", [])
+        if isinstance(item, dict)
+    ):
+        raise RuntimeVerifyError("公开友链列表展示了已拒绝友链")
+
+    site_group = api.encrypted_post(
+        "/api/admin/site-groups",
+        session=admin_session,
+        csrf_token=csrf_token,
+        payload={
+            "name": "运行库验收导航分组",
+            "slug": site_group_slug,
+            "description": "M4 真实运行库验收导航分组",
+            "visibility": "public",
+            "sort_order": 0,
+        },
+    )
+    site_group_id = int(site_group["id"])
+    site_item = api.encrypted_post(
+        "/api/admin/site-items",
+        session=admin_session,
+        csrf_token=csrf_token,
+        payload={
+            "group_id": site_group_id,
+            "title": site_title,
+            "url": site_url,
+            "icon_url": site_icon_url,
+            "description": "M4 真实运行库验收导航入口",
+            "tags_json": {"items": ["验收", "导航"]},
+            "open_target": "self",
+            "visibility": "public",
+            "sort_order": 0,
+        },
+    )
+    site_item_id = int(site_item["id"])
+    if site_item.get("tags_json") != {"items": ["验收", "导航"]}:
+        raise RuntimeVerifyError("后台导航条目没有返回规范化标签")
+
+    public_sites = api.encrypted_get(
+        "/api/public/site-items?limit=100&offset=0",
+        session=public_session,
+        profile="content-v1",
+    )
+    public_site = _find_item_by_id(
+        public_sites,
+        item_id=site_item_id,
+        label="公开站点目录",
+    )
+    if public_site.get("icon_url") != site_icon_url:
+        raise RuntimeVerifyError("公开站点目录没有返回图标 URL")
+    if public_site.get("tags_json") != {"items": ["验收", "导航"]}:
+        raise RuntimeVerifyError("公开站点目录没有返回标签")
+    if public_site.get("open_target") != "self":
+        raise RuntimeVerifyError("公开站点目录没有返回打开方式")
+
+    visit_response = api.client.get(f"/api/public/site-items/{site_item_id}/visit")
+    if visit_response.status_code != 302:
+        raise RuntimeVerifyError(
+            f"公开站点跳转没有返回 302：{visit_response.status_code}",
+        )
+    if visit_response.headers.get("location") != site_url:
+        raise RuntimeVerifyError("公开站点跳转 location 不正确")
+
+    admin_sites = api.encrypted_get(
+        "/api/admin/site-items?limit=100&offset=0",
+        session=admin_session,
+        profile="content-v1",
+    )
+    admin_site = _find_item_by_id(
+        admin_sites,
+        item_id=site_item_id,
+        label="后台站点目录",
+    )
+    if int(admin_site.get("click_count") or 0) < 1:
+        raise RuntimeVerifyError("后台站点目录没有体现点击统计")
+
+    checked_public_routes = _assert_m4_public_frontend(
+        frontend_url=frontend_url,
+        browser_channel=browser_channel,
+        timeout_seconds=timeout_seconds,
+        friend_name=approved_name,
+        rejected_friend_name=rejected_name,
+        site_title=site_title,
+    )
+    return M4RuntimeVerifyResult(
+        approved_friend_link_id=approved_friend_link_id,
+        rejected_friend_link_id=rejected_friend_link_id,
+        friend_link_group_id=friend_group_id,
+        site_group_id=site_group_id,
+        site_item_id=site_item_id,
+        checked_public_routes=checked_public_routes,
+    )
+
+
 def _runtime_png(*, run_token: str, variant: Literal["public", "private"]) -> bytes:
     background = (247, 245, 239) if variant == "public" else (238, 241, 246)
     accent = (171, 90, 112) if variant == "public" else (70, 105, 145)
@@ -957,6 +1241,18 @@ def _find_file(
         if isinstance(item, dict) and item.get("id") == file_id:
             return item
     raise RuntimeVerifyError(f"{label}没有返回文件 {file_id}")
+
+
+def _find_item_by_id(
+    payload: dict[str, Any],
+    *,
+    item_id: int,
+    label: str,
+) -> dict[str, Any]:
+    for item in payload.get("items", []):
+        if isinstance(item, dict) and item.get("id") == item_id:
+            return item
+    raise RuntimeVerifyError(f"{label}没有返回记录 {item_id}")
 
 
 def _assert_frontend_route(frontend_url: str, path: str) -> None:
@@ -1043,6 +1339,96 @@ def _assert_frontend_seo(
                     raise RuntimeVerifyError(f"前端页面 {check.path} og:url 不匹配")
         finally:
             browser.close()
+
+
+def _assert_m4_public_frontend(
+    *,
+    frontend_url: str,
+    browser_channel: str,
+    timeout_seconds: float,
+    friend_name: str,
+    rejected_friend_name: str,
+    site_title: str,
+) -> list[str]:
+    checked: list[str] = []
+    timeout_ms = int(timeout_seconds * 1000)
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
+            channel=browser_channel,
+            headless=True,
+        )
+        try:
+            for viewport in VIEWPORTS:
+                page = browser.new_page(
+                    viewport={"width": viewport.width, "height": viewport.height},
+                )
+                page.set_default_timeout(timeout_ms)
+                try:
+                    _check_m4_public_route(
+                        page=page,
+                        frontend_url=frontend_url,
+                        path="/links",
+                        label="公开友链页",
+                        viewport=viewport,
+                        expected_texts=[friend_name, "运行库验收友链分组"],
+                        rejected_texts=[rejected_friend_name],
+                        timeout_ms=timeout_ms,
+                    )
+                    checked.append(f"/links:{viewport.name}")
+                    _check_m4_public_route(
+                        page=page,
+                        frontend_url=frontend_url,
+                        path="/sites",
+                        label="公开站点目录页",
+                        viewport=viewport,
+                        expected_texts=[site_title, "#验收", "#导航"],
+                        rejected_texts=[],
+                        timeout_ms=timeout_ms,
+                    )
+                    site_tile = page.locator(".site-tile", has_text=site_title).first
+                    if site_tile.locator(".site-tile__icon").count() < 1:
+                        raise RuntimeVerifyError("公开站点目录页没有展示导航图标")
+                    checked.append(f"/sites:{viewport.name}")
+                finally:
+                    page.close()
+        finally:
+            browser.close()
+    return checked
+
+
+def _check_m4_public_route(
+    *,
+    page: Any,
+    frontend_url: str,
+    path: str,
+    label: str,
+    viewport: ViewportCheck,
+    expected_texts: list[str],
+    rejected_texts: list[str],
+    timeout_ms: int,
+) -> None:
+    response = page.goto(
+        frontend_url.rstrip("/") + path,
+        wait_until="networkidle",
+        timeout=timeout_ms,
+    )
+    if response is None or not response.ok:
+        status = response.status if response is not None else "no response"
+        raise RuntimeVerifyError(f"{label}访问失败：{status}")
+    for expected_text in expected_texts:
+        page.get_by_text(expected_text, exact=False).first.wait_for(
+            timeout=timeout_ms,
+        )
+    body_text = page.locator("body").inner_text(timeout=timeout_ms)
+    for rejected_text in rejected_texts:
+        if rejected_text in body_text:
+            raise RuntimeVerifyError(f"{label}展示了不应公开的内容：{rejected_text}")
+    overflow = _collect_overflow(page)
+    if overflow["has_overflow"]:
+        raise RuntimeVerifyError(
+            f"{label}在 {viewport.name} 视口横向溢出："
+            f"{json.dumps(overflow, ensure_ascii=False)}",
+        )
 
 
 def _assert_admin_pagination(
