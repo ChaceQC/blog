@@ -87,6 +87,7 @@ uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 
 公开分类、标签和文章读取接口使用 public scope `content-v1` 加密响应，调用方需要先协商 `/api/public/encryption/sessions` 并携带 `X-Encryption-Session`：
 
+- `GET /api/public/posts`：返回已公开且已到发布时间的文章列表，支持通过 `category={slug}` 和 `tag={slug}` 按分类、标签筛选。
 - `GET /api/public/categories`：返回已公开且已到发布时间文章使用到的分类，包含 `id`、`name`、`slug` 和 `post_count`。
 - `GET /api/public/tags`：返回已公开且已到发布时间文章使用到的标签，包含 `id`、`name`、`slug` 和 `post_count`。
 

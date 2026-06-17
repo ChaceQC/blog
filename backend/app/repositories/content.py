@@ -26,13 +26,30 @@ class ContentRepository:
         await self._attach_post_taxonomy(posts)
         return posts
 
-    async def list_public_posts(self, *, limit: int, offset: int) -> Sequence[Post]:
+    async def list_public_posts(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        category_slug: str | None = None,
+        tag_slug: str | None = None,
+    ) -> Sequence[Post]:
         now = utc_now()
-        result = await self.session.execute(
-            select(Post)
-            .where(
-                *_public_post_filters(now),
+        statement = select(Post).where(*_public_post_filters(now))
+        if category_slug is not None:
+            statement = (
+                statement.join(PostCategory, PostCategory.post_id == Post.id)
+                .join(Category, Category.id == PostCategory.category_id)
+                .where(Category.slug == category_slug)
             )
+        if tag_slug is not None:
+            statement = (
+                statement.join(PostTag, PostTag.post_id == Post.id)
+                .join(Tag, Tag.id == PostTag.tag_id)
+                .where(Tag.slug == tag_slug)
+            )
+        result = await self.session.execute(
+            statement
             .order_by(Post.published_at.desc(), Post.id.desc())
             .limit(limit)
             .offset(offset),

@@ -24,7 +24,14 @@ class ContentFileNotFoundError(Exception):
 class ContentRepositoryProtocol(Protocol):
     async def list_posts(self, *, limit: int, offset: int) -> Sequence[Post]: ...
 
-    async def list_public_posts(self, *, limit: int, offset: int) -> Sequence[Post]: ...
+    async def list_public_posts(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        category_slug: str | None = None,
+        tag_slug: str | None = None,
+    ) -> Sequence[Post]: ...
 
     async def list_public_feed_posts(self, *, limit: int) -> Sequence[Post]: ...
 
@@ -159,8 +166,20 @@ class ContentService:
     async def list_posts(self, *, limit: int, offset: int) -> Sequence[Post]:
         return await self.repository.list_posts(limit=limit, offset=offset)
 
-    async def list_public_posts(self, *, limit: int, offset: int) -> Sequence[Post]:
-        return await self.repository.list_public_posts(limit=limit, offset=offset)
+    async def list_public_posts(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        category_slug: str | None = None,
+        tag_slug: str | None = None,
+    ) -> Sequence[Post]:
+        return await self.repository.list_public_posts(
+            limit=limit,
+            offset=offset,
+            category_slug=category_slug,
+            tag_slug=tag_slug,
+        )
 
     async def list_public_feed_posts(self, *, limit: int) -> Sequence[Post]:
         return await self.repository.list_public_feed_posts(limit=limit)

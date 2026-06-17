@@ -25,6 +25,7 @@ from app.providers.markdown import count_words
 from app.repositories.content import ContentRepository
 from app.repositories.links import LinkRepository
 from app.schemas.content import (
+    SLUG_PATTERN,
     PublicPostDetail,
     PublicPostItem,
     PublicPostListResponse,
@@ -142,8 +143,27 @@ async def list_public_posts(
     logs: LogServiceDependency,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    category_slug: str | None = Query(
+        default=None,
+        alias="category",
+        min_length=1,
+        max_length=80,
+        pattern=SLUG_PATTERN,
+    ),
+    tag_slug: str | None = Query(
+        default=None,
+        alias="tag",
+        min_length=1,
+        max_length=80,
+        pattern=SLUG_PATTERN,
+    ),
 ):
-    posts = await service.list_public_posts(limit=limit, offset=offset)
+    posts = await service.list_public_posts(
+        limit=limit,
+        offset=offset,
+        category_slug=category_slug,
+        tag_slug=tag_slug,
+    )
     response = await encrypted_response(
         PublicPostListResponse(
             items=[
@@ -165,7 +185,13 @@ async def list_public_posts(
         access_type="public_posts_list",
         status_code=status.HTTP_200_OK,
         entity_type="post",
-        detail_json={"limit": limit, "offset": offset, "count": len(posts)},
+        detail_json={
+            "limit": limit,
+            "offset": offset,
+            "count": len(posts),
+            "category": category_slug,
+            "tag": tag_slug,
+        },
     )
     return response
 

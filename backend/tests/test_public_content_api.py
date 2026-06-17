@@ -89,9 +89,22 @@ class FakeLogService:
 
 
 class FakePublicContentService:
-    async def list_public_posts(self, *, limit: int, offset: int) -> list[object]:
-        assert limit == 1
+    async def list_public_posts(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        category_slug: str | None = None,
+        tag_slug: str | None = None,
+    ) -> list[object]:
+        assert limit in {1, 2}
         assert offset == 0
+        if limit == 1:
+            assert category_slug is None
+            assert tag_slug is None
+        if limit == 2:
+            assert category_slug == "category-a"
+            assert tag_slug == "fastapi"
         return [
             SimpleNamespace(
                 id=1,
@@ -386,6 +399,37 @@ def test_public_posts_returns_published_post_list() -> None:
         in str(manager.payload["items"][0]["cover_image_url"])
     )
     assert logs.items[0]["access_type"] == "public_posts_list"
+
+
+def test_public_posts_accept_category_and_tag_filters() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_content_service] = (
+        lambda: FakePublicContentService()
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get(
+            "/api/public/posts?limit=2&category=category-a&tag=fastapi",
+            headers={"X-Encryption-Session": "public-session"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload is not None
+    assert manager.payload["items"][0]["slug"] == "public-post"
+    assert logs.items[0]["detail_json"] == {
+        "limit": 2,
+        "offset": 0,
+        "count": 1,
+        "category": "category-a",
+        "tag": "fastapi",
+    }
 
 
 def test_public_categories_return_encrypted_list() -> None:

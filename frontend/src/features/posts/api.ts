@@ -7,11 +7,22 @@ import type {
 } from './types.ts'
 
 export function listPublicPosts(
-  params: { limit?: number; offset?: number } = {},
+  params: {
+    limit?: number
+    offset?: number
+    categorySlug?: string
+    tagSlug?: string
+  } = {},
 ): Promise<PublicPostListResponse> {
   const query = new URLSearchParams()
   query.set('limit', String(params.limit ?? 20))
   query.set('offset', String(params.offset ?? 0))
+  if (params.categorySlug) {
+    query.set('category', params.categorySlug)
+  }
+  if (params.tagSlug) {
+    query.set('tag', params.tagSlug)
+  }
 
   return apiGetEncrypted<PublicPostListResponse>(
     `/public/posts?${query.toString()}`,

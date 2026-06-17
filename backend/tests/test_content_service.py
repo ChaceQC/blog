@@ -64,7 +64,16 @@ class FakeContentRepository:
     async def list_posts(self, *, limit: int, offset: int) -> list[FakePost]:
         return self.posts[offset : offset + limit]
 
-    async def list_public_posts(self, *, limit: int, offset: int) -> list[FakePost]:
+    async def list_public_posts(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        category_slug: str | None = None,
+        tag_slug: str | None = None,
+    ) -> list[FakePost]:
+        assert category_slug is None
+        assert tag_slug is None
         return [
             post
             for post in self.posts

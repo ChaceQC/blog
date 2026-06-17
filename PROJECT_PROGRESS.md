@@ -4,6 +4,10 @@
 
 ### 已完成
 
+- 公开文章列表接口 `GET /api/public/posts` 新增 `category={slug}` 和 `tag={slug}` 查询参数，按分类、标签 slug 筛选公开且已到发布时间的文章，并在访问日志 `detail_json` 中记录筛选条件。
+- 前台 `/posts` 接入归档筛选入口：读取公开分类与标签聚合接口，筛选状态写入 URL 查询参数，分页状态使用 `page` 查询参数，切换筛选时自动回到第一页。
+- 文章列表页补充“归档筛选”紧凑筛选区，分类和标签使用可换行的细边框按钮，移动端降级为单列，筛选结果为空时显示筛选空状态。
+- 同步更新后端 `README.md` 和 `PROJECT_PLAN.md`，记录公开文章列表筛选参数，并将下一步推进到分类/标签独立公开路由与 sitemap 扩展。
 - 根目录 `README.md` 调整说明顺序，新增“从 Git 开始”作为第一节，先说明 clone、切换 `dev`、同步远端、提交前检查、提交推送和 `main` 快进流程，再进入架构、功能和开发部署说明。
 - 根目录 `README.md` 补充稳定功能模块说明，覆盖文章发布、页面、文件、友链、小网站导航、站点设置、后台管理、公开订阅 SEO 和运维任务，避免只讲架构不讲系统能力。
 - 调整 `deploy/README.md` 为部署目录补充说明，只保留 Compose、环境变量模板、Nginx、维护脚本和 systemd timer 的文件职责与注意事项，完整部署流程仍由根目录 `README.md` 承担。
@@ -122,7 +126,7 @@
 
 ### 进行中
 
-- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目、RSS/sitemap/robots.txt 初版、生产 Nginx SEO 出口反代、公开页面 canonical/Open Graph 基线、公开文章列表分类标签展示和公开分类/标签聚合接口已形成基础闭环；下一步接入前台归档筛选入口。
+- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目、RSS/sitemap/robots.txt 初版、生产 Nginx SEO 出口反代、公开页面 canonical/Open Graph 基线、公开文章列表分类标签展示、公开分类/标签聚合接口和前台归档筛选入口已形成基础闭环；下一步补分类与标签独立公开路由。
 
 ### 阻塞与风险
 
@@ -142,14 +146,20 @@
 - `/rss.xml`、`/sitemap.xml` 与 `/robots.txt` 的绝对链接依赖 `BLOG_PUBLIC_BASE_URL`，生产部署前必须确认该值为公网 HTTPS 域名。
 - 生产 Nginx 已补充根级 SEO 文件反代规则；后续如果改为静态预渲染或 CDN 缓存，需要同步检查这些路径是否仍返回后端生成内容或等价静态文件。
 - 当前 canonical 与 Open Graph 由 React 客户端运行时写入，能改善浏览器内分享状态，但对不执行 JavaScript 的搜索引擎或社交抓取器仍不如 SSR/SSG；后续若 SEO 要求提高，需要评估预渲染或服务端渲染。
-- 公开分类与标签接口目前只提供聚合数据，前台文章列表还没有按分类或标签筛选；下一步需要同步设计 URL 查询参数、接口筛选参数和列表空状态。
+- 当前分类/标签筛选入口使用 `/posts?category=...` 与 `/posts?tag=...` 查询参数；后续若要更清晰的 SEO URL，需要补充 `/categories/{slug}`、`/tags/{slug}` 独立路由并加入 sitemap。
 
 ### 下一步
 
-- 前台归档筛选入口：在文章列表或归档页读取 `GET /api/public/categories` 和 `GET /api/public/tags`，并补充按分类、标签筛选公开文章的接口参数与 UI 状态。
+- 分类与标签独立公开路由：补充 `/categories/{slug}`、`/tags/{slug}` 或等价稳定 URL，并将分类/标签入口加入 sitemap。
 
 ### 验证
 
+- 前台归档筛选入口接入后已运行 `uv run ruff check .`，通过。
+- 前台归档筛选入口接入后已运行 `uv run pytest tests\test_public_content_api.py tests\test_content_service.py`，21 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 前台归档筛选入口接入后已运行后端全量 `uv run pytest`，97 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 相关上游弃用警告。
+- 前台归档筛选入口接入后已运行 `npm.cmd run lint`，通过。
+- 前台归档筛选入口接入后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
+- 前台归档筛选入口接入后已运行 `git diff --check`，未发现空白或行尾问题。
 - README Git 入口调整后已运行 `git diff --check`，未发现空白或行尾问题。
 - 根目录 README 功能说明与 `deploy/README.md` 职责收敛后已运行 `git diff --check`，未发现空白或行尾问题。
 - README 开发者文档重写后已运行 `git diff --check`，未发现空白或行尾问题。

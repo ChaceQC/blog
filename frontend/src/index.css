@@ -959,6 +959,75 @@ img {
   color: var(--color-neutral-8);
 }
 
+.archive-filter-panel {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.archive-filter-group {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.archive-filter-group > span {
+  min-height: 32px;
+  color: var(--color-neutral-7);
+  font-size: 0.86rem;
+  line-height: 32px;
+}
+
+.archive-filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.archive-filter-chip {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--color-neutral-7);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  padding: 0 12px;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.archive-filter-chip:hover {
+  border-color: rgba(197, 100, 115, 0.36);
+  color: var(--color-neutral-9);
+  transform: translateY(-1px);
+}
+
+.archive-filter-chip:disabled {
+  cursor: wait;
+  opacity: 0.62;
+  transform: none;
+}
+
+.archive-filter-chip.is-active {
+  border-color: rgba(197, 100, 115, 0.42);
+  color: var(--color-neutral-10);
+}
+
+.archive-filter-chip small {
+  color: var(--color-neutral-6);
+  font-size: 0.76rem;
+}
+
 .pagination-bar {
   display: flex;
   flex-wrap: wrap;
@@ -2346,6 +2415,16 @@ img {
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     font-size: 0.9rem;
+  }
+
+  .archive-filter-group {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .archive-filter-group > span {
+    min-height: auto;
+    line-height: 1.4;
   }
 
   .compact-row,
