@@ -4,6 +4,8 @@
 
 ### 已完成
 
+- 根目录 `README.md` 补充稳定功能模块说明，覆盖文章发布、页面、文件、友链、小网站导航、站点设置、后台管理、公开订阅 SEO 和运维任务，避免只讲架构不讲系统能力。
+- 调整 `deploy/README.md` 为部署目录补充说明，只保留 Compose、环境变量模板、Nginx、维护脚本和 systemd timer 的文件职责与注意事项，完整部署流程仍由根目录 `README.md` 承担。
 - 重写根目录 `README.md`：移除当前阶段流水账和过长功能状态描述，改为面向开发者的项目架构、本地开发、配置、数据库迁移、验证、生产部署、运维任务、备份恢复和文档分工说明。
 - 明确 `README.md` 与 `PROJECT_PROGRESS.md` 的职责边界：README 维护稳定开发与部署入口，具体实现进展、风险和下一步继续放在进度记录中。
 - 新增公开分类接口 `GET /api/public/categories`，使用 public scope `content-v1` 加密响应，按已公开且已到发布时间的文章聚合分类并返回 `id`、`name`、`slug` 和 `post_count`。
@@ -143,10 +145,11 @@
 
 ### 下一步
 
-- 检查 `deploy/README.md` 与根目录 `README.md` 的部署说明是否存在重复或冲突，必要时将 `deploy/README.md` 调整为只保留部署目录内文件说明和补充细节。
+- 前台归档筛选入口：在文章列表或归档页读取 `GET /api/public/categories` 和 `GET /api/public/tags`，并补充按分类、标签筛选公开文章的接口参数与 UI 状态。
 
 ### 验证
 
+- 根目录 README 功能说明与 `deploy/README.md` 职责收敛后已运行 `git diff --check`，未发现空白或行尾问题。
 - README 开发者文档重写后已运行 `git diff --check`，未发现空白或行尾问题。
 - 公开分类与标签接口接入后已运行 `uv run ruff check .`，通过。
 - 公开分类与标签接口接入后已运行 `uv run pytest tests\test_public_content_api.py tests\test_content_service.py`，20 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
