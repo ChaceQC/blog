@@ -2,6 +2,11 @@ FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PIP_INDEX_URL=https://mirrors.cloud.tencent.com/pypi/simple \
+    UV_INDEX_URL=https://mirrors.cloud.tencent.com/pypi/simple \
+    UV_DEFAULT_INDEX=https://mirrors.cloud.tencent.com/pypi/simple \
+    UV_HTTP_TIMEOUT=300 \
+    UV_CONCURRENT_DOWNLOADS=1 \
     PATH="/app/.venv/bin:${PATH}"
 
 WORKDIR /app
