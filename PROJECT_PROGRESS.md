@@ -4,6 +4,8 @@
 
 ### 已完成
 
+- 前台归档筛选的分类与标签列表改为按公开文章数量降序展示前 5 项，避免分类/标签过多时撑高筛选区。
+- 分类与标签剩余项收敛到 `...` 按钮，点击后在模态框中分页浏览，每页 12 项，并保持分类/标签稳定公开 URL 跳转。
 - 新增公开分类详情接口 `GET /api/public/categories/{slug}` 和公开标签详情接口 `GET /api/public/tags/{slug}`，均使用 public scope `content-v1` 加密响应，只返回已公开且已到发布时间文章实际使用到的分类/标签，并在 200/404 时写入访问日志。
 - sitemap 扩展分类与标签稳定入口，除首页、文章列表和文章详情外，现在会包含 `/categories/{slug}` 与 `/tags/{slug}`，访问日志 `count` 同步统计文章、分类和标签 URL 数量。
 - 前端新增 `/categories/:slug` 与 `/tags/:slug` 公开路由，和 `/posts` 共用 `PublicPostArchivePage` 归档视图，分类/标签筛选 chip 改为稳定链接，分页继续通过 `page` 查询参数维护。
@@ -159,6 +161,8 @@
 
 ### 验证
 
+- 分类与标签筛选溢出收敛后已运行 `npm.cmd run lint`，通过。
+- 分类与标签筛选溢出收敛后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - 分类与标签独立公开路由接入后已运行 `uv run ruff check app tests\test_public_content_api.py`，通过。
 - 分类与标签独立公开路由接入后已运行 `uv run pytest tests\test_public_content_api.py`，18 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 分类与标签独立公开路由接入后已运行后端全量 `uv run pytest`，101 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 和 cookies 相关上游弃用警告。
