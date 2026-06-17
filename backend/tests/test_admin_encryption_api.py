@@ -92,6 +92,26 @@ class FakeAuthService:
         )
 
 
+class FakeRefreshAuthService:
+    def __init__(self) -> None:
+        self.refresh_token: str | None = None
+
+    async def refresh(self, *, refresh_token: str) -> TokenPair:
+        self.refresh_token = refresh_token
+        return TokenPair(
+            access_token="new-test-access-token",
+            refresh_token="new-test-refresh-token",
+            expires_in=900,
+            user=AuthenticatedUser(
+                id=1,
+                username="admin",
+                display_name="管理员",
+                roles=["editor"],
+                permissions=["post:read"],
+            ),
+        )
+
+
 class RaisingAuthService:
     async def login(
         self,
@@ -197,6 +217,74 @@ def test_login_rejects_missing_encryption_session_header() -> None:
 
     assert response.status_code == 400
     assert response.json()["detail"] == "missing encryption session"
+
+
+def test_refresh_uses_cookie_without_csrf_header() -> None:
+    refresh_token = "r" * 32
+    client_private_key = ec.generate_private_key(ec.SECP256R1())
+    client = TestClient(app)
+    encryption_repository = FakeEncryptionSessionRepository()
+    encryption_manager = EncryptionSessionManager(
+        repository=encryption_repository,
+        settings=get_settings(),
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        encryption_manager
+    )
+    try:
+        session_response = client.post(
+            "/api/admin/encryption/sessions",
+            json={
+                "client_public_key": _export_public_key(
+                    client_private_key.public_key(),
+                ),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert session_response.status_code == 200
+    session_payload = session_response.json()
+    shared_key = client_private_key.exchange(
+        ec.ECDH(),
+        _load_public_key(session_payload["server_public_key"]),
+    )
+    auth_service = FakeRefreshAuthService()
+    client.cookies.set("blog_admin_refresh", refresh_token, path="/api/admin")
+
+    app.dependency_overrides[get_auth_service] = lambda: auth_service
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        encryption_manager
+    )
+    try:
+        response = client.post(
+            "/api/admin/auth/refresh",
+            headers={"X-Encryption-Session": session_payload["session_id"]},
+            json={},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert auth_service.refresh_token == refresh_token
+    set_cookie_headers = response.headers.get_list("set-cookie")
+    assert any(
+        "blog_admin_csrf=" in header and "Path=/api/admin" in header
+        for header in set_cookie_headers
+    )
+    envelope_payload = response.json()
+    decrypted = decrypt_json_payload_with_key_material(
+        EncryptedEnvelope(
+            profile=EncryptionProfile(envelope_payload["profile"]),
+            nonce=envelope_payload["nonce"],
+            ciphertext=envelope_payload["ciphertext"],
+        ),
+        key_material=shared_key,
+        expected_profile=EncryptionProfile.SENSITIVE,
+    )
+
+    assert decrypted["user"]["username"] == "admin"
+    assert decrypted["csrf_token"]
 
 
 def test_cleanup_expired_encryption_sessions_deletes_only_expired() -> None:

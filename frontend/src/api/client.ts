@@ -16,6 +16,15 @@ type ApiRequestOptions = {
   csrfToken?: string
   encryptRequest?: boolean
   encryptionScope?: EncryptionScope
+  skipAuthRefresh?: boolean
+}
+
+type AuthRefreshHandler = () => Promise<boolean>
+
+let authRefreshHandler: AuthRefreshHandler | null = null
+
+export function setAuthRefreshHandler(handler: AuthRefreshHandler | null): void {
+  authRefreshHandler = handler
 }
 
 export class ApiError extends Error {
@@ -33,6 +42,7 @@ export async function apiGet<T>(
 ): Promise<T> {
   return requestJson<T>(path, {
     headers: jsonHeaders(options),
+    skipAuthRefresh: options.skipAuthRefresh,
   })
 }
 
@@ -45,6 +55,7 @@ export async function apiPost<TBody, TResponse>(
     method: 'POST',
     headers: jsonHeaders(options, { includeContentType: true }),
     body: JSON.stringify(body),
+    skipAuthRefresh: options.skipAuthRefresh,
   })
 }
 
@@ -60,6 +71,7 @@ export async function apiGetEncrypted<T>(
   return requestJson<T>(path, {
     headers: jsonHeaders(options, { encryptionSessionId: session.id }),
     encryption: { profile, session },
+    skipAuthRefresh: options.skipAuthRefresh,
   })
 }
 
@@ -84,6 +96,7 @@ export async function apiPostEncrypted<TBody, TResponse>(
     }),
     body: JSON.stringify(requestBody),
     encryption: { profile, session },
+    skipAuthRefresh: options.skipAuthRefresh,
   })
 }
 
@@ -104,6 +117,7 @@ export async function apiPostFormEncrypted<TResponse>(
     }),
     body,
     encryption: { profile, session },
+    skipAuthRefresh: options.skipAuthRefresh,
   })
 }
 
@@ -128,6 +142,7 @@ export async function apiPatchEncrypted<TBody, TResponse>(
     }),
     body: JSON.stringify(requestBody),
     encryption: { profile, session },
+    skipAuthRefresh: options.skipAuthRefresh,
   })
 }
 
@@ -146,6 +161,7 @@ export async function apiDeleteEncrypted<TResponse>(
       encryptionSessionId: session.id,
     }),
     encryption: { profile, session },
+    skipAuthRefresh: options.skipAuthRefresh,
   })
 }
 
@@ -153,13 +169,24 @@ async function requestJson<T>(
   path: string,
   init: RequestInit & {
     encryption?: { profile: EncryptionProfile; session: EncryptionSession }
+    skipAuthRefresh?: boolean
   },
 ): Promise<T> {
-  const { encryption, ...fetchInit } = init
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const { encryption, skipAuthRefresh, ...fetchInit } = init
+  let response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: 'include',
     ...fetchInit,
   })
+
+  if (response.status === 401 && !skipAuthRefresh && authRefreshHandler) {
+    const refreshed = await authRefreshHandler()
+    if (refreshed) {
+      response = await fetch(`${API_BASE_URL}${path}`, {
+        credentials: 'include',
+        ...fetchInit,
+      })
+    }
+  }
 
   if (!response.ok) {
     throw new ApiError(await readErrorMessage(response), response.status)

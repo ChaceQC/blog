@@ -13,6 +13,7 @@ from app.api.admin.dependencies import (
     SettingServiceDependency,
 )
 from app.api.public.router import PublicContentServiceDependency
+from app.core.request import client_ip
 from app.models.content import Post
 
 FEED_POST_LIMIT = 1000
@@ -303,7 +304,7 @@ async def _record_feed_access(
         path=str(request.url.path),
         status_code=status.HTTP_200_OK,
         entity_type="post",
-        ip=request.client.host if request.client else None,
+        ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
         detail_json={"count": count},
     )

@@ -24,6 +24,7 @@ from app.api.admin.dependencies import (
 )
 from app.api.admin.encrypted_response import encrypted_response
 from app.core.encryption import EncryptionProfile
+from app.core.request import client_ip
 from app.schemas.encryption import EncryptedApiResponse
 from app.schemas.files import (
     AdminFileItem,
@@ -211,7 +212,7 @@ async def create_file_temporary_url(
         status_code=status.HTTP_200_OK,
         entity_type="file",
         entity_id=access.file.id,
-        ip=request.client.host if request.client else None,
+        ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
         detail_json={"expires_at": access.expires_at.isoformat()},
     )
@@ -358,7 +359,7 @@ async def _record_admin_file_download_log(
         status_code=status_code,
         entity_type="file",
         entity_id=file_id,
-        ip=request.client.host if request.client else None,
+        ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
         detail_json=detail_json,
     )

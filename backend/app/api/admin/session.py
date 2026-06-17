@@ -30,6 +30,7 @@ def set_admin_session_cookies(
         value=tokens.access_token,
         max_age=tokens.expires_in,
         http_only=True,
+        path=ADMIN_COOKIE_PATH,
         settings=settings,
     )
     _set_cookie(
@@ -38,6 +39,7 @@ def set_admin_session_cookies(
         value=tokens.refresh_token,
         max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
         http_only=True,
+        path=ADMIN_COOKIE_PATH,
         settings=settings,
     )
     _set_cookie(
@@ -46,6 +48,7 @@ def set_admin_session_cookies(
         value=csrf_token,
         max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
         http_only=False,
+        path=ADMIN_COOKIE_PATH,
         settings=settings,
     )
 
@@ -67,6 +70,7 @@ def ensure_csrf_cookie(
         value=csrf_token,
         max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
         http_only=False,
+        path=ADMIN_COOKIE_PATH,
         settings=settings,
     )
     return csrf_token
@@ -132,6 +136,7 @@ def _set_cookie(
     value: str,
     max_age: int,
     http_only: bool,
+    path: str,
     settings: Settings,
 ) -> None:
     response.set_cookie(
@@ -141,5 +146,5 @@ def _set_cookie(
         httponly=http_only,
         secure=settings.admin_cookie_secure,
         samesite=settings.admin_cookie_samesite,
-        path=ADMIN_COOKIE_PATH,
+        path=path,
     )

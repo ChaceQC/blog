@@ -2,6 +2,7 @@ from typing import Any
 
 from fastapi import HTTPException, Request, status
 
+from app.core.request import client_ip
 from app.services.logs import LogService
 from app.services.rate_limit import RateLimitExceeded, RateLimitRule, RateLimitService
 
@@ -32,9 +33,3 @@ async def enforce_rate_limit(
             detail="rate limit exceeded",
             headers={"Retry-After": str(exc.retry_after_seconds)},
         ) from exc
-
-
-def client_ip(request: Request) -> str | None:
-    if request.client is None:
-        return None
-    return request.client.host

@@ -21,10 +21,19 @@ export function getCurrentAdminSession(): Promise<AuthSessionResponse> {
   )
 }
 
+export function refreshAdmin(): Promise<AuthSessionResponse> {
+  return apiPostEncrypted<Record<string, never>, AuthSessionResponse>(
+    '/admin/auth/refresh',
+    {},
+    'sensitive-v1',
+    { skipAuthRefresh: true },
+  )
+}
+
 export function logoutAdmin(csrfToken: string): Promise<{ status: 'ok' }> {
   return apiPost<Record<string, never>, { status: 'ok' }>(
     '/admin/auth/logout',
     {},
-    { csrfToken },
+    { csrfToken, skipAuthRefresh: true },
   )
 }

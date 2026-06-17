@@ -16,11 +16,12 @@ from app.api.admin.encrypted_response import (
     decrypt_encrypted_request,
     encrypted_response,
 )
-from app.api.admin.limits import client_ip, enforce_rate_limit
+from app.api.admin.limits import enforce_rate_limit
 from app.api.public.encryption import router as public_encryption_router
 from app.api.public.files import router as public_files_router
 from app.core.database import get_session
 from app.core.encryption import EncryptionProfile
+from app.core.request import client_ip
 from app.models.content import Post
 from app.providers.markdown import count_words
 from app.repositories.content import ContentRepository
@@ -759,7 +760,7 @@ async def _record_public_access(
         status_code=status_code,
         entity_type=entity_type,
         entity_id=entity_id,
-        ip=request.client.host if request.client else None,
+        ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
         detail_json=detail_json,
     )

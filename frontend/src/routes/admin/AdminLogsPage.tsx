@@ -322,9 +322,19 @@ function formatEntity(type: string | null, id: number | null): string {
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat('zh-CN', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Shanghai',
+  }).format(new Date(normalizeUtcTimestamp(value)))
+}
+
+function normalizeUtcTimestamp(value: string): string {
+  return /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? value : `${value}Z`
 }
 
 function formatJson(value: Record<string, unknown> | null): string {

@@ -13,7 +13,7 @@ from app.api.admin.encrypted_response import (
     encrypted_response,
     require_encryption_session,
 )
-from app.api.admin.limits import client_ip, enforce_rate_limit
+from app.api.admin.limits import enforce_rate_limit
 from app.api.admin.session import (
     clear_admin_session_cookies,
     create_csrf_token,
@@ -23,6 +23,7 @@ from app.api.admin.session import (
     set_admin_session_cookies,
 )
 from app.core.encryption import EncryptionProfile
+from app.core.request import client_ip
 from app.schemas.auth import (
     LoginRequest,
     LogoutRequest,
@@ -97,7 +98,6 @@ async def login(
 async def refresh(
     request: Request,
     response: Response,
-    _: AdminCsrfDependency,
     service: AuthServiceDependency,
     settings: SettingsDependency,
     encryption_manager: EncryptionSessionManagerDependency,

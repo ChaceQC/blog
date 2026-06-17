@@ -2,6 +2,7 @@ from typing import Any
 
 from fastapi import Request
 
+from app.core.request import client_ip
 from app.services.auth import AuthenticatedUser
 from app.services.logs import LogService
 
@@ -22,7 +23,7 @@ async def record_admin_audit(
         entity_type=entity_type,
         entity_id=entity_id,
         actor_id=actor.id,
-        ip=request.client.host if request.client else None,
+        ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
         before_json=before_json,
         after_json=after_json,

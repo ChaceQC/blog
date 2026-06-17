@@ -13,6 +13,7 @@ from app.api.admin.dependencies import (
 from app.api.admin.encrypted_response import encrypted_response
 from app.core.database import get_session
 from app.core.encryption import EncryptionProfile
+from app.core.request import client_ip
 from app.repositories.content import ContentRepository
 from app.schemas.encryption import EncryptedApiResponse
 from app.schemas.files import (
@@ -394,7 +395,7 @@ async def _record_file_access(
         status_code=status_code,
         entity_type=entity_type,
         entity_id=file_id if entity_id is None and file_id > 0 else entity_id,
-        ip=request.client.host if request.client else None,
+        ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
         detail_json=detail_json,
     )

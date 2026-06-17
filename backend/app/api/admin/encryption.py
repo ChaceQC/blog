@@ -6,7 +6,8 @@ from app.api.admin.dependencies import (
     RateLimitServiceDependency,
     SettingsDependency,
 )
-from app.api.admin.limits import client_ip, enforce_rate_limit
+from app.api.admin.limits import enforce_rate_limit
+from app.core.request import client_ip
 from app.schemas.encryption import (
     CreateEncryptionSessionRequest,
     CreateEncryptionSessionResponse,
