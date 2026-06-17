@@ -1,0 +1,9 @@
+[Unit]
+Description=Blog backup MySQL database
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/blog
+ExecStart=/usr/bin/bash deploy/scripts/backup_mysql.sh

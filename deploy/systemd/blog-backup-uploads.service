@@ -1,0 +1,7 @@
+[Unit]
+Description=Blog backup uploaded files
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/blog
+ExecStart=/usr/bin/bash deploy/scripts/backup_uploads.sh

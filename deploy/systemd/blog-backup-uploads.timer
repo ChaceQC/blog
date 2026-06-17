@@ -1,0 +1,11 @@
+[Unit]
+Description=Run blog uploaded files backup daily
+
+[Timer]
+OnCalendar=*-*-* 02:40:00
+Persistent=true
+RandomizedDelaySec=20m
+Unit=blog-backup-uploads.service
+
+[Install]
+WantedBy=timers.target

@@ -65,6 +65,8 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml co
 
 - `backup_mysql.sh`：备份 MySQL。
 - `restore_mysql.sh`：恢复 MySQL。
+- `backup_uploads.sh`：备份上传文件目录，默认读取 `/data/blog/uploads` 并写入 `/data/blog/backups/uploads`。
+- `restore_uploads.sh`：恢复上传文件目录，会覆盖同名文件但不会删除现有额外文件；执行前必须设置 `CONFIRM_RESTORE_UPLOADS=yes`。
 - `renew_cert.sh`：证书续期示例。
 
 备份至少应覆盖 MySQL、上传文件目录、生产环境变量、证书和部署版本信息。备份文件应加密保存到服务器外部位置，并定期做恢复演练。
@@ -76,6 +78,8 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml co
 ```bash
 sudo cp deploy/systemd/*.service deploy/systemd/*.timer /etc/systemd/system/
 sudo systemctl daemon-reload
+sudo systemctl enable --now blog-backup-mysql.timer
+sudo systemctl enable --now blog-backup-uploads.timer
 sudo systemctl enable --now blog-cleanup-encryption-sessions.timer
 sudo systemctl enable --now blog-cleanup-deleted-files.timer
 sudo systemctl enable --now blog-scan-orphan-files.timer
@@ -85,6 +89,8 @@ systemctl list-timers 'blog-*'
 
 任务说明：
 
+- `blog-backup-mysql.timer`：每天备份 MySQL。
+- `blog-backup-uploads.timer`：每天备份上传文件目录。
 - `blog-cleanup-encryption-sessions.timer`：每小时清理过期加密会话。
 - `blog-cleanup-deleted-files.timer`：每天清理超过保留期、无引用且路径安全的软删除文件。
 - `blog-scan-orphan-files.timer`：每周 dry-run 扫描孤儿文件，只输出汇总和示例。

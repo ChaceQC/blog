@@ -1,0 +1,11 @@
+[Unit]
+Description=Run blog MySQL backup daily
+
+[Timer]
+OnCalendar=*-*-* 02:10:00
+Persistent=true
+RandomizedDelaySec=20m
+Unit=blog-backup-mysql.service
+
+[Install]
+WantedBy=timers.target

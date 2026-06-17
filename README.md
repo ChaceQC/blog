@@ -363,7 +363,16 @@ systemctl list-timers 'blog-*'
 
 - `backup_mysql.sh`：备份 MySQL。
 - `restore_mysql.sh`：恢复 MySQL。
+- `backup_uploads.sh`：备份上传文件目录。
+- `restore_uploads.sh`：恢复上传文件目录，会覆盖同名文件但不会删除现有额外文件。
 - `renew_cert.sh`：证书续期示例。
+
+```bash
+bash deploy/scripts/backup_mysql.sh
+bash deploy/scripts/backup_uploads.sh
+bash deploy/scripts/restore_mysql.sh /data/blog/backups/mysql/blog-YYYYMMDDTHHMMSSZ.sql.gz
+CONFIRM_RESTORE_UPLOADS=yes bash deploy/scripts/restore_uploads.sh /data/blog/backups/uploads/uploads-YYYYMMDDTHHMMSSZ.tar.gz
+```
 
 生产环境至少需要备份：
 

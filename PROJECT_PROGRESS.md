@@ -19,6 +19,9 @@
 - M5 安全响应头收口：新增后端 `SecurityHeadersMiddleware`，所有响应统一设置 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 和 `Permissions-Policy`；生产环境额外设置 HSTS 与 Content Security Policy，本地开发环境不设置 CSP，避免影响 FastAPI `/docs`。
 - 补充安全响应头测试，覆盖开发环境基础头、生产环境 HSTS/CSP 和生产环境禁用 `/docs`。
 - 同步更新根目录 `README.md`、后端 `README.md`、部署 `README.md` 和 `PROJECT_PLAN.md`，记录后端与 Nginx 双层安全响应头边界。
+- M5 运维脚本补齐上传文件备份/恢复：新增 `deploy/scripts/backup_uploads.sh` 和 `deploy/scripts/restore_uploads.sh`，默认备份 `/data/blog/uploads` 到 `/data/blog/backups/uploads`，恢复时必须设置 `CONFIRM_RESTORE_UPLOADS=yes`，只覆盖同名文件、不删除现有额外文件，并拒绝包含绝对路径或 `..` 的备份包。
+- 新增 `blog-backup-mysql.timer` 和 `blog-backup-uploads.timer` systemd 示例，每天分别备份 MySQL 与上传文件目录；维护任务安装说明同步加入这两个 timer。
+- 同步更新根目录 `README.md`、部署 `README.md` 和 `PROJECT_PLAN.md`，记录上传目录备份/恢复命令和后续运维验收方向。
 - 扩展真实运行库 HTTP 闭环脚本 `backend/scripts/verify_runtime_publish_flow.py`：在原有文章发布、分类/标签、封面缩略图、正文图片渲染、公开文件短链、后台下载和访问日志覆盖基础上，新增后台创建公开页面、公开页面详情、RSS、sitemap、robots.txt、前端文章/页面 SEO 元信息、私有文件不进公开列表、后台私有文件鉴权下载、文件引用追踪、后台文章/文件列表大数量分页和桌面/移动端无横向溢出检查。
 - 按用户要求创建真实 MySQL 临时库 `blog_codex_m2m3_verify_20260617184907`，迁移到 Alembic head，创建一次性后台管理员 `codex_m2m3_verify`，启动本地后端 `18080` 与前端 `15173` 后运行增强后的真实运行库闭环脚本通过；脚本输出 `post_id=12`、`post_slug=runtime-flow-verify-5617afdd`、`page_id=3`、`page_slug=runtime-flow-verify-page-1896bdf8`、`file_id=24`、`private_file_id=25`，并检查 `/admin/posts`、`/admin/files` 的 desktop/mobile 分页。
 - 在同一真实临时库运行公开页分页与移动端溢出回归脚本 `backend/scripts/verify_public_page_pagination.py` 通过；脚本临时前缀为 `codex_public_pages_d056f63e`，`/links?page=2`、`/sites?page=2`、`/files?page=2` 在桌面和移动端均显示第二页分页条，`scroll_width` 等于 `client_width`，`remaining_seed_rows` 为 0。
@@ -174,7 +177,7 @@
 
 ### 进行中
 
-- M1 认证与后台框架已完成；M2 文章与页面、M3 文件管理、M4 友链与小网站跳转已完成真实 MySQL 临时库闭环验收。M5 已补齐后端安全响应头兜底，当前继续进行部署和运维验收。
+- M1 认证与后台框架已完成；M2 文章与页面、M3 文件管理、M4 友链与小网站跳转已完成真实 MySQL 临时库闭环验收。M5 已补齐后端安全响应头兜底和上传文件备份/恢复脚本，当前继续进行部署验收和上线前检查清单整理。
 
 ### 阻塞与风险
 
@@ -202,7 +205,7 @@
 ### 下一步
 
 - M5 部署验收：复查 Docker Compose、Nginx、环境变量示例、systemd 维护任务和生产端口暴露策略，确认公网只暴露 Nginx `80/443`。
-- M5 运维验收：复查 MySQL 备份恢复、上传文件备份恢复、证书续期和维护任务执行路径，形成可执行的 Debian 上线前检查清单。
+- M5 上线前检查清单：把证书续期、备份外传、恢复演练、迁移前备份、维护任务 timer 和公网入口检查整理为可执行清单。
 
 ### 验证
 
@@ -235,6 +238,11 @@
 - M5 安全响应头接入后已运行 `uv run pytest tests\test_admin_security.py tests\test_health.py`，13 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - M5 安全响应头接入后已运行后端全量 `uv run ruff check .`，通过。
 - M5 安全响应头接入后已运行后端全量 `uv run pytest`，115 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient、cookies 和 `HTTP_422_UNPROCESSABLE_ENTITY` 上游弃用警告。
+- 上传文件备份/恢复脚本接入后已运行 Git Bash `bash -n deploy/scripts/backup_mysql.sh deploy/scripts/restore_mysql.sh deploy/scripts/backup_uploads.sh deploy/scripts/restore_uploads.sh deploy/scripts/renew_cert.sh`，通过。
+- 上传文件备份/恢复脚本接入后已用临时目录执行 smoke test：写入 `uploads/public/example.txt`，运行 `backup_uploads.sh` 生成 tar.gz，再用 `CONFIRM_RESTORE_UPLOADS=yes restore_uploads.sh` 恢复到独立目录并校验文件内容，临时目录已清理。
+- 备份 systemd 示例接入后已运行文本结构检查，确认 `blog-backup-mysql.timer` 指向 `blog-backup-mysql.service`、`blog-backup-uploads.timer` 指向 `blog-backup-uploads.service`，两个 service 均包含 `WorkingDirectory=/opt/blog` 和对应备份脚本命令。
+- M5 部署验收已运行 `docker compose -f deploy\docker-compose.yml -f deploy\docker-compose.prod.yml config --quiet`，通过。
+- M5 部署端口结构已运行文本检查，确认生产 Compose 只映射 Nginx `80:80` 与 `443:443`，`backend`、`mysql`、`redis` 未配置宿主端口映射。
 - 本次 M2/M3 验收脚本与文档更新后已运行后端全量 `uv run ruff check .`，通过。
 - 本次 M2/M3 验收脚本与文档更新后已运行后端全量 `uv run pytest`，104 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 和 cookies 相关上游弃用警告。
 - 本次 M2/M3 验收脚本与文档更新后已运行 `npm.cmd run lint`，通过。
