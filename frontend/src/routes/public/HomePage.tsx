@@ -59,6 +59,11 @@ export function HomePage() {
   const featuredPosts = postsData?.items ?? []
   const featuredSites = sitesData?.items ?? []
   const latestPost = featuredPosts[0] ?? null
+  const heroStats = [
+    `${postsData?.total ?? featuredPosts.length} 篇文章`,
+    `${sitesData?.total ?? featuredSites.length} 个入口`,
+    `${profile.musings.length} 则碎念`,
+  ]
   usePageSeo({
     title: profile.title,
     description: profile.description,
@@ -82,9 +87,7 @@ export function HomePage() {
           </p>
           <div className="hero-quote">
             <span>{profile.quote}</span>
-            <small>
-              {siteSettings.stats.map((stat) => stat.value).join(' · ')}
-            </small>
+            <small>{heroStats.join(' · ')}</small>
           </div>
           <div className="social-strip" aria-label="社交链接">
             {profile.socialLinks.map((link) => {
