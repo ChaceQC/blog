@@ -7,6 +7,7 @@ import {
   formatPostDate,
   formatRelativePostDate,
 } from '../../features/posts/postMeta.ts'
+import { usePageSeo } from '../../features/seo/usePageSeo.ts'
 import { getPublicSiteProfile } from '../../features/settings/api.ts'
 import { siteSettings } from '../../features/settings/siteSettings.ts'
 import { listPublicSiteItems } from '../../features/sites/api.ts'
@@ -55,6 +56,13 @@ export function HomePage() {
     RSS: Rss,
     Email: Mail,
   }
+  usePageSeo({
+    title: profile.title,
+    description: profile.description,
+    path: '/',
+    imageUrl: profile.avatarUrl,
+    siteName: profile.title,
+  })
 
   return (
     <div className="page-flow">

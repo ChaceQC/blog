@@ -4,8 +4,10 @@ import { useState } from 'react'
 import { ListPager } from '../../components/ListPager.tsx'
 import { PostList } from '../../features/posts/PostList.tsx'
 import { listPublicPosts } from '../../features/posts/api.ts'
+import { usePageSeo } from '../../features/seo/usePageSeo.ts'
 
 const PAGE_SIZE = 5
+const pageDescription = '按发布时间收起已经公开的文章和随手记下的长句。'
 
 export function PostListPage() {
   const [page, setPage] = useState(0)
@@ -16,13 +18,19 @@ export function PostListPage() {
   })
   const posts = (data?.items ?? []).slice(0, PAGE_SIZE)
   const hasNextPage = (data?.items.length ?? 0) > PAGE_SIZE
+  usePageSeo({
+    title: '全部文章',
+    description: pageDescription,
+    path: '/posts',
+    keywords: '文章,写作,博客',
+  })
 
   return (
     <div className="page-flow page-flow--narrow">
       <section className="page-heading">
         <small>ARCHIVE</small>
         <h1>全部文章</h1>
-        <p>按发布时间收起已经公开的文章和随手记下的长句。</p>
+        <p>{pageDescription}</p>
       </section>
       <section className="content-section">
         <div className="section-heading section-heading--stacked">

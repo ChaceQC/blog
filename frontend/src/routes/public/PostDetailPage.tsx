@@ -1,6 +1,5 @@
 import { ArrowLeft, Clock3 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { MathHtml } from '../../components/MathHtml.tsx'
@@ -10,6 +9,8 @@ import {
   getReadingMinutes,
   postCoverUrl,
 } from '../../features/posts/postMeta.ts'
+import { usePageSeo } from '../../features/seo/usePageSeo.ts'
+import { siteSettings } from '../../features/settings/siteSettings.ts'
 
 export function PostDetailPage() {
   const { slug = '' } = useParams()
@@ -18,23 +19,15 @@ export function PostDetailPage() {
     queryFn: () => getPublicPost(slug),
     enabled: slug.length > 0,
   })
-
-  useEffect(() => {
-    if (!post) {
-      return
-    }
-    const previousTitle = document.title
-    const nextTitle = post.seo_title ?? post.title
-    document.title = `${nextTitle} | 静默书房`
-    setMetaContent(
-      'description',
-      post.seo_description ?? post.summary ?? '静默书房文章',
-    )
-    setMetaContent('keywords', post.seo_keywords ?? post.tag_names.join(','))
-    return () => {
-      document.title = previousTitle
-    }
-  }, [post])
+  usePageSeo({
+    title: post?.seo_title ?? post?.title ?? '文章',
+    description:
+      post?.seo_description ?? post?.summary ?? `${siteSettings.title}文章`,
+    path: slug ? `/posts/${slug}` : '/posts',
+    keywords: post?.seo_keywords ?? post?.tag_names.join(',') ?? null,
+    imageUrl: post ? postCoverUrl(post) : null,
+    type: 'article',
+  })
 
   if (isLoading) {
     return (
@@ -100,14 +93,4 @@ export function PostDetailPage() {
       />
     </article>
   )
-}
-
-function setMetaContent(name: string, content: string) {
-  let meta = document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)
-  if (!meta) {
-    meta = document.createElement('meta')
-    meta.name = name
-    document.head.append(meta)
-  }
-  meta.content = content
 }

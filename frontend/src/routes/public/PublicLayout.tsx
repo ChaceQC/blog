@@ -7,7 +7,6 @@ import {
   Settings,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
 import { getPublicSiteProfile } from '../../features/settings/api.ts'
@@ -19,10 +18,6 @@ export function PublicLayout() {
     queryFn: getPublicSiteProfile,
   })
   const title = siteProfile?.title ?? siteSettings.title
-
-  useEffect(() => {
-    document.title = title
-  }, [title])
 
   return (
     <div className="public-shell">

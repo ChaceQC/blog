@@ -8,8 +8,10 @@ import {
   submitPublicFriendLinkApplication,
 } from '../../features/links/api.ts'
 import type { FriendLink } from '../../features/links/types.ts'
+import { usePageSeo } from '../../features/seo/usePageSeo.ts'
 
 const PAGE_SIZE = 8
+const pageDescription = '保留一些值得常去看看的站点，也给彼此留一个入口。'
 const emptyLinks: FriendLink[] = []
 const emptyApplicationForm = {
   name: '',
@@ -47,13 +49,19 @@ export function LinksPage() {
       setApplicationNotice(error instanceof Error ? error.message : '申请提交失败')
     },
   })
+  usePageSeo({
+    title: '友链',
+    description: pageDescription,
+    path: '/links',
+    keywords: '友链,个人站点,博客',
+  })
 
   return (
     <div className="page-flow page-flow--narrow">
       <section className="page-heading">
         <small>FRIENDS</small>
         <h1>友链</h1>
-        <p>保留一些值得常去看看的站点，也给彼此留一个入口。</p>
+        <p>{pageDescription}</p>
       </section>
       <section className="content-section">
         <div className="section-heading section-heading--stacked">

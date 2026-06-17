@@ -4,6 +4,11 @@
 
 ### 已完成
 
+- 新增前端公开页面 SEO hook `usePageSeo`，统一维护 `document.title`、`description`、`keywords`、canonical 和基础 Open Graph 元信息。
+- 移除 `PublicLayout` 对 `document.title` 的全局覆盖，避免公开子页面设置的页面级标题被站点标题覆盖。
+- 首页、文章列表、文章详情、友链、文件和站点目录已接入 `usePageSeo`；文章详情使用文章 SEO 标题/描述/关键词、canonical URL、`og:type=article` 和封面图作为分享元信息。
+- `frontend/index.html` 新增默认 description 与基础 Open Graph 兜底，前端默认 RSS 入口从 `/feed` 调整为 `/rss.xml`。
+- 同步更新根目录 `README.md`、前端 `README.md` 和 `PROJECT_PLAN.md`，记录公开页面 canonical/Open Graph 基线，并将下一步调整为公开分类与标签接口。
 - 新增 `GET /robots.txt` 根级公开端点，不要求应用层加密会话；默认允许常规公开内容抓取，屏蔽 `/admin` 与 `/api/admin/`，并声明由 `BLOG_PUBLIC_BASE_URL` 生成的 `/sitemap.xml` 绝对地址。
 - `robots.txt` 访问会写入 `access_logs`，记录为 `public_robots`。
 - 生产 Nginx 站点模板新增根级 `/rss.xml`、`/sitemap.xml`、`/robots.txt` 精确反代规则，避免公开 SEO 文件被前端 SPA `index.html` 兜底吞掉。
@@ -107,7 +112,7 @@
 
 ### 进行中
 
-- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目、RSS/sitemap/robots.txt 初版、生产 Nginx SEO 出口反代和公开文章列表分类标签展示已形成基础闭环；下一步补齐公开页面 canonical 与 Open Graph 元信息基线。
+- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目、RSS/sitemap/robots.txt 初版、生产 Nginx SEO 出口反代、公开页面 canonical/Open Graph 基线和公开文章列表分类标签展示已形成基础闭环；下一步补齐公开分类与标签接口。
 
 ### 阻塞与风险
 
@@ -126,13 +131,16 @@
 - RSS 与 sitemap 当前直接实时查询数据库生成 XML，适合当前规模；后续文章量明显增大或搜索引擎抓取频率升高时，再评估缓存或后台任务刷新静态文件。
 - `/rss.xml`、`/sitemap.xml` 与 `/robots.txt` 的绝对链接依赖 `BLOG_PUBLIC_BASE_URL`，生产部署前必须确认该值为公网 HTTPS 域名。
 - 生产 Nginx 已补充根级 SEO 文件反代规则；后续如果改为静态预渲染或 CDN 缓存，需要同步检查这些路径是否仍返回后端生成内容或等价静态文件。
+- 当前 canonical 与 Open Graph 由 React 客户端运行时写入，能改善浏览器内分享状态，但对不执行 JavaScript 的搜索引擎或社交抓取器仍不如 SSR/SSG；后续若 SEO 要求提高，需要评估预渲染或服务端渲染。
 
 ### 下一步
 
-- 公开页面 canonical 与 Open Graph 元信息基线：文章详情、文章列表、友链和站点目录补齐可分享标题、描述、canonical URL 与基础 `og:*`。
+- 公开分类与标签接口：补齐 `GET /api/public/categories` 和 `GET /api/public/tags`，用于前台归档筛选和后续 sitemap 扩展。
 
 ### 验证
 
+- 公开页面 canonical/Open Graph 基线接入后已运行 `npm.cmd run lint`，通过。
+- 公开页面 canonical/Open Graph 基线接入后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - robots.txt 与 Nginx SEO 反代接入后已运行 `uv run ruff check .`，通过。
 - robots.txt 与 Nginx SEO 反代接入后已运行 `uv run pytest tests\test_public_content_api.py tests\test_content_service.py`，18 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - robots.txt 与 Nginx SEO 反代接入后已运行 `docker compose -f deploy\docker-compose.yml -f deploy\docker-compose.prod.yml config --quiet`，通过。

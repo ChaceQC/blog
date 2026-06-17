@@ -8,8 +8,10 @@ import {
   listPublicFiles,
 } from '../../features/files/api.ts'
 import type { PublicFileItem } from '../../features/files/types.ts'
+import { usePageSeo } from '../../features/seo/usePageSeo.ts'
 
 const PAGE_SIZE = 8
+const pageDescription = '公开发布的附件会显示在这里。'
 const emptyFiles: PublicFileItem[] = []
 
 export function FilesPage() {
@@ -29,6 +31,12 @@ export function FilesPage() {
     () => files.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE),
     [files, safePage],
   )
+  usePageSeo({
+    title: '文件',
+    description: pageDescription,
+    path: '/files',
+    keywords: '公开文件,附件,资料',
+  })
 
   async function openFile(file: PublicFileItem) {
     try {
@@ -45,7 +53,7 @@ export function FilesPage() {
       <section className="page-heading">
         <small>资料</small>
         <h1>文件</h1>
-        <p>公开发布的附件会显示在这里。</p>
+        <p>{pageDescription}</p>
       </section>
 
       <section className="content-section">

@@ -24,6 +24,7 @@ npm run build
 - `src/routes/admin`：后台管理页面。
 - `src/features`：按业务模块拆分文章、文件、友链、导航和设置。
 - `src/features/auth`：后台登录、会话保存和退出逻辑。
+- `src/features/seo`：公开页面标题、description、canonical 和 Open Graph 元信息维护。
 - `src/api`：接口客户端与请求封装。
 - `src/components`：跨模块复用组件。
 
@@ -34,6 +35,7 @@ npm run build
 - 后台登录与工作台沿用同一套 token，但优先保证管理界面的可读性和操作效率。
 - 不直接在业务组件中写原始色值；新增颜色应先映射到 `src/index.css` 的 Yohaku token 变量。
 - 公开首页、公开布局品牌、后台布局品牌和页面标题优先读取 `/api/public/settings/site-profile` 的真实站点资料，不再回退到演示站点文案。
+- 公开页面通过 `usePageSeo` 维护页面标题、description、canonical 和基础 `og:*`；新增公开页面时必须同步补齐可分享标题和描述。
 - 日志类页面必须使用内部滚动列表或分页，不能让大量日志把整个后台页面无限撑长。
 
 ## 内容与文件约定
