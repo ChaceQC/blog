@@ -25,7 +25,7 @@ DEFAULT_SITE_PROFILE = {
     ],
     "social_links": [
         {"label": "GitHub", "url": "https://github.com/ChaceQC"},
-        {"label": "RSS", "url": "/feed"},
+        {"label": "RSS", "url": "/rss.xml"},
         {"label": "Email", "url": "mailto:ChaceQC@users.noreply.github.com"},
     ],
 }

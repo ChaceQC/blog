@@ -48,6 +48,27 @@ class ContentRepository:
         await self._attach_post_taxonomy(posts)
         return posts
 
+    async def list_public_feed_posts(self, *, limit: int) -> Sequence[Post]:
+        now = utc_now()
+        result = await self.session.execute(
+            select(Post)
+            .where(
+                Post.deleted_at.is_(None),
+                or_(
+                    Post.status == "published",
+                    Post.status == "scheduled",
+                ),
+                Post.visibility == "public",
+                Post.published_at.is_not(None),
+                Post.published_at <= now,
+            )
+            .order_by(Post.published_at.desc(), Post.id.desc())
+            .limit(limit),
+        )
+        posts = list(result.scalars().all())
+        await self._attach_post_taxonomy(posts)
+        return posts
+
     async def get_post(self, post_id: int) -> Post | None:
         result = await self.session.execute(
             select(Post).where(Post.id == post_id, Post.deleted_at.is_(None)),

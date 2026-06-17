@@ -111,6 +111,27 @@ class FakePublicContentService:
             ),
         ]
 
+    async def list_public_feed_posts(self, *, limit: int) -> list[object]:
+        assert limit == 1000
+        return [
+            SimpleNamespace(
+                id=1,
+                title="公开文章 & RSS",
+                slug="public-post",
+                summary="摘要 <需要转义>",
+                cover_file_id=1,
+                content_md="中文阅读时长 test-article 2026",
+                word_count=1,
+                seo_title="SEO 标题",
+                seo_description="SEO <摘要>",
+                seo_keywords="博客,验证",
+                category_names=["技术"],
+                tag_names=["FastAPI", "React"],
+                published_at=datetime(2026, 6, 16, 8, 0, tzinfo=UTC),
+                updated_at=datetime(2026, 6, 17, 9, 30, tzinfo=UTC),
+            ),
+        ]
+
     async def get_public_post_by_slug(self, slug: str) -> object:
         if slug != "public-post":
             raise ContentNotFoundError("post not found")
@@ -233,6 +254,58 @@ def test_public_encryption_session_uses_public_scope() -> None:
 
     assert response.status_code == 200
     assert response.json()["scope"] == "public"
+
+
+def test_rss_feed_returns_public_posts_xml() -> None:
+    client = TestClient(app)
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_content_service] = (
+        lambda: FakePublicContentService()
+    )
+    app.dependency_overrides[get_setting_service] = lambda: FakeSettingService()
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get("/rss.xml")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/rss+xml")
+    assert "<title>恬妡的小屋</title>" in response.text
+    assert "<title>SEO 标题</title>" in response.text
+    assert "http://127.0.0.1:15173/posts/public-post" in response.text
+    assert "SEO &lt;摘要&gt;" in response.text
+    assert "<category>FastAPI</category>" in response.text
+    assert logs.items[0]["access_type"] == "public_rss"
+    assert logs.items[0]["detail_json"] == {"count": 1}
+
+
+def test_sitemap_returns_public_post_urls_xml() -> None:
+    client = TestClient(app)
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_content_service] = (
+        lambda: FakePublicContentService()
+    )
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get("/sitemap.xml")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/xml")
+    assert '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' in (
+        response.text
+    )
+    assert "<loc>http://127.0.0.1:15173/</loc>" in response.text
+    assert "<loc>http://127.0.0.1:15173/posts</loc>" in response.text
+    assert (
+        "<loc>http://127.0.0.1:15173/posts/public-post</loc>" in response.text
+    )
+    assert "<lastmod>2026-06-17</lastmod>" in response.text
+    assert logs.items[0]["access_type"] == "public_sitemap"
 
 
 def test_public_posts_returns_published_post_list() -> None:

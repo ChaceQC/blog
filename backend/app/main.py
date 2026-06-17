@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.api.admin.router import router as admin_router
+from app.api.public.feeds import router as feeds_router
 from app.api.public.health import router as health_router
 from app.api.public.router import router as public_router
 from app.core.config import Settings, get_settings
@@ -24,6 +25,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     configure_security_middleware(app, settings)
 
     app.include_router(health_router)
+    app.include_router(feeds_router)
     app.include_router(public_router, prefix="/api/public")
     app.include_router(admin_router, prefix="/api/admin")
 

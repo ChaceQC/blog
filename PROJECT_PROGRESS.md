@@ -4,6 +4,13 @@
 
 ### 已完成
 
+- 新增根级公开 XML 端点 `GET /rss.xml` 与 `GET /sitemap.xml`，不要求应用层加密会话，方便订阅客户端和搜索引擎直接抓取。
+- RSS 2.0 输出站点标题、站点描述、文章永久链接、发布时间、SEO 标题、SEO 描述、分类和标签；站点信息来自公开 `site_profile`。
+- sitemap 输出首页、文章列表页和已公开文章永久链接，使用文章更新时间或发布时间生成 `lastmod`。
+- 新增 `ContentRepository.list_public_feed_posts` 与 `ContentService.list_public_feed_posts`，复用公开文章过滤规则，仅包含未删除、公开可见、已发布或已到点定时发布的文章。
+- RSS 和 sitemap 访问会写入 `access_logs`，分别记录为 `public_rss` 与 `public_sitemap`。
+- 默认站点资料中的 RSS 社交入口从 `/feed` 调整为 `/rss.xml`。
+- 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，记录 RSS/sitemap 初版和后续 `robots.txt` 计划。
 - 新增友链状态检查服务 `FriendLinkHealthService`，只检查已通过友链，按最久未检查优先排序，写入 `last_checked_at` 与 `last_status_code`。
 - 新增友链状态检查任务 `backend/app/tasks/links.py` 和 CLI 子命令 `uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5`；任务优先使用 `HEAD`，遇到 `405` 时回退 `GET`，访问失败记录为状态码 `0`。
 - 后台友链列表和详情开始展示“未检查 / 正常 / 异常 / 访问失败”与最近检查时间，方便人工判断是否需要下架或修正。
@@ -93,7 +100,7 @@
 
 ### 进行中
 
-- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查和导航条目基础能力已形成闭环；下一步补齐 RSS 与 sitemap 初版。
+- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目和 RSS/sitemap 初版已形成基础闭环；下一步补齐 `robots.txt` 并检查生产反代规则。
 
 ### 阻塞与风险
 
@@ -109,13 +116,17 @@
 - 本次运行库验证中复用了同一张验证图片文件 `file_id=10`；验证文章已归档，但验证图片和访问日志保留，后续文件清理前需要确认引用状态。
 - 公开友链申请入口已接入应用限流，但公开加密会话协商仍会先发生；若后续遇到明显垃圾申请，需要继续评估验证码、黑名单或更细粒度的 URL 去重策略。
 - `check-friend-links` 会访问外部站点，可能受网络波动、对方反爬、HEAD 支持不完整或临时 5xx 影响；本任务只记录状态码和失败，不自动修改人工审核状态。
+- RSS 与 sitemap 当前直接实时查询数据库生成 XML，适合当前规模；后续文章量明显增大或搜索引擎抓取频率升高时，再评估缓存或后台任务刷新静态文件。
+- `/rss.xml` 与 `/sitemap.xml` 的绝对链接依赖 `BLOG_PUBLIC_BASE_URL`，生产部署前必须确认该值为公网 HTTPS 域名。
 
 ### 下一步
 
-- RSS 与 sitemap 初版：基于已发布文章输出 `/rss.xml` 和 `/sitemap.xml`，覆盖文章永久链接、发布时间、更新时间和站点基础资料。
+- `robots.txt` 初版：声明 `/sitemap.xml`，允许常规公开内容抓取，并检查生产 Nginx 对 `/rss.xml`、`/sitemap.xml` 和 `/robots.txt` 的反代规则。
 
 ### 验证
 
+- RSS/sitemap 初版接入后已运行 `uv run ruff check .`，通过。
+- RSS/sitemap 初版接入后已运行 `uv run pytest tests\test_public_content_api.py tests\test_content_service.py`，17 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 友链状态检查任务接入后已运行 `uv run ruff check .`，通过。
 - 友链状态检查任务接入后已运行 `uv run pytest tests\test_link_health.py tests\test_admin_links_api.py`，9 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 友链状态检查任务接入后已运行后端全量 `uv run pytest`，91 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 相关上游弃用警告。

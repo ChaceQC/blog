@@ -26,6 +26,8 @@ class ContentRepositoryProtocol(Protocol):
 
     async def list_public_posts(self, *, limit: int, offset: int) -> Sequence[Post]: ...
 
+    async def list_public_feed_posts(self, *, limit: int) -> Sequence[Post]: ...
+
     async def get_post(self, post_id: int) -> Post | None: ...
 
     async def get_post_by_slug(self, slug: str) -> Post | None: ...
@@ -145,6 +147,9 @@ class ContentService:
 
     async def list_public_posts(self, *, limit: int, offset: int) -> Sequence[Post]:
         return await self.repository.list_public_posts(limit=limit, offset=offset)
+
+    async def list_public_feed_posts(self, *, limit: int) -> Sequence[Post]:
+        return await self.repository.list_public_feed_posts(limit=limit)
 
     async def get_post(self, post_id: int) -> Post:
         post = await self.repository.get_post(post_id)
