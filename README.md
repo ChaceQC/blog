@@ -2,6 +2,51 @@
 
 自托管个人博客与轻量 CMS。系统面向公网部署设计，包含文章发布、页面管理、文件管理、友链、小网站导航、后台管理、公开订阅和基础运维任务。
 
+## 从 Git 开始
+
+项目使用 Git 和 GitHub 管理，默认远端为 `origin`，默认主分支为 `main`，日常开发在 `dev` 分支进行。
+
+首次获取代码：
+
+```powershell
+git clone https://github.com/ChaceQC/blog.git
+cd blog
+git switch dev
+git status --short --branch
+```
+
+开始开发前先同步远端：
+
+```powershell
+git fetch origin
+git switch dev
+git pull --ff-only origin dev
+```
+
+提交前检查工作区，确认只包含本次任务相关文件：
+
+```powershell
+git status --short --branch
+git diff --check
+```
+
+完成一个可验证小步后提交并推送：
+
+```powershell
+git add <本次修改的文件>
+git commit -m "docs: 中文说明"
+git push origin dev
+```
+
+一个完整功能在 `dev` 验证通过后，再将 `main` 快进到 `dev`：
+
+```powershell
+git switch main
+git merge --ff-only dev
+git push origin main
+git switch dev
+```
+
 ## 架构概览
 
 ```text
