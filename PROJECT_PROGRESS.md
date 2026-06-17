@@ -4,6 +4,9 @@
 
 ### 已完成
 
+- 调整公开文章列表元信息展示：顶部只保留“已发布”状态，摘要下方统一展示带“分类 / 标签”前缀的分类和标签信息。
+- 公开文章列表会过滤“定时发布”这类发布流程词，避免把验证用发布语义当作前台内容标签展示。
+- 补充 `post-taxonomy` 内部标签间距与前缀样式，保持移动端和桌面端都能自然换行。
 - 新增根级公开 XML 端点 `GET /rss.xml` 与 `GET /sitemap.xml`，不要求应用层加密会话，方便订阅客户端和搜索引擎直接抓取。
 - RSS 2.0 输出站点标题、站点描述、文章永久链接、发布时间、SEO 标题、SEO 描述、分类和标签；站点信息来自公开 `site_profile`。
 - sitemap 输出首页、文章列表页和已公开文章永久链接，使用文章更新时间或发布时间生成 `lastmod`。
@@ -100,7 +103,7 @@
 
 ### 进行中
 
-- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目和 RSS/sitemap 初版已形成基础闭环；下一步补齐 `robots.txt` 并检查生产反代规则。
+- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目、RSS/sitemap 初版和公开文章列表分类标签展示已形成基础闭环；下一步补齐 `robots.txt` 并检查生产反代规则。
 
 ### 阻塞与风险
 
@@ -125,6 +128,8 @@
 
 ### 验证
 
+- 公开文章列表分类标签展示调整后已运行 `npm.cmd run lint`，通过。
+- 公开文章列表分类标签展示调整后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - RSS/sitemap 初版接入后已运行 `uv run ruff check .`，通过。
 - RSS/sitemap 初版接入后已运行 `uv run pytest tests\test_public_content_api.py tests\test_content_service.py`，17 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 友链状态检查任务接入后已运行 `uv run ruff check .`，通过。
