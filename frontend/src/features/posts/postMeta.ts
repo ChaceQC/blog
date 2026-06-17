@@ -1,25 +1,11 @@
 import { API_BASE_URL } from '../../api/config.ts'
+import { formatChinaDate, parseApiTime } from '../../utils/datetime.ts'
 import type { PublicPostItem } from './types.ts'
 
 export const DEFAULT_POST_COVER_URL = '/default-cover.svg'
 
-const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-})
-
 export function formatPostDate(value: string | null): string {
-  if (!value) {
-    return '未标记日期'
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return '未标记日期'
-  }
-
-  return dateFormatter.format(date).replaceAll('/', '-')
+  return formatChinaDate(value, '未标记日期')
 }
 
 export function getReadingMinutes(wordCount: number): number {
@@ -31,7 +17,7 @@ export function formatRelativePostDate(value: string | null): string {
     return '刚刚'
   }
 
-  const publishedAt = new Date(value).getTime()
+  const publishedAt = parseApiTime(value)
   if (Number.isNaN(publishedAt)) {
     return '刚刚'
   }

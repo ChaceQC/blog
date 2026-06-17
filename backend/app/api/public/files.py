@@ -14,6 +14,7 @@ from app.api.admin.encrypted_response import encrypted_response
 from app.core.database import get_session
 from app.core.encryption import EncryptionProfile
 from app.core.request import client_ip
+from app.core.urls import public_file_download_url
 from app.repositories.content import ContentRepository
 from app.schemas.encryption import EncryptedApiResponse
 from app.schemas.files import (
@@ -124,10 +125,9 @@ async def create_public_file_temporary_url(
             detail="file is not listed public",
         ) from exc
 
-    url = request.url_for("download_public_file", file_id=access.file.id)
     response = await encrypted_response(
         AdminFileTemporaryUrlResponse(
-            url=str(url.include_query_params(token=access.token)),
+            url=public_file_download_url(file_id=access.file.id, token=access.token),
             expires_at=access.expires_at,
         ),
         request=request,

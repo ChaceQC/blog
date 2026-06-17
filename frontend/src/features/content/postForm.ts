@@ -1,4 +1,8 @@
 import type { AdminPostItem, PostFormPayload, PostWritePayload } from './types.ts'
+import {
+  apiTimestampFromChinaDateTimeInput,
+  localDateTimeInputFromApi,
+} from '../../utils/datetime.ts'
 
 export const emptyPostForm: PostFormPayload = {
   title: '',
@@ -117,20 +121,11 @@ function normalizePublishedAt(value: string | null): string | null {
   if (!trimmed) {
     return null
   }
-  const date = new Date(trimmed)
-  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+  return apiTimestampFromChinaDateTimeInput(trimmed)
 }
 
 function toLocalDateTimeInput(value: string | null): string | null {
-  if (!value) {
-    return null
-  }
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-  return offsetDate.toISOString().slice(0, 16)
+  return localDateTimeInputFromApi(value)
 }
 
 function nextPostSlug(posts: AdminPostItem[]): string {

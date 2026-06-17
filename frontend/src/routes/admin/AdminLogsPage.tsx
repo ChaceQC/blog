@@ -8,6 +8,7 @@ import {
   listLoginLogs,
   listSecurityEvents,
 } from '../../features/logs/api.ts'
+import { formatChinaDateTime } from '../../utils/datetime.ts'
 
 import type {
   AccessLogItem,
@@ -321,20 +322,7 @@ function formatEntity(type: string | null, id: number | null): string {
 }
 
 function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-    timeZone: 'Asia/Shanghai',
-  }).format(new Date(normalizeUtcTimestamp(value)))
-}
-
-function normalizeUtcTimestamp(value: string): string {
-  return /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? value : `${value}Z`
+  return formatChinaDateTime(value, '未知时间')
 }
 
 function formatJson(value: Record<string, unknown> | null): string {

@@ -1,4 +1,5 @@
 import { API_BASE_URL } from './config.ts'
+import { parseApiTime } from '../utils/datetime.ts'
 
 export type EncryptionProfile = 'sensitive-v1' | 'content-v1'
 export type EncryptionScope = 'admin' | 'public'
@@ -215,7 +216,7 @@ async function createEncryptionSession(
     scope: sessionResponse.scope,
     sharedSecret: sharedBits,
     profiles: sessionResponse.profiles,
-    expiresAt: Date.parse(sessionResponse.expires_at),
+    expiresAt: parseApiTime(sessionResponse.expires_at),
   }
 }
 

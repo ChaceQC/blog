@@ -10,6 +10,7 @@ import {
 } from '../../features/files/api.ts'
 import type { PublicFileItem } from '../../features/files/types.ts'
 import { usePageSeo } from '../../features/seo/usePageSeo.ts'
+import { formatChinaDateTime } from '../../utils/datetime.ts'
 
 const PAGE_SIZE = 8
 const pageDescription = '公开发布的附件会显示在这里。'
@@ -40,7 +41,7 @@ export function FilesPage() {
     try {
       const link = await temporaryUrlMutation.mutateAsync(file.id)
       window.open(link.url, '_blank', 'noopener,noreferrer')
-      setNotice(`链接有效至 ${formatDate(link.expires_at)}`)
+      setNotice(`链接有效至 ${formatChinaDateTime(link.expires_at, '未知时间')}`)
     } catch {
       setNotice('下载链接暂时无法生成。')
     }
@@ -118,13 +119,6 @@ function formatFileSize(sizeBytes: number): string {
     return `${(sizeBytes / 1024).toFixed(1)} KB`
   }
   return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('zh-CN', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
 }
 
 function parsePage(value: string | null) {

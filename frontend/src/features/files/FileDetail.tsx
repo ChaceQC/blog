@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 
 import { adminFileDownloadUrl } from './api.ts'
+import { formatChinaDateTime } from '../../utils/datetime.ts'
 
 import type { AdminFileItem, AdminFileTemporaryUrlResponse } from './types.ts'
 
@@ -90,12 +91,12 @@ export function FileDetail({
         </div>
         <div>
           <dt>更新时间</dt>
-          <dd>{formatDate(file.updated_at)}</dd>
+          <dd>{formatChinaDateTime(file.updated_at, '未记录')}</dd>
         </div>
         {temporaryUrl ? (
           <div>
             <dt>链接有效期</dt>
-            <dd>{formatDate(temporaryUrl.expires_at)}</dd>
+            <dd>{formatChinaDateTime(temporaryUrl.expires_at, '未记录')}</dd>
           </div>
         ) : null}
       </dl>
@@ -179,16 +180,6 @@ function formatFileSize(sizeBytes: number): string {
     return `${(sizeBytes / 1024).toFixed(1)} KB`
   }
   return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`
-}
-
-function formatDate(value: string | null): string {
-  if (!value) {
-    return '未记录'
-  }
-  return new Intl.DateTimeFormat('zh-CN', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
 }
 
 function openAdminDownload(

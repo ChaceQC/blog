@@ -4,6 +4,7 @@ import type {
   AdminFriendLinkStatus,
   FriendLinkWritePayload,
 } from './types.ts'
+import { formatChinaDateTime } from '../../utils/datetime.ts'
 
 export const linkStatusLabels = {
   healthy: '通过',
@@ -100,11 +101,5 @@ function emptyToNull(value: string): string | null {
 }
 
 export function formatDateTime(value: string | null): string {
-  if (!value) {
-    return '未记录'
-  }
-  return new Intl.DateTimeFormat('zh-CN', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(new Date(value))
+  return formatChinaDateTime(value, '未记录')
 }

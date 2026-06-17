@@ -11,6 +11,7 @@ import {
 } from '../../features/files/api.ts'
 import { FileDetail } from '../../features/files/FileDetail.tsx'
 import { useAuth } from '../../features/auth/useAuth.ts'
+import { parseApiTime } from '../../utils/datetime.ts'
 
 import type {
   AdminFileItem,
@@ -144,7 +145,7 @@ export function AdminFilesPage() {
     }
 
     const cached = temporaryUrls[file.id]
-    if (cached && new Date(cached.expires_at).getTime() > Date.now() + 5000) {
+    if (cached && parseApiTime(cached.expires_at) > Date.now() + 5000) {
       return cached.url
     }
 

@@ -25,6 +25,7 @@ from app.api.admin.dependencies import (
 from app.api.admin.encrypted_response import encrypted_response
 from app.core.encryption import EncryptionProfile
 from app.core.request import client_ip
+from app.core.urls import public_file_download_url
 from app.schemas.encryption import EncryptedApiResponse
 from app.schemas.files import (
     AdminFileItem,
@@ -195,9 +196,8 @@ async def create_file_temporary_url(
             detail="file is not public",
         ) from exc
 
-    url = request.url_for("download_public_file", file_id=access.file.id)
     payload = AdminFileTemporaryUrlResponse(
-        url=str(url.include_query_params(token=access.token)),
+        url=public_file_download_url(file_id=access.file.id, token=access.token),
         expires_at=access.expires_at,
     )
     response = await _files_response(

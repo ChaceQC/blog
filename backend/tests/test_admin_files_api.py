@@ -367,7 +367,7 @@ def test_admin_file_temporary_url_uses_encrypted_response() -> None:
     assert manager.payload is not None
     assert (
         manager.payload["url"]
-        == "http://testserver/api/public/files/1/download?token=signed-token-value"
+        == "/api/public/files/1/download?token=signed-token-value"
     )
     assert manager.payload["expires_at"] == "2026-06-16T00:00:00Z"
     assert logs.items[0]["access_type"] == "admin_file_temporary_url"
@@ -419,7 +419,7 @@ def test_public_file_temporary_url_requires_public_session() -> None:
     assert manager.payload is not None
     assert (
         manager.payload["url"]
-        == "http://testserver/api/public/files/1/download?token=public-signed-token"
+        == "/api/public/files/1/download?token=public-signed-token"
     )
     assert logs.items[0]["access_type"] == "public_file_temporary_url"
 
