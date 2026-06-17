@@ -37,6 +37,8 @@ class RuntimeVerifyResult:
     post_id: int
     post_slug: str
     file_id: int
+    category_slug: str
+    tag_slug: str
     checked_access_types: list[str]
 
 
@@ -255,6 +257,11 @@ class RuntimeApiClient:
         _raise_for_status(response, f"请求文件 {url} 失败")
         return response
 
+    def get_text(self, path: str) -> str:
+        response = self.client.get(path)
+        _raise_for_status(response, f"GET {path} 失败")
+        return response.text
+
 
 def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
     api = RuntimeApiClient(base_url=args.base_url, timeout=args.timeout)
@@ -389,6 +396,68 @@ def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
         render_response = api.get_binary(render_url)
         _assert_media_type(render_response, "image/png", "公开正文图片")
 
+        category_slug = _find_taxonomy_slug(
+            api.encrypted_get(
+                "/api/public/categories?limit=100&offset=0",
+                session=public_session,
+                profile="content-v1",
+            ),
+            name="验证",
+            label="公开分类列表",
+        )
+        tag_slug = _find_taxonomy_slug(
+            api.encrypted_get(
+                "/api/public/tags?limit=100&offset=0",
+                session=public_session,
+                profile="content-v1",
+            ),
+            name="SEO",
+            label="公开标签列表",
+        )
+        category_detail = api.encrypted_get(
+            f"/api/public/categories/{category_slug}",
+            session=public_session,
+            profile="content-v1",
+        )
+        _assert_taxonomy_detail(category_detail, name="验证", label="公开分类详情")
+        tag_detail = api.encrypted_get(
+            f"/api/public/tags/{tag_slug}",
+            session=public_session,
+            profile="content-v1",
+        )
+        _assert_taxonomy_detail(tag_detail, name="SEO", label="公开标签详情")
+        _assert_public_posts_include_slug(
+            api.encrypted_get(
+                f"/api/public/posts?limit=5&offset=0&category={category_slug}",
+                session=public_session,
+                profile="content-v1",
+            ),
+            slug=slug,
+            label="公开分类文章列表",
+        )
+        _assert_public_posts_include_slug(
+            api.encrypted_get(
+                f"/api/public/posts?limit=5&offset=0&tag={tag_slug}",
+                session=public_session,
+                profile="content-v1",
+            ),
+            slug=slug,
+            label="公开标签文章列表",
+        )
+        sitemap_xml = api.get_text("/sitemap.xml")
+        _assert_contains(
+            sitemap_xml,
+            f"/categories/{category_slug}",
+            "sitemap 没有包含分类稳定 URL",
+        )
+        _assert_contains(
+            sitemap_xml,
+            f"/tags/{tag_slug}",
+            "sitemap 没有包含标签稳定 URL",
+        )
+        _assert_frontend_route(args.frontend_url, f"/categories/{category_slug}")
+        _assert_frontend_route(args.frontend_url, f"/tags/{tag_slug}")
+
         public_files = api.encrypted_get(
             "/api/public/files?limit=20&offset=0",
             session=public_session,
@@ -421,6 +490,11 @@ def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
             "public_file_temporary_url",
             "public_file_download",
             "admin_file_download",
+            "public_categories_list",
+            "public_category_detail",
+            "public_tags_list",
+            "public_tag_detail",
+            "public_sitemap",
         }
         missing = sorted(expected - access_types)
         if missing:
@@ -444,6 +518,8 @@ def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
             post_id=post_id,
             post_slug=slug,
             file_id=file_id,
+            category_slug=category_slug,
+            tag_slug=tag_slug,
             checked_access_types=sorted(expected),
         )
     finally:
@@ -474,6 +550,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=os.getenv("BLOG_VERIFY_SLUG_PREFIX", "runtime-flow-verify"),
         help="验证文章 slug 前缀，脚本会自动追加随机后缀",
     )
+    parser.add_argument(
+        "--frontend-url",
+        default=os.getenv("BLOG_VERIFY_FRONTEND_URL", "http://127.0.0.1:15173"),
+        help="前端站点地址，用于验证分类/标签稳定路由",
+    )
     parser.add_argument("--timeout", type=float, default=20.0, help="请求超时秒数")
     parser.add_argument(
         "--keep-published",
@@ -501,6 +582,8 @@ def main() -> None:
                 "post_id": result.post_id,
                 "post_slug": result.post_slug,
                 "file_id": result.file_id,
+                "category_slug": result.category_slug,
+                "tag_slug": result.tag_slug,
                 "checked_access_types": result.checked_access_types,
             },
             ensure_ascii=False,
@@ -526,6 +609,54 @@ def _extract_image_src(content_html: str, *, file_id: int) -> str:
     if match is None:
         raise RuntimeVerifyError("公开文章详情中没有找到正文图片渲染地址")
     return match.group(1).replace("&amp;", "&")
+
+
+def _find_taxonomy_slug(
+    payload: dict[str, Any],
+    *,
+    name: str,
+    label: str,
+) -> str:
+    for item in payload.get("items", []):
+        if isinstance(item, dict) and item.get("name") == name:
+            slug = item.get("slug")
+            if isinstance(slug, str) and slug:
+                return slug
+    raise RuntimeVerifyError(f"{label}没有返回 {name} 的 slug")
+
+
+def _assert_taxonomy_detail(
+    payload: dict[str, Any],
+    *,
+    name: str,
+    label: str,
+) -> None:
+    if payload.get("name") != name:
+        raise RuntimeVerifyError(f"{label}名称不匹配")
+    post_count = payload.get("post_count")
+    if not isinstance(post_count, int) or post_count < 1:
+        raise RuntimeVerifyError(f"{label}公开文章数量不正确")
+
+
+def _assert_public_posts_include_slug(
+    payload: dict[str, Any],
+    *,
+    slug: str,
+    label: str,
+) -> None:
+    if not any(item.get("slug") == slug for item in payload.get("items", [])):
+        raise RuntimeVerifyError(f"{label}没有返回验证文章")
+
+
+def _assert_frontend_route(frontend_url: str, path: str) -> None:
+    url = frontend_url.rstrip("/") + path
+    response = httpx.get(url, timeout=10.0, follow_redirects=True)
+    _raise_for_status(response, f"前端路由 {path} 不可访问")
+    _assert_contains(
+        response.text,
+        '<div id="root">',
+        f"前端路由 {path} 未返回应用入口",
+    )
 
 
 def _raise_for_status(response: httpx.Response, message: str) -> None:

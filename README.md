@@ -236,10 +236,11 @@ cd backend
 $env:PYTHONUTF8='1'
 $env:BLOG_VERIFY_ADMIN_USERNAME='admin'
 $env:BLOG_VERIFY_ADMIN_PASSWORD='你的本地后台管理员密码'
+$env:BLOG_VERIFY_FRONTEND_URL='http://127.0.0.1:15173'
 uv run python scripts/verify_runtime_publish_flow.py
 ```
 
-该脚本需要本地后端已启动，会覆盖后台加密登录、上传公开图片、文章预览、创建发布文章、公开文章读取、公开文件下载和访问日志查询。默认会归档测试文章。
+该脚本需要本地后端和前端已启动，会覆盖后台加密登录、上传公开图片、文章预览、创建发布文章、公开文章读取、分类/标签稳定路由、sitemap、公开文件下载和访问日志查询。默认会归档测试文章。
 
 ## 生产部署
 

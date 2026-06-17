@@ -4,6 +4,10 @@
 
 ### 已完成
 
+- 真实运行库 HTTP 闭环验证脚本扩展分类/标签稳定 URL 回归：脚本现在会从公开分类/标签列表读取真实 slug，校验分类/标签详情接口、按 slug 筛选文章列表、sitemap 分类/标签 URL，以及前端 `/categories/{slug}`、`/tags/{slug}` 路由可访问性。
+- 使用本地运行库和已启动的前后端服务跑通扩展后的验证脚本，结果为 `post_id=14`、`post_slug=runtime-flow-verify-0aae62a0`、`file_id=10`、`category_slug=category-80144e2e73b1`、`tag_slug=seo`。
+- 本次真实运行库验证创建了临时后台账号 `codex_verify_routes_20260617130311`；验证后已撤销刷新令牌、移除角色、禁用账号并重置随机密码，避免留下可用后台入口。
+- 同步更新根目录 `README.md` 和后端 `README.md`，记录真实运行库脚本现在需要前后端服务，以及 `BLOG_VERIFY_FRONTEND_URL` 配置。
 - 前台归档筛选的分类与标签列表改为按公开文章数量降序展示前 5 项，避免分类/标签过多时撑高筛选区。
 - 分类与标签剩余项收敛到 `...` 按钮，点击后在模态框中分页浏览，每页 12 项，并保持分类/标签稳定公开 URL 跳转。
 - 新增公开分类详情接口 `GET /api/public/categories/{slug}` 和公开标签详情接口 `GET /api/public/tags/{slug}`，均使用 public scope `content-v1` 加密响应，只返回已公开且已到发布时间文章实际使用到的分类/标签，并在 200/404 时写入访问日志。
@@ -133,7 +137,7 @@
 
 ### 进行中
 
-- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目、RSS/sitemap/robots.txt 初版、生产 Nginx SEO 出口反代、公开页面 canonical/Open Graph 基线、公开文章列表分类标签展示、公开分类/标签聚合接口、前台归档筛选入口和分类/标签独立公开路由已形成基础闭环；下一步把分类/标签稳定 URL 纳入真实运行库 HTTP 回归脚本。
+- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目、RSS/sitemap/robots.txt 初版、生产 Nginx SEO 出口反代、公开页面 canonical/Open Graph 基线、公开文章列表分类标签展示、公开分类/标签聚合接口、前台归档筛选入口、分类/标签独立公开路由和真实运行库回归脚本已形成基础闭环；下一步继续收敛前台友链、站点目录和文件页的展示密度与移动端验证。
 
 ### 阻塞与风险
 
@@ -153,14 +157,17 @@
 - `/rss.xml`、`/sitemap.xml` 与 `/robots.txt` 的绝对链接依赖 `BLOG_PUBLIC_BASE_URL`，生产部署前必须确认该值为公网 HTTPS 域名。
 - 生产 Nginx 已补充根级 SEO 文件反代规则；后续如果改为静态预渲染或 CDN 缓存，需要同步检查这些路径是否仍返回后端生成内容或等价静态文件。
 - 当前 canonical 与 Open Graph 由 React 客户端运行时写入，能改善浏览器内分享状态，但对不执行 JavaScript 的搜索引擎或社交抓取器仍不如 SSR/SSG；后续若 SEO 要求提高，需要评估预渲染或服务端渲染。
-- 分类/标签稳定 URL 已接入前端路由和 sitemap；当前真实运行库 HTTP 验证脚本仍主要覆盖 `/posts?category=...` 与 `/posts?tag=...` 查询参数，后续应补充 `/categories/{slug}`、`/tags/{slug}` 页面级检查。
+- 分类/标签稳定 URL 已纳入真实运行库 HTTP 验证脚本；脚本默认还会请求前端 `15173`，如果只启动后端而未启动前端，需通过 `BLOG_VERIFY_FRONTEND_URL` 指向可访问的前端站点，或先启动前端开发服务。
 
 ### 下一步
 
-- 扩展真实运行库 HTTP 闭环验证脚本：在已有文章发布、分类、标签和 SEO 校验基础上，增加 `/categories/{slug}`、`/tags/{slug}` 前端路由可访问性与 sitemap 分类/标签 URL 断言。
+- 前台公开页细节收敛：检查友链页、站点目录页和文件页在数据较多时的列表密度、分页体验和移动端布局，优先处理会导致页面过长或横向溢出的展示问题。
 
 ### 验证
 
+- 真实运行库 HTTP 闭环脚本扩展后已运行 `uv run ruff check scripts\verify_runtime_publish_flow.py`，通过。
+- 真实运行库 HTTP 闭环脚本扩展后已运行 `uv run python scripts\verify_runtime_publish_flow.py --help`，通过。
+- 真实运行库 HTTP 闭环脚本扩展后已使用本地运行库和本次已启动的前后端服务执行 `uv run python scripts\verify_runtime_publish_flow.py`，通过；验证文章默认归档，临时后台账号已禁用并撤权。
 - 分类与标签筛选溢出收敛后已运行 `npm.cmd run lint`，通过。
 - 分类与标签筛选溢出收敛后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - 分类与标签独立公开路由接入后已运行 `uv run ruff check app tests\test_public_content_api.py`，通过。
