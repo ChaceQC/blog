@@ -206,9 +206,13 @@ class FakePublicFileContentService:
 class FakeLogService:
     def __init__(self) -> None:
         self.items: list[dict[str, object]] = []
+        self.audit_items: list[dict[str, object]] = []
 
     async def record_access_log(self, **kwargs: object) -> None:
         self.items.append(dict(kwargs))
+
+    async def record_audit_log(self, **kwargs: object) -> None:
+        self.audit_items.append(dict(kwargs))
 
 
 class FakeEncryptionSessionManager:
@@ -271,9 +275,11 @@ def test_admin_files_use_content_encryption_profile() -> None:
 
 def test_admin_file_upload_accepts_multipart_and_csrf() -> None:
     manager = FakeEncryptionSessionManager()
+    logs = FakeLogService()
     app.dependency_overrides[get_current_admin_user] = override_admin_user
     app.dependency_overrides[get_file_service] = override_file_service
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
     client = TestClient(app)
 
     try:
@@ -298,13 +304,24 @@ def test_admin_file_upload_accepts_multipart_and_csrf() -> None:
     assert response.json()["profile"] == "content-v1"
     assert manager.payload is not None
     assert manager.payload["object_key"] == "public/2026/06/cover.png"
+    assert logs.audit_items[0]["action"] == "file.upload"
+    assert logs.audit_items[0]["entity_type"] == "file"
+    assert logs.audit_items[0]["after_json"] == {
+        "original_name": "cover.png",
+        "mime_type": "image/png",
+        "visibility": "public",
+        "public_listed": True,
+        "status": "active",
+    }
 
 
 def test_admin_file_delete_requires_csrf() -> None:
     manager = FakeEncryptionSessionManager()
+    logs = FakeLogService()
     app.dependency_overrides[get_current_admin_user] = override_admin_user
     app.dependency_overrides[get_file_service] = override_file_service
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
     client = TestClient(app)
 
     try:
@@ -323,6 +340,9 @@ def test_admin_file_delete_requires_csrf() -> None:
     assert response.json()["profile"] == "content-v1"
     assert manager.payload is not None
     assert manager.payload["status"] == "deleted"
+    assert logs.audit_items[0]["action"] == "file.delete"
+    assert logs.audit_items[0]["entity_id"] == 1
+    assert logs.audit_items[0]["after_json"]["status"] == "deleted"
 
 
 def test_admin_file_temporary_url_uses_encrypted_response() -> None:

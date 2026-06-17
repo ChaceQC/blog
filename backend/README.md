@@ -52,6 +52,8 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 - `GET /api/admin/login-logs`：后台登录日志，需要 `audit_log:read` 权限和 `sensitive-v1` 加密会话。
 - `GET /api/admin/security-events`：安全事件日志，需要 `audit_log:read` 权限和 `sensitive-v1` 加密会话。
 
+后台文章、页面、文件、友链、导航和设置的关键写操作会写入 `audit_logs`，记录操作者、动作、实体、IP、UA 和最小变更摘要；正文、密钥、Token 和完整设置值不写入审计日志。
+
 登录入口、加密协商入口和公开友链申请入口已接入可配置限流，命中后返回 `429` 并写入 `security_events`。阈值通过 `BLOG_ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_FRIEND_LINK_APPLICATION_RATE_LIMIT_MAX_ATTEMPTS` 和 `BLOG_FRIEND_LINK_APPLICATION_RATE_LIMIT_WINDOW_SECONDS` 配置。限流后端通过 `BLOG_RATE_LIMIT_BACKEND` 配置，默认本地开发使用 `memory`，生产示例使用 `redis` 和 `BLOG_REDIS_URL=redis://redis:6379/0`。Redis 适配器使用 sorted set 与 Lua 脚本保证单次命中检查原子性，并显式使用 RESP2 以兼容 Redis 5 与 Redis 7；如果 Redis 连接异常，会按相同 key 回落到进程内限流器，避免入口完全失去保护。真实 Redis 集成测试默认跳过，设置 `BLOG_TEST_REDIS_URL` 后会验证后台登录和加密协商入口的 `429`、`Retry-After` 与安全事件记录。
 
 ## 后台维护任务
@@ -85,7 +87,7 @@ uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 
 ## 公开订阅与站点地图
 
-公开分类、标签和文章读取接口使用 public scope `content-v1` 加密响应，调用方需要先协商 `/api/public/encryption/sessions` 并携带 `X-Encryption-Session`：
+公开分类、标签、文章和页面读取接口使用 public scope `content-v1` 加密响应，调用方需要先协商 `/api/public/encryption/sessions` 并携带 `X-Encryption-Session`：
 
 - `GET /api/public/posts`：返回已公开且已到发布时间的文章列表，支持通过 `category={slug}` 和 `tag={slug}` 按分类、标签筛选；列表响应包含 `items` 和 `total`，供前台直接显示总页数。
 - `GET /api/public/friend-links`、`GET /api/public/site-items` 和 `GET /api/public/files`：公开友链、站点目录和公开文件列表响应同样包含 `items` 和 `total`，前台分页不需要额外多取一条记录判断下一页。
@@ -93,6 +95,7 @@ uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 - `GET /api/public/categories/{slug}`：返回单个公开分类归档信息；分类不存在或没有公开文章时返回 404。
 - `GET /api/public/tags`：返回已公开且已到发布时间文章使用到的标签，包含 `id`、`name`、`slug` 和 `post_count`。
 - `GET /api/public/tags/{slug}`：返回单个公开标签归档信息；标签不存在或没有公开文章时返回 404。
+- `GET /api/public/pages/{slug}`：返回已发布独立页面的标题、正文 HTML 和 SEO 信息；草稿、归档、未发布或不存在页面返回 404。
 
 公开 RSS、sitemap 和 robots.txt 直接挂在根路径，不要求 `X-Encryption-Session`，方便订阅客户端和搜索引擎抓取：
 

@@ -16,6 +16,7 @@ import { RequireAdminPermission } from '../routes/admin/RequireAdminPermission.t
 import { FilesPage } from '../routes/public/FilesPage.tsx'
 import { HomePage } from '../routes/public/HomePage.tsx'
 import { LinksPage } from '../routes/public/LinksPage.tsx'
+import { PageDetailPage } from '../routes/public/PageDetailPage.tsx'
 import { PostDetailPage } from '../routes/public/PostDetailPage.tsx'
 import { PostListPage } from '../routes/public/PostListPage.tsx'
 import { PublicLayout } from '../routes/public/PublicLayout.tsx'
@@ -35,6 +36,7 @@ export const router = createBrowserRouter([
       { path: 'links', element: <LinksPage /> },
       { path: 'files', element: <FilesPage /> },
       { path: 'sites', element: <SitesPage /> },
+      { path: ':slug', element: <PageDetailPage /> },
     ],
   },
   {

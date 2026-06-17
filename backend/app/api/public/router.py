@@ -26,6 +26,7 @@ from app.repositories.content import ContentRepository
 from app.repositories.links import LinkRepository
 from app.schemas.content import (
     SLUG_PATTERN,
+    PublicPageDetail,
     PublicPostDetail,
     PublicPostItem,
     PublicPostListResponse,
@@ -345,6 +346,51 @@ async def get_public_post(
         status_code=status.HTTP_200_OK,
         entity_type="post",
         entity_id=post.id,
+        detail_json={"slug": slug},
+    )
+    return response
+
+
+@router.get("/pages/{slug}")
+async def get_public_page(
+    slug: Annotated[
+        str,
+        Path(min_length=1, max_length=220, pattern=SLUG_PATTERN),
+    ],
+    request: Request,
+    service: PublicContentServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
+):
+    try:
+        page = await service.get_public_page_by_slug(slug)
+    except ContentNotFoundError as exc:
+        await _record_public_access(
+            logs,
+            request=request,
+            access_type="public_page_detail",
+            status_code=status.HTTP_404_NOT_FOUND,
+            entity_type="page",
+            detail_json={"slug": slug},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="page not found",
+        ) from exc
+
+    response = await encrypted_response(
+        PublicPageDetail.model_validate(page),
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+    await _record_public_access(
+        logs,
+        request=request,
+        access_type="public_page_detail",
+        status_code=status.HTTP_200_OK,
+        entity_type="page",
+        entity_id=page.id,
         detail_json={"slug": slug},
     )
     return response

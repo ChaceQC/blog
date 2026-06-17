@@ -3,10 +3,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ValidationError
 
+from app.api.admin.audit import record_admin_audit
 from app.api.admin.dependencies import (
     AdminCsrfDependency,
     EncryptionSessionManagerDependency,
     LinkServiceDependency,
+    LogServiceDependency,
     require_admin_permission,
 )
 from app.api.admin.encrypted_response import (
@@ -71,10 +73,11 @@ async def list_friend_links(
 async def create_friend_link(
     payload: EncryptedApiRequest,
     _: AdminCsrfDependency,
-    __: FriendLinkReviewerDependency,
+    current_user: FriendLinkReviewerDependency,
     request: Request,
     service: LinkServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
     decrypted_payload = await decrypt_encrypted_request(
         payload,
@@ -102,6 +105,15 @@ async def create_friend_link(
     except InvalidFriendLinkStatusError as exc:
         raise _invalid_status() from exc
 
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="friend_link.create",
+        entity_type="friend_link",
+        entity_id=link.id,
+        after_json=_friend_link_audit_payload(link),
+    )
     return await _links_response(
         AdminFriendLinkItem.model_validate(link),
         request=request,
@@ -114,10 +126,11 @@ async def update_friend_link(
     link_id: int,
     payload: EncryptedApiRequest,
     _: AdminCsrfDependency,
-    __: FriendLinkReviewerDependency,
+    current_user: FriendLinkReviewerDependency,
     request: Request,
     service: LinkServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
     decrypted_payload = await decrypt_encrypted_request(
         payload,
@@ -139,6 +152,18 @@ async def update_friend_link(
     except InvalidFriendLinkStatusError as exc:
         raise _invalid_status() from exc
 
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="friend_link.update",
+        entity_type="friend_link",
+        entity_id=link.id,
+        after_json={
+            **_friend_link_audit_payload(link),
+            "changed_fields": sorted(link_payload.model_fields_set),
+        },
+    )
     return await _links_response(
         AdminFriendLinkItem.model_validate(link),
         request=request,
@@ -151,10 +176,11 @@ async def review_friend_link(
     link_id: int,
     payload: EncryptedApiRequest,
     _: AdminCsrfDependency,
-    __: FriendLinkReviewerDependency,
+    current_user: FriendLinkReviewerDependency,
     request: Request,
     service: LinkServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
     decrypted_payload = await decrypt_encrypted_request(
         payload,
@@ -176,6 +202,18 @@ async def review_friend_link(
     except InvalidFriendLinkStatusError as exc:
         raise _invalid_status() from exc
 
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="friend_link.review",
+        entity_type="friend_link",
+        entity_id=link.id,
+        after_json={
+            **_friend_link_audit_payload(link),
+            "review_status": review_payload.status,
+        },
+    )
     return await _links_response(
         AdminFriendLinkItem.model_validate(link),
         request=request,
@@ -206,10 +244,11 @@ async def list_site_nav_items(
 async def create_site_nav_item(
     payload: EncryptedApiRequest,
     _: AdminCsrfDependency,
-    __: SiteNavWriterDependency,
+    current_user: SiteNavWriterDependency,
     request: Request,
     service: LinkServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
     decrypted_payload = await decrypt_encrypted_request(
         payload,
@@ -238,6 +277,15 @@ async def create_site_nav_item(
     except InvalidSiteNavItemValueError as exc:
         raise _invalid_site_item_value() from exc
 
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="site_nav.create",
+        entity_type="site_nav_item",
+        entity_id=item.id,
+        after_json=_site_item_audit_payload(item),
+    )
     return await _links_response(
         AdminSiteNavItem.model_validate(item),
         request=request,
@@ -250,10 +298,11 @@ async def update_site_nav_item(
     item_id: int,
     payload: EncryptedApiRequest,
     _: AdminCsrfDependency,
-    __: SiteNavWriterDependency,
+    current_user: SiteNavWriterDependency,
     request: Request,
     service: LinkServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
     decrypted_payload = await decrypt_encrypted_request(
         payload,
@@ -275,6 +324,18 @@ async def update_site_nav_item(
     except InvalidSiteNavItemValueError as exc:
         raise _invalid_site_item_value() from exc
 
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="site_nav.update",
+        entity_type="site_nav_item",
+        entity_id=item.id,
+        after_json={
+            **_site_item_audit_payload(item),
+            "changed_fields": sorted(item_payload.model_fields_set),
+        },
+    )
     return await _links_response(
         AdminSiteNavItem.model_validate(item),
         request=request,
@@ -312,6 +373,25 @@ def _validate_decrypted_payload[T: BaseModel](
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="invalid encrypted request payload",
         ) from exc
+
+
+def _friend_link_audit_payload(link: object) -> dict[str, object]:
+    return {
+        "name": getattr(link, "name", None),
+        "url": getattr(link, "url", None),
+        "status": getattr(link, "status", None),
+        "sort_order": getattr(link, "sort_order", None),
+    }
+
+
+def _site_item_audit_payload(item: object) -> dict[str, object]:
+    return {
+        "title": getattr(item, "title", None),
+        "url": getattr(item, "url", None),
+        "visibility": getattr(item, "visibility", None),
+        "open_target": getattr(item, "open_target", None),
+        "sort_order": getattr(item, "sort_order", None),
+    }
 
 
 def _link_not_found() -> HTTPException:

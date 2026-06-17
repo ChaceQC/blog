@@ -7,6 +7,7 @@ from app.api.admin.dependencies import (
     get_content_service,
     get_current_admin_user,
     get_encryption_session_manager,
+    get_log_service,
 )
 from app.core.encryption import EncryptionProfile
 from app.main import app
@@ -108,6 +109,14 @@ class FakeEncryptionSessionManager:
         return self.decrypted_payload
 
 
+class FakeLogService:
+    def __init__(self) -> None:
+        self.audit_items: list[dict[str, object]] = []
+
+    async def record_audit_log(self, **kwargs: object) -> None:
+        self.audit_items.append(dict(kwargs))
+
+
 def test_admin_posts_use_content_encryption_profile() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
@@ -161,6 +170,7 @@ def test_admin_posts_reject_missing_encryption_session() -> None:
 def test_create_admin_post_decrypts_content_request() -> None:
     client = TestClient(app)
     client.cookies.set("blog_admin_csrf", "csrf-token")
+    logs = FakeLogService()
     manager = FakeEncryptionSessionManager(
         decrypted_payload={
             "title": "第二篇文章",
@@ -183,6 +193,7 @@ def test_create_admin_post_decrypts_content_request() -> None:
     )
     app.dependency_overrides[get_content_service] = lambda: FakeContentService()
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
 
     try:
         response = client.post(
@@ -209,6 +220,16 @@ def test_create_admin_post_decrypts_content_request() -> None:
     assert manager.payload["seo_keywords"] == "博客,发布"
     assert manager.payload["category_names"] == ["技术"]
     assert manager.payload["tag_names"] == ["FastAPI", "React"]
+    assert logs.audit_items[0]["action"] == "post.create"
+    assert logs.audit_items[0]["entity_type"] == "post"
+    assert logs.audit_items[0]["entity_id"] == 2
+    assert logs.audit_items[0]["after_json"] == {
+        "title": "第二篇文章",
+        "slug": "second-post",
+        "status": "draft",
+        "visibility": "public",
+        "published_at": None,
+    }
 
 
 def test_preview_admin_post_renders_current_markdown() -> None:

@@ -3,10 +3,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ValidationError
 
+from app.api.admin.audit import record_admin_audit
 from app.api.admin.dependencies import (
     AdminCsrfDependency,
     ContentServiceDependency,
     EncryptionSessionManagerDependency,
+    LogServiceDependency,
     SettingsDependency,
     require_admin_permission,
 )
@@ -85,6 +87,7 @@ async def create_post(
     _: AdminCsrfDependency,
     service: ContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
     decrypted_payload = await _decrypt_content_payload(
         payload,
@@ -116,6 +119,15 @@ async def create_post(
     except ContentFileNotFoundError as exc:
         raise _not_found("file not found") from exc
 
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="post.create",
+        entity_type="post",
+        entity_id=post.id,
+        after_json=_post_audit_payload(post),
+    )
     return await _content_response(
         AdminPostItem.model_validate(post),
         request=request,
@@ -181,10 +193,11 @@ async def update_post(
     post_id: int,
     payload: EncryptedApiRequest,
     _: AdminCsrfDependency,
-    __: PostWriterDependency,
+    current_user: PostWriterDependency,
     request: Request,
     service: ContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
     decrypted_payload = await _decrypt_content_payload(
         payload,
@@ -204,6 +217,18 @@ async def update_post(
     except ContentFileNotFoundError as exc:
         raise _not_found("file not found") from exc
 
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="post.update",
+        entity_type="post",
+        entity_id=post.id,
+        after_json={
+            **_post_audit_payload(post),
+            "changed_fields": sorted(post_payload.model_fields_set),
+        },
+    )
     return await _content_response(
         AdminPostItem.model_validate(post),
         request=request,
@@ -215,10 +240,11 @@ async def update_post(
 async def publish_post(
     post_id: int,
     _: AdminCsrfDependency,
-    __: PostPublisherDependency,
+    current_user: PostPublisherDependency,
     request: Request,
     service: ContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
     try:
         post = await service.publish_post(post_id)
@@ -227,6 +253,15 @@ async def publish_post(
     except ContentFileNotFoundError as exc:
         raise _not_found("file not found") from exc
 
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="post.publish",
+        entity_type="post",
+        entity_id=post.id,
+        after_json=_post_audit_payload(post),
+    )
     return await _content_response(
         AdminPostItem.model_validate(post),
         request=request,
@@ -257,10 +292,11 @@ async def list_pages(
 async def create_page(
     payload: EncryptedApiRequest,
     _: AdminCsrfDependency,
-    __: PageWriterDependency,
+    current_user: PageWriterDependency,
     request: Request,
     service: ContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
     decrypted_payload = await _decrypt_content_payload(
         payload,
@@ -284,6 +320,15 @@ async def create_page(
     except ContentSlugExistsError as exc:
         raise _slug_conflict("page slug already exists") from exc
 
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="page.create",
+        entity_type="page",
+        entity_id=page.id,
+        after_json=_page_audit_payload(page),
+    )
     return await _content_response(
         AdminPageItem.model_validate(page),
         request=request,
@@ -316,10 +361,11 @@ async def update_page(
     page_id: int,
     payload: EncryptedApiRequest,
     _: AdminCsrfDependency,
-    __: PageWriterDependency,
+    current_user: PageWriterDependency,
     request: Request,
     service: ContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
     decrypted_payload = await _decrypt_content_payload(
         payload,
@@ -337,6 +383,18 @@ async def update_page(
     except ContentSlugExistsError as exc:
         raise _slug_conflict("page slug already exists") from exc
 
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="page.update",
+        entity_type="page",
+        entity_id=page.id,
+        after_json={
+            **_page_audit_payload(page),
+            "changed_fields": sorted(page_payload.model_fields_set),
+        },
+    )
     return await _content_response(
         AdminPageItem.model_validate(page),
         request=request,
@@ -388,6 +446,32 @@ def _validate_decrypted_payload[T: BaseModel](
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="invalid encrypted request payload",
         ) from exc
+
+
+def _post_audit_payload(post: object) -> dict[str, object]:
+    return {
+        "title": getattr(post, "title", None),
+        "slug": getattr(post, "slug", None),
+        "status": getattr(post, "status", None),
+        "visibility": getattr(post, "visibility", None),
+        "published_at": _iso_or_none(getattr(post, "published_at", None)),
+    }
+
+
+def _page_audit_payload(page: object) -> dict[str, object]:
+    return {
+        "title": getattr(page, "title", None),
+        "slug": getattr(page, "slug", None),
+        "status": getattr(page, "status", None),
+        "show_in_nav": getattr(page, "show_in_nav", None),
+        "sort_order": getattr(page, "sort_order", None),
+    }
+
+
+def _iso_or_none(value: object) -> str | None:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return None
 
 
 def _not_found(detail: str) -> HTTPException:

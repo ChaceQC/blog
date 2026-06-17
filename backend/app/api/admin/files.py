@@ -13,6 +13,7 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse
 
+from app.api.admin.audit import record_admin_audit
 from app.api.admin.dependencies import (
     AdminCsrfDependency,
     EncryptionSessionManagerDependency,
@@ -86,6 +87,7 @@ async def upload_file(
     service: FileServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
     settings: SettingsDependency,
+    logs: LogServiceDependency,
     file: UploadedFile,
     visibility: FileVisibilityForm = "public",
     alt_text: AltTextForm = None,
@@ -115,6 +117,15 @@ async def upload_file(
             detail="invalid file upload",
         ) from exc
 
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="file.upload",
+        entity_type="file",
+        entity_id=uploaded_file.id,
+        after_json=_file_audit_payload(uploaded_file),
+    )
     return await _files_response(
         AdminFileItem.model_validate(uploaded_file),
         request=request,
@@ -126,10 +137,11 @@ async def upload_file(
 async def delete_file(
     file_id: int,
     _: AdminCsrfDependency,
-    __: FileDeleterDependency,
+    current_user: FileDeleterDependency,
     request: Request,
     service: FileServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
     try:
         file = await service.delete_file(file_id)
@@ -139,6 +151,15 @@ async def delete_file(
             detail="file not found",
         ) from exc
 
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="file.delete",
+        entity_type="file",
+        entity_id=file.id,
+        after_json=_file_audit_payload(file),
+    )
     return await _files_response(
         AdminFileItem.model_validate(file),
         request=request,
@@ -355,3 +376,13 @@ async def _files_response(
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
     )
+
+
+def _file_audit_payload(file: object) -> dict[str, object]:
+    return {
+        "original_name": getattr(file, "original_name", None),
+        "mime_type": getattr(file, "mime_type", None),
+        "visibility": getattr(file, "visibility", None),
+        "public_listed": getattr(file, "public_listed", None),
+        "status": getattr(file, "status", None),
+    }

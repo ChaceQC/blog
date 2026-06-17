@@ -4,34 +4,42 @@ import { useMemo, useState } from 'react'
 import { ListPager } from '../../components/ListPager.tsx'
 import {
   listAccessLogs,
+  listAuditLogs,
   listLoginLogs,
   listSecurityEvents,
 } from '../../features/logs/api.ts'
 
 import type {
   AccessLogItem,
+  AuditLogItem,
   LoginLogItem,
   SecurityEventItem,
 } from '../../features/logs/types.ts'
 
 const LIST_PAGE_SIZE = 10
 
-type LogTab = 'access' | 'login' | 'security'
+type LogTab = 'audit' | 'access' | 'login' | 'security'
 type LogRecord =
+  | { tab: 'audit'; item: AuditLogItem }
   | { tab: 'access'; item: AccessLogItem }
   | { tab: 'login'; item: LoginLogItem }
   | { tab: 'security'; item: SecurityEventItem }
 
 const tabLabels = {
+  audit: '操作',
   access: '访问',
   login: '登录',
   security: '事件',
 } satisfies Record<LogTab, string>
 
 export function AdminLogsPage() {
-  const [activeTab, setActiveTab] = useState<LogTab>('access')
+  const [activeTab, setActiveTab] = useState<LogTab>('audit')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [listPage, setListPage] = useState(0)
+  const auditLogsQuery = useQuery({
+    queryKey: ['admin-audit-logs'],
+    queryFn: listAuditLogs,
+  })
   const accessLogsQuery = useQuery({
     queryKey: ['admin-access-logs'],
     queryFn: listAccessLogs,
@@ -45,6 +53,12 @@ export function AdminLogsPage() {
     queryFn: listSecurityEvents,
   })
   const records = useMemo<LogRecord[]>(() => {
+    if (activeTab === 'audit') {
+      return (auditLogsQuery.data?.items ?? []).map((item) => ({
+        tab: 'audit',
+        item,
+      }))
+    }
     if (activeTab === 'access') {
       return (accessLogsQuery.data?.items ?? []).map((item) => ({
         tab: 'access',
@@ -61,7 +75,13 @@ export function AdminLogsPage() {
       tab: 'security',
       item,
     }))
-  }, [accessLogsQuery.data, activeTab, loginLogsQuery.data, securityEventsQuery.data])
+  }, [
+    accessLogsQuery.data,
+    activeTab,
+    auditLogsQuery.data,
+    loginLogsQuery.data,
+    securityEventsQuery.data,
+  ])
   const safeListPage = Math.min(
     listPage,
     Math.max(0, Math.ceil(records.length / LIST_PAGE_SIZE) - 1),
@@ -79,6 +99,7 @@ export function AdminLogsPage() {
     visibleRecords[0] ??
     null
   const activeQuery = {
+    audit: auditLogsQuery,
     access: accessLogsQuery,
     login: loginLogsQuery,
     security: securityEventsQuery,
@@ -166,6 +187,18 @@ export function AdminLogsPage() {
 }
 
 function LogSummary({ record }: { record: LogRecord }) {
+  if (record.tab === 'audit') {
+    return (
+      <span>
+        <strong>{record.item.action}</strong>
+        <small>
+          {formatEntity(record.item.entity_type, record.item.entity_id)} ·{' '}
+          {formatDate(record.item.created_at)}
+        </small>
+        <small>{record.item.ip ?? '未知 IP'}</small>
+      </span>
+    )
+  }
   if (record.tab === 'access') {
     return (
       <span>
@@ -219,6 +252,16 @@ function LogDetail({ record }: { record: LogRecord }) {
 }
 
 function detailRows(record: LogRecord): Array<{ label: string; value: string }> {
+  if (record.tab === 'audit') {
+    return [
+      { label: '动作', value: record.item.action },
+      { label: '对象', value: formatEntity(record.item.entity_type, record.item.entity_id) },
+      { label: '操作者', value: record.item.actor_id === null ? '未知' : `#${record.item.actor_id}` },
+      { label: 'IP', value: record.item.ip ?? '未知' },
+      { label: '时间', value: formatDate(record.item.created_at) },
+      { label: 'UA', value: record.item.user_agent ?? '未知' },
+    ]
+  }
   if (record.tab === 'access') {
     return [
       { label: '类型', value: record.item.access_type },
@@ -251,6 +294,12 @@ function detailRows(record: LogRecord): Array<{ label: string; value: string }> 
 }
 
 function detailJson(record: LogRecord): Record<string, unknown> | null {
+  if (record.tab === 'audit') {
+    return {
+      before: record.item.before_json,
+      after: record.item.after_json,
+    }
+  }
   if (record.tab === 'login') {
     return null
   }

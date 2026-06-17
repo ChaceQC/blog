@@ -329,6 +329,16 @@ class ContentRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_public_page_by_slug(self, slug: str) -> Page | None:
+        result = await self.session.execute(
+            select(Page).where(
+                Page.slug == slug,
+                Page.deleted_at.is_(None),
+                Page.status == "published",
+            ),
+        )
+        return result.scalar_one_or_none()
+
     async def create_page(
         self,
         *,

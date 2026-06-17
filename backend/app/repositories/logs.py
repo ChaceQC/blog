@@ -80,6 +80,31 @@ class LogRepository:
             ),
         )
 
+    async def record_audit_log(
+        self,
+        *,
+        action: str,
+        entity_type: str,
+        entity_id: int | None,
+        actor_id: int | None,
+        ip: str | None,
+        user_agent: str | None,
+        before_json: dict[str, Any] | None,
+        after_json: dict[str, Any] | None,
+    ) -> None:
+        self.session.add(
+            AuditLog(
+                actor_id=actor_id,
+                action=action,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                before_json=before_json,
+                after_json=after_json,
+                ip=ip,
+                user_agent=user_agent,
+            ),
+        )
+
     async def record_access_log(
         self,
         *,

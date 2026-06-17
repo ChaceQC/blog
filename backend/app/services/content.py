@@ -121,6 +121,8 @@ class ContentRepositoryProtocol(Protocol):
 
     async def get_page_by_slug(self, slug: str) -> Page | None: ...
 
+    async def get_public_page_by_slug(self, slug: str) -> Page | None: ...
+
     async def create_page(
         self,
         *,
@@ -354,6 +356,12 @@ class ContentService:
 
     async def get_page(self, page_id: int) -> Page:
         page = await self.repository.get_page(page_id)
+        if page is None:
+            raise ContentNotFoundError("page not found")
+        return page
+
+    async def get_public_page_by_slug(self, slug: str) -> Page:
+        page = await self.repository.get_public_page_by_slug(slug)
         if page is None:
             raise ContentNotFoundError("page not found")
         return page

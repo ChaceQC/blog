@@ -37,6 +37,19 @@ class LogRepositoryProtocol(Protocol):
         detail_json: dict[str, Any] | None,
     ) -> None: ...
 
+    async def record_audit_log(
+        self,
+        *,
+        action: str,
+        entity_type: str,
+        entity_id: int | None,
+        actor_id: int | None,
+        ip: str | None,
+        user_agent: str | None,
+        before_json: dict[str, Any] | None,
+        after_json: dict[str, Any] | None,
+    ) -> None: ...
+
     async def record_access_log(
         self,
         *,
@@ -109,6 +122,30 @@ class LogService:
             user_agent=user_agent,
             path=path,
             detail_json=detail_json,
+        )
+        await self.repository.commit()
+
+    async def record_audit_log(
+        self,
+        *,
+        action: str,
+        entity_type: str,
+        entity_id: int | None,
+        actor_id: int | None,
+        ip: str | None,
+        user_agent: str | None,
+        before_json: dict[str, Any] | None = None,
+        after_json: dict[str, Any] | None = None,
+    ) -> None:
+        await self.repository.record_audit_log(
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            actor_id=actor_id,
+            ip=ip,
+            user_agent=user_agent,
+            before_json=before_json,
+            after_json=after_json,
         )
         await self.repository.commit()
 

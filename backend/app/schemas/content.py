@@ -115,6 +115,18 @@ class PublicPostDetail(PublicPostItem):
     content_html: str
 
 
+class PublicPageDetail(BaseModel):
+    id: int
+    title: str
+    slug: str
+    content_html: str
+    seo_title: str | None
+    seo_description: str | None
+    updated_at: datetime | None
+
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+
 class PublicPostListResponse(BaseModel):
     items: list[PublicPostItem]
     total: int = Field(ge=0)

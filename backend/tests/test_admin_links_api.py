@@ -7,6 +7,7 @@ from app.api.admin.dependencies import (
     get_current_admin_user,
     get_encryption_session_manager,
     get_link_service,
+    get_log_service,
 )
 from app.core.encryption import EncryptionProfile
 from app.main import app
@@ -210,6 +211,14 @@ class FakeEncryptionSessionManager:
         return self.decrypted_payload
 
 
+class FakeLogService:
+    def __init__(self) -> None:
+        self.audit_items: list[dict[str, object]] = []
+
+    async def record_audit_log(self, **kwargs: object) -> None:
+        self.audit_items.append(dict(kwargs))
+
+
 def override_admin_user() -> AuthenticatedUser:
     return AuthenticatedUser(
         id=1,
@@ -244,10 +253,12 @@ def test_admin_friend_links_use_content_encryption_profile() -> None:
 def test_review_admin_friend_link_decrypts_content_request() -> None:
     client = TestClient(app)
     client.cookies.set("blog_admin_csrf", "csrf-token")
+    logs = FakeLogService()
     manager = FakeEncryptionSessionManager(decrypted_payload={"status": "healthy"})
     app.dependency_overrides[get_current_admin_user] = override_admin_user
     app.dependency_overrides[get_link_service] = lambda: FakeLinkService()
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
 
     try:
         response = client.patch(
@@ -271,11 +282,15 @@ def test_review_admin_friend_link_decrypts_content_request() -> None:
     assert manager.request_payload is not None
     assert manager.payload is not None
     assert manager.payload["status"] == "healthy"
+    assert logs.audit_items[0]["action"] == "friend_link.review"
+    assert logs.audit_items[0]["entity_type"] == "friend_link"
+    assert logs.audit_items[0]["after_json"]["review_status"] == "healthy"
 
 
 def test_create_admin_friend_link_decrypts_content_request() -> None:
     client = TestClient(app)
     client.cookies.set("blog_admin_csrf", "csrf-token")
+    logs = FakeLogService()
     manager = FakeEncryptionSessionManager(
         decrypted_payload={
             "name": "新友链",
@@ -288,6 +303,7 @@ def test_create_admin_friend_link_decrypts_content_request() -> None:
     app.dependency_overrides[get_current_admin_user] = override_admin_user
     app.dependency_overrides[get_link_service] = lambda: FakeLinkService()
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
 
     try:
         response = client.post(
@@ -311,11 +327,13 @@ def test_create_admin_friend_link_decrypts_content_request() -> None:
     assert manager.request_payload is not None
     assert manager.payload is not None
     assert manager.payload["name"] == "新友链"
+    assert logs.audit_items[0]["action"] == "friend_link.create"
 
 
 def test_update_admin_friend_link_decrypts_content_request() -> None:
     client = TestClient(app)
     client.cookies.set("blog_admin_csrf", "csrf-token")
+    logs = FakeLogService()
     manager = FakeEncryptionSessionManager(
         decrypted_payload={
             "name": "更新后的友链",
@@ -326,6 +344,7 @@ def test_update_admin_friend_link_decrypts_content_request() -> None:
     app.dependency_overrides[get_current_admin_user] = override_admin_user
     app.dependency_overrides[get_link_service] = lambda: FakeLinkService()
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
 
     try:
         response = client.patch(
@@ -349,6 +368,7 @@ def test_update_admin_friend_link_decrypts_content_request() -> None:
     assert manager.request_payload is not None
     assert manager.payload is not None
     assert manager.payload["name"] == "更新后的友链"
+    assert logs.audit_items[0]["action"] == "friend_link.update"
 
 
 def test_admin_site_items_use_content_encryption_profile() -> None:
@@ -375,6 +395,7 @@ def test_admin_site_items_use_content_encryption_profile() -> None:
 def test_create_admin_site_item_decrypts_content_request() -> None:
     client = TestClient(app)
     client.cookies.set("blog_admin_csrf", "csrf-token")
+    logs = FakeLogService()
     manager = FakeEncryptionSessionManager(
         decrypted_payload={
             "title": "新导航",
@@ -388,6 +409,7 @@ def test_create_admin_site_item_decrypts_content_request() -> None:
     app.dependency_overrides[get_current_admin_user] = override_admin_user
     app.dependency_overrides[get_link_service] = lambda: FakeLinkService()
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
 
     try:
         response = client.post(
@@ -411,11 +433,13 @@ def test_create_admin_site_item_decrypts_content_request() -> None:
     assert manager.request_payload is not None
     assert manager.payload is not None
     assert manager.payload["title"] == "新导航"
+    assert logs.audit_items[0]["action"] == "site_nav.create"
 
 
 def test_update_admin_site_item_decrypts_content_request() -> None:
     client = TestClient(app)
     client.cookies.set("blog_admin_csrf", "csrf-token")
+    logs = FakeLogService()
     manager = FakeEncryptionSessionManager(
         decrypted_payload={
             "title": "更新后的导航",
@@ -426,6 +450,7 @@ def test_update_admin_site_item_decrypts_content_request() -> None:
     app.dependency_overrides[get_current_admin_user] = override_admin_user
     app.dependency_overrides[get_link_service] = lambda: FakeLinkService()
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
 
     try:
         response = client.patch(
@@ -449,3 +474,4 @@ def test_update_admin_site_item_decrypts_content_request() -> None:
     assert manager.request_payload is not None
     assert manager.payload is not None
     assert manager.payload["title"] == "更新后的导航"
+    assert logs.audit_items[0]["action"] == "site_nav.update"

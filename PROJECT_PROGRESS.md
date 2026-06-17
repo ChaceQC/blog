@@ -145,10 +145,16 @@
 - 真实运行库验证脚本扩展为覆盖分类、标签、SEO 信息和未来定时文章不提前公开；使用真实运行库再次跑通，结果为 `post_id=12`、`post_slug=runtime-flow-verify-7b7986d2`、`file_id=10`。
 - 本次真实运行库验证创建了临时后台账号 `codex_verify_article_20260617`；验证后已归档 `runtime-flow-verify%` 验证文章、撤销刷新令牌、移除角色、禁用账号并重置随机密码。
 - 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，标记文章定时发布、分类、标签和 SEO 信息已完成，并将下一步调整为用户指定的友链管理。
+- 补齐 M1 操作审计闭环：`LogService` 与 `LogRepository` 新增 `record_audit_log`，后台文章、页面、文件、友链、导航和设置的关键写操作会写入 `audit_logs`，记录操作者、动作、实体、IP、UA 和最小变更摘要，不记录正文、密钥、Token 或完整设置值。
+- 前端后台日志页新增“操作”标签，接入 `/api/admin/audit-logs`，现在可在同一日志页查看操作审计、访问日志、登录日志和安全事件。
+- 同步更新后端 `README.md` 和 `PROJECT_PLAN.md`，将 M1 认证与后台框架阶段标记为已完成，后续进入 M2 文章与页面、M3 文件管理的收尾验收。
+- 补齐 M2 公开页面详情链路：新增 `GET /api/public/pages/{slug}`，只返回 `status=published` 且未软删除的独立页面，草稿、归档、未发布或不存在页面返回 404，并写入 `access_logs`。
+- 前端新增公开独立页面路由 `/:slug` 和 `PageDetailPage`，复用 `MathHtml` 与 `usePageSeo` 展示后台发布的关于、项目等页面；该路由放在 `/posts`、`/links`、`/files`、`/sites` 等固定前台路由之后，避免抢占系统入口。
+- 同步更新后端 `README.md`、前端 `README.md` 和 `PROJECT_PLAN.md`，记录公开页面 API、前端路由顺序和 M2 下一步验收方向。
 
 ### 进行中
 
-- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目、RSS/sitemap/robots.txt 初版、生产 Nginx SEO 出口反代、公开页面 canonical/Open Graph 基线、公开文章列表分类标签展示、公开分类/标签聚合接口、前台归档筛选入口、分类/标签独立公开路由、真实运行库回归脚本、公开友链/站点/文件页服务端分页和公开页分页移动端回归脚本已形成基础闭环；下一步把后台管理页的大数量分页与移动端溢出纳入脚本级检查。
+- M1 认证与后台框架已完成；当前进入 M2/M3 收尾验收。M2 文章与页面已覆盖文章 CRUD、Markdown/LaTeX 预览、发布流程、分类标签、页面后台管理、公开页面详情、前台文章列表/详情/归档、RSS 和 sitemap；M3 文件管理已覆盖上传、列表、软删除、复制链接、图片元数据、哈希去重、文章封面与正文图片引用追踪、本地存储、公开短时访问、后台私有文件下载和清理任务。下一步按 M2 优先、M3 随后的顺序补齐真实运行库验收脚本和文件管理回归。
 
 ### 阻塞与风险
 
@@ -174,10 +180,26 @@
 
 ### 下一步
 
-- 扩展后台管理页回归验证：对后台文章、文件、友链和导航管理页加入大数量分页、移动端无横向溢出和分页状态断言，避免后台列表继续在数据变多时退化。
+- M2 验收：扩展真实运行库 HTTP 闭环脚本，覆盖后台创建页面、公开页面访问、文章发布、分类/标签、RSS、sitemap、robots.txt 和公开 SEO 元信息。
+- M3 收尾：扩展文件管理回归，覆盖后台文章和文件页的大数量分页、复制链接/文章引用、公开文件短时访问、私有文件后台下载、引用追踪和移动端无横向溢出。
+- M3 验收完成后再进入 M4：友链与小网站跳转的分组、审核、排序、公开展示和点击统计完善。
 
 ### 验证
 
+- 操作审计闭环补齐后已运行 `uv run ruff check app tests\test_admin_logs_api.py tests\test_admin_content_api.py tests\test_admin_files_api.py tests\test_admin_links_api.py tests\test_admin_settings_api.py`，通过。
+- 操作审计闭环补齐后已运行 `uv run pytest tests\test_admin_logs_api.py tests\test_admin_content_api.py tests\test_admin_files_api.py tests\test_admin_links_api.py tests\test_admin_settings_api.py`，31 个测试通过；仍存在 FastAPI/Starlette TestClient 和 cookies 相关上游弃用警告。
+- 操作审计闭环补齐后已运行 `npm.cmd run lint`，通过。
+- 操作审计闭环补齐后已运行后端全量 `uv run ruff check .`，通过。
+- 操作审计闭环补齐后已运行后端全量 `uv run pytest`，102 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 和 cookies 相关上游弃用警告。
+- 操作审计闭环补齐后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
+- 操作审计闭环补齐后已运行 `git diff --check`，未发现空白或行尾问题。
+- 公开页面详情链路接入后已运行 `uv run ruff check app tests\test_public_content_api.py`，通过。
+- 公开页面详情链路接入后已运行 `uv run pytest tests\test_public_content_api.py`，20 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 公开页面详情路由接入后已运行 `npm.cmd run lint`，通过。
+- 公开页面详情链路接入后已运行后端全量 `uv run ruff check .`，通过。
+- 公开页面详情链路接入后已运行后端全量 `uv run pytest`，104 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 和 cookies 相关上游弃用警告。
+- 公开页面详情路由接入后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
+- 公开页面详情链路接入后已运行 `git diff --check`，未发现空白或行尾问题。
 - 公开页分页回归脚本新增后已运行 `uv run ruff check scripts\verify_public_page_pagination.py`，通过。
 - 公开页分页回归脚本新增后已运行 `uv run python scripts\verify_public_page_pagination.py --help`，通过。
 - 已启动本地后端 `uv run python main.py` 和前端 `npm.cmd run dev -- --host 127.0.0.1 --port 15173`，运行 `uv run python scripts\verify_public_page_pagination.py` 通过；脚本输出 `/links?page=2` 桌面/移动端均为 `第 2 / 3 页`，`/sites?page=2` 桌面/移动端均为 `第 2 / 3 页`，`/files?page=2` 桌面/移动端均为 `第 2 / 2 页`，所有视口 `scroll_width` 等于 `client_width`，`remaining_seed_rows` 为 0。

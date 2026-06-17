@@ -1,6 +1,7 @@
 import { apiGetEncrypted } from '../../api/client.ts'
 
 import type {
+  PublicPageDetail,
   PublicPostDetail,
   PublicPostListResponse,
   PublicTaxonomyItem,
@@ -35,6 +36,14 @@ export function listPublicPosts(
 export function getPublicPost(slug: string): Promise<PublicPostDetail> {
   return apiGetEncrypted<PublicPostDetail>(
     `/public/posts/${encodeURIComponent(slug)}`,
+    'content-v1',
+    { encryptionScope: 'public' },
+  )
+}
+
+export function getPublicPage(slug: string): Promise<PublicPageDetail> {
+  return apiGetEncrypted<PublicPageDetail>(
+    `/public/pages/${encodeURIComponent(slug)}`,
     'content-v1',
     { encryptionScope: 'public' },
   )

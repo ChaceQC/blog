@@ -16,7 +16,22 @@ from app.services.auth import AuthenticatedUser
 
 class FakeLogService:
     async def list_audit_logs(self, *, limit: int, offset: int) -> list[object]:
-        return []
+        assert limit == 1
+        assert offset == 0
+        return [
+            SimpleNamespace(
+                id=1,
+                actor_id=1,
+                action="post.publish",
+                entity_type="post",
+                entity_id=2,
+                before_json=None,
+                after_json={"title": "第一篇文章", "status": "published"},
+                ip="127.0.0.1",
+                user_agent="pytest",
+                created_at=datetime(2026, 6, 16, tzinfo=UTC),
+            ),
+        ]
 
     async def list_access_logs(self, *, limit: int, offset: int) -> list[object]:
         assert limit == 1
@@ -131,6 +146,50 @@ def test_login_logs_return_items_for_audit_reader() -> None:
                 "ip": "127.0.0.1",
                 "user_agent": "pytest",
                 "reason": "invalid_credentials",
+                "created_at": "2026-06-16T00:00:00Z",
+            },
+        ],
+    }
+
+
+def test_audit_logs_return_items_for_audit_reader() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    app.dependency_overrides[get_current_admin_user] = lambda: AuthenticatedUser(
+        id=1,
+        username="admin",
+        display_name="管理员",
+        roles=["super_admin"],
+        permissions=["*"],
+    )
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+
+    try:
+        response = client.get(
+            "/api/admin/audit-logs?limit=1",
+            headers={"X-Encryption-Session": "sensitive-session"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "sensitive-v1"
+    assert manager.payload == {
+        "items": [
+            {
+                "id": 1,
+                "actor_id": 1,
+                "action": "post.publish",
+                "entity_type": "post",
+                "entity_id": 2,
+                "before_json": None,
+                "after_json": {
+                    "title": "第一篇文章",
+                    "status": "published",
+                },
+                "ip": "127.0.0.1",
+                "user_agent": "pytest",
                 "created_at": "2026-06-16T00:00:00Z",
             },
         ],

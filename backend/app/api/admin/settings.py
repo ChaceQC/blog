@@ -3,9 +3,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ValidationError
 
+from app.api.admin.audit import record_admin_audit
 from app.api.admin.dependencies import (
     AdminCsrfDependency,
     EncryptionSessionManagerDependency,
+    LogServiceDependency,
     SettingServiceDependency,
     require_admin_permission,
 )
@@ -56,6 +58,7 @@ async def update_setting(
     _: AdminCsrfDependency,
     service: SettingServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
     decrypted_payload = await decrypt_encrypted_request(
         payload,
@@ -73,6 +76,19 @@ async def update_setting(
         group_name=setting_payload.group_name,
         is_public=setting_payload.is_public,
         updated_by=current_user.id,
+    )
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="setting.update",
+        entity_type="setting",
+        entity_id=setting.id,
+        after_json={
+            "key_name": setting.key_name,
+            "group_name": setting.group_name,
+            "is_public": setting.is_public,
+        },
     )
     return await _settings_response(
         AdminSettingItem.model_validate(setting),

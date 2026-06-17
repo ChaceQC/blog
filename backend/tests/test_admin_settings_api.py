@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from app.api.admin.dependencies import (
     get_current_admin_user,
     get_encryption_session_manager,
+    get_log_service,
     get_setting_service,
 )
 from app.core.encryption import EncryptionProfile
@@ -83,6 +84,14 @@ class FakeEncryptionSessionManager:
         return self.decrypted_payload
 
 
+class FakeLogService:
+    def __init__(self) -> None:
+        self.audit_items: list[dict[str, object]] = []
+
+    async def record_audit_log(self, **kwargs: object) -> None:
+        self.audit_items.append(dict(kwargs))
+
+
 def override_admin_user() -> AuthenticatedUser:
     return AuthenticatedUser(
         id=1,
@@ -117,6 +126,7 @@ def test_admin_settings_use_sensitive_encryption_profile() -> None:
 def test_update_admin_setting_decrypts_sensitive_request() -> None:
     client = TestClient(app)
     client.cookies.set("blog_admin_csrf", "csrf-token")
+    logs = FakeLogService()
     manager = FakeEncryptionSessionManager(
         decrypted_payload={
             "value_json": {"title": "静默书房"},
@@ -127,6 +137,7 @@ def test_update_admin_setting_decrypts_sensitive_request() -> None:
     app.dependency_overrides[get_current_admin_user] = override_admin_user
     app.dependency_overrides[get_setting_service] = lambda: FakeSettingService()
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
 
     try:
         response = client.patch(
@@ -151,3 +162,10 @@ def test_update_admin_setting_decrypts_sensitive_request() -> None:
     assert manager.payload is not None
     assert manager.payload["key_name"] == SITE_PROFILE_KEY
     assert manager.payload["updated_by"] == 1
+    assert logs.audit_items[0]["action"] == "setting.update"
+    assert logs.audit_items[0]["entity_type"] == "setting"
+    assert logs.audit_items[0]["after_json"] == {
+        "key_name": SITE_PROFILE_KEY,
+        "group_name": "site",
+        "is_public": True,
+    }

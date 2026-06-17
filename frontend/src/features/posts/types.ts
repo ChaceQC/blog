@@ -19,6 +19,16 @@ export type PublicPostDetail = PublicPostItem & {
   content_html: string
 }
 
+export type PublicPageDetail = {
+  id: number
+  title: string
+  slug: string
+  content_html: string
+  seo_title: string | null
+  seo_description: string | null
+  updated_at: string | null
+}
+
 export type PublicPostListResponse = {
   items: PublicPostItem[]
   total: number

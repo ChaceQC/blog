@@ -216,6 +216,19 @@ class FakePublicContentService:
             updated_at=datetime(2026, 6, 16, tzinfo=UTC),
         )
 
+    async def get_public_page_by_slug(self, slug: str) -> object:
+        if slug != "about":
+            raise ContentNotFoundError("page not found")
+        return SimpleNamespace(
+            id=3,
+            title="关于",
+            slug="about",
+            content_html="<p>这里是关于页面。</p>",
+            seo_title="关于静默书房",
+            seo_description="关于这个长期写作空间",
+            updated_at=datetime(2026, 6, 17, tzinfo=UTC),
+        )
+
 
 class FakePublicLinkService:
     async def list_public_friend_links(
@@ -704,6 +717,58 @@ def test_public_post_detail_returns_404_for_missing_post() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "post not found"
+    assert logs.items[0]["status_code"] == 404
+
+
+def test_public_page_detail_returns_html_content() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_content_service] = (
+        lambda: FakePublicContentService()
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get(
+            "/api/public/pages/about",
+            headers={"X-Encryption-Session": "public-session"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload == {
+        "id": 3,
+        "title": "关于",
+        "slug": "about",
+        "content_html": "<p>这里是关于页面。</p>",
+        "seo_title": "关于静默书房",
+        "seo_description": "关于这个长期写作空间",
+        "updated_at": "2026-06-17T00:00:00Z",
+    }
+    assert logs.items[0]["access_type"] == "public_page_detail"
+    assert logs.items[0]["entity_id"] == 3
+
+
+def test_public_page_detail_returns_404_for_missing_page() -> None:
+    client = TestClient(app)
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_content_service] = (
+        lambda: FakePublicContentService()
+    )
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get("/api/public/pages/missing-page")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "page not found"
+    assert logs.items[0]["access_type"] == "public_page_detail"
     assert logs.items[0]["status_code"] == 404
 
 
