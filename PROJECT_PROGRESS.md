@@ -4,6 +4,9 @@
 
 ### 已完成
 
+- 新增公开小网站导航跳转入口 `GET /api/public/site-items/{item_id}/visit`：仅公开条目可访问，后端原子递增 `site_nav_items.click_count` 后记录 `public_site_item_visit` 访问日志，并 302 跳转到真实 URL；隐藏、私有或不存在的条目返回 404。
+- 前台站点目录卡片改为使用公开跳转入口，点击会进入后端计数链路，同时按条目 `open_target` 决定当前页或新标签打开。
+- 补充公开站点跳转接口测试，覆盖点击计数跳转成功、访问日志写入和缺失条目 404；同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md` 的小网站导航与公开 API 说明。
 - 扩展真实运行库 HTTP 闭环脚本 `backend/scripts/verify_runtime_publish_flow.py`：在原有文章发布、分类/标签、封面缩略图、正文图片渲染、公开文件短链、后台下载和访问日志覆盖基础上，新增后台创建公开页面、公开页面详情、RSS、sitemap、robots.txt、前端文章/页面 SEO 元信息、私有文件不进公开列表、后台私有文件鉴权下载、文件引用追踪、后台文章/文件列表大数量分页和桌面/移动端无横向溢出检查。
 - 按用户要求创建真实 MySQL 临时库 `blog_codex_m2m3_verify_20260617184907`，迁移到 Alembic head，创建一次性后台管理员 `codex_m2m3_verify`，启动本地后端 `18080` 与前端 `15173` 后运行增强后的真实运行库闭环脚本通过；脚本输出 `post_id=12`、`post_slug=runtime-flow-verify-5617afdd`、`page_id=3`、`page_slug=runtime-flow-verify-page-1896bdf8`、`file_id=24`、`private_file_id=25`，并检查 `/admin/posts`、`/admin/files` 的 desktop/mobile 分页。
 - 在同一真实临时库运行公开页分页与移动端溢出回归脚本 `backend/scripts/verify_public_page_pagination.py` 通过；脚本临时前缀为 `codex_public_pages_d056f63e`，`/links?page=2`、`/sites?page=2`、`/files?page=2` 在桌面和移动端均显示第二页分页条，`scroll_width` 等于 `client_width`，`remaining_seed_rows` 为 0。
@@ -159,7 +162,7 @@
 
 ### 进行中
 
-- M1 认证与后台框架已完成；M2 文章与页面、M3 文件管理已完成真实 MySQL 临时库闭环验收。下一步进入 M4：友链与小网站跳转的分组、审核、排序、公开展示、点击统计和移动端布局验收。
+- M1 认证与后台框架已完成；M2 文章与页面、M3 文件管理已完成真实 MySQL 临时库闭环验收。M4 已补齐公开友链申请、友链健康检查和小网站导航点击统计，下一步继续推进友链/导航分组管理和真实运行库验收。
 
 ### 阻塞与风险
 
@@ -185,12 +188,14 @@
 
 ### 下一步
 
-- M4 友链管理：完善友链分组、审核、排序、公开展示和必要的垃圾申请防护策略。
-- M4 小网站跳转：完善导航分组、条目、图标、公开导航页和点击统计。
+- M4 友链管理：补齐友链分组管理入口，并继续保持审核、排序、公开展示和垃圾申请防护策略。
+- M4 小网站跳转：补齐导航分组管理、图标/标签编辑和公开导航页点击统计的真实库验收。
 - M4 验收：用真实运行库覆盖友链申请、后台审核、公开展示、站点导航展示、点击统计和移动端布局。
 
 ### 验证
 
+- 小网站导航点击统计接入后已运行 `uv run pytest tests/test_public_content_api.py tests/test_admin_links_api.py`，29 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- 小网站导航点击统计接入后已运行 `npm.cmd run lint`，通过。
 - 真实运行库脚本扩展后已运行 `uv run ruff check scripts\verify_runtime_publish_flow.py`，通过。
 - 真实运行库脚本扩展后已运行 `uv run python scripts\verify_runtime_publish_flow.py --help`，通过。
 - 已创建真实 MySQL 临时库 `blog_codex_m2m3_verify_20260617184907`，设置临时上传目录 `backend/var/m2m3-verify-20260617184907`，运行 `uv run alembic upgrade head`，从空库迁移到 `20260617_0005`。

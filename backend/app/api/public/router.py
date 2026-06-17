@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,7 +46,11 @@ from app.schemas.links import (
 from app.schemas.settings import PublicSiteProfileResponse
 from app.services.content import ContentNotFoundError, ContentService
 from app.services.files import create_article_render_token, sign_article_render_urls
-from app.services.links import CreateFriendLinkCommand, LinkService
+from app.services.links import (
+    CreateFriendLinkCommand,
+    LinkService,
+    SiteNavItemNotFoundError,
+)
 from app.services.rate_limit import RateLimitRule
 
 router = APIRouter(tags=["public"])
@@ -554,6 +559,44 @@ async def list_public_site_items(
         },
     )
     return response
+
+
+@router.get("/site-items/{item_id}/visit")
+async def visit_public_site_item(
+    item_id: int,
+    request: Request,
+    service: PublicLinkServiceDependency,
+    logs: LogServiceDependency,
+) -> RedirectResponse:
+    try:
+        item = await service.record_public_site_nav_click(item_id=item_id)
+    except SiteNavItemNotFoundError as exc:
+        await _record_public_access(
+            logs,
+            request=request,
+            access_type="public_site_item_visit",
+            status_code=status.HTTP_404_NOT_FOUND,
+            entity_type="site_nav_item",
+            entity_id=item_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="site nav item not found",
+        ) from exc
+
+    await _record_public_access(
+        logs,
+        request=request,
+        access_type="public_site_item_visit",
+        status_code=status.HTTP_302_FOUND,
+        entity_type="site_nav_item",
+        entity_id=item.id,
+        detail_json={
+            "click_count": item.click_count,
+            "open_target": item.open_target,
+        },
+    )
+    return RedirectResponse(url=item.url, status_code=status.HTTP_302_FOUND)
 
 
 def _validate_decrypted_payload[T: BaseModel](

@@ -1,4 +1,5 @@
 import { apiGetEncrypted } from '../../api/client.ts'
+import { API_BASE_URL } from '../../api/config.ts'
 
 import type { PublicSiteNavItemListResponse } from './types.ts'
 
@@ -24,4 +25,8 @@ export function listPublicSiteItems(
     'content-v1',
     { encryptionScope: 'public' },
   )
+}
+
+export function publicSiteItemVisitUrl(siteId: number): string {
+  return `${API_BASE_URL}/public/site-items/${siteId}/visit`
 }

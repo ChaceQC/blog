@@ -19,7 +19,7 @@ from app.schemas.encryption import (
     EncryptedApiResponse,
 )
 from app.services.content import ContentNotFoundError
-from app.services.links import CreateFriendLinkCommand
+from app.services.links import CreateFriendLinkCommand, SiteNavItemNotFoundError
 from app.services.rate_limit import RateLimitService
 
 
@@ -279,6 +279,26 @@ class FakePublicLinkService:
 
     async def count_public_site_nav_items(self) -> int:
         return 1
+
+    async def record_public_site_nav_click(self, *, item_id: int) -> object:
+        if item_id != 1:
+            raise SiteNavItemNotFoundError("site nav item not found")
+        return SimpleNamespace(
+            id=1,
+            group_name="项目",
+            group_slug="projects",
+            title="GitHub 仓库",
+            url="https://github.com/ChaceQC/blog",
+            icon_url=None,
+            description="源码与提交记录",
+            tags_json={"tags": ["blog"]},
+            open_target="blank",
+            visibility="public",
+            click_count=8,
+            sort_order=0,
+            created_at=datetime(2026, 6, 16, tzinfo=UTC),
+            updated_at=datetime(2026, 6, 16, tzinfo=UTC),
+        )
 
     async def create_friend_link(self, command: CreateFriendLinkCommand) -> object:
         assert command.group_id is None
@@ -857,3 +877,41 @@ def test_public_site_items_return_encrypted_list() -> None:
     assert manager.payload["total"] == 1
     assert manager.payload["items"][0]["title"] == "GitHub 仓库"
     assert logs.items[0]["access_type"] == "public_site_items_list"
+
+
+def test_public_site_item_visit_records_click_and_redirects() -> None:
+    client = TestClient(app)
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_link_service] = lambda: FakePublicLinkService()
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get("/api/public/site-items/1/visit", follow_redirects=False)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "https://github.com/ChaceQC/blog"
+    assert logs.items[0]["access_type"] == "public_site_item_visit"
+    assert logs.items[0]["entity_id"] == 1
+    assert logs.items[0]["detail_json"] == {
+        "click_count": 8,
+        "open_target": "blank",
+    }
+
+
+def test_public_site_item_visit_returns_404_for_missing_item() -> None:
+    client = TestClient(app)
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_link_service] = lambda: FakePublicLinkService()
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get("/api/public/site-items/404/visit")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "site nav item not found"
+    assert logs.items[0]["access_type"] == "public_site_item_visit"
+    assert logs.items[0]["status_code"] == 404

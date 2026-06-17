@@ -329,7 +329,8 @@ deploy/
 | GET | `/api/public/pages/{slug}` | 页面详情 |
 | GET | `/api/public/friend-links` | 友链列表 |
 | POST | `/api/public/friend-links/applications` | 提交友链申请 |
-| GET | `/api/public/site-groups` | 导航站点分组与条目 |
+| GET | `/api/public/site-items` | 导航站点条目列表 |
+| GET | `/api/public/site-items/{id}/visit` | 导航站点跳转与点击统计 |
 | GET | `/api/public/files` | 公开文件栏列表 |
 | GET | `/api/public/files/{id}/download` | 公开文件短时签名下载 |
 | GET | `/api/public/settings/site-profile` | 公开站点资料 |

@@ -78,6 +78,11 @@ class LinkRepositoryProtocol(Protocol):
 
     async def get_site_nav_item(self, item_id: int) -> SiteNavItem | None: ...
 
+    async def increment_public_site_nav_click(
+        self,
+        item_id: int,
+    ) -> SiteNavItem | None: ...
+
     async def create_site_nav_item(
         self,
         *,
@@ -298,6 +303,19 @@ class LinkService:
 
     async def count_public_site_nav_items(self) -> int:
         return await self.repository.count_public_site_nav_items()
+
+    async def record_public_site_nav_click(
+        self,
+        *,
+        item_id: int,
+    ) -> AdminSiteNavItemRecord:
+        item = await self.repository.increment_public_site_nav_click(item_id)
+        if item is None:
+            raise SiteNavItemNotFoundError("site nav item not found")
+
+        await self.repository.commit()
+        await self.repository.refresh(item)
+        return self._site_nav_item_record(item=item, group_name=None, group_slug=None)
 
     async def create_site_nav_item(
         self,

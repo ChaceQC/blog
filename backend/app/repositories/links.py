@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.link import FriendLink, FriendLinkGroup
@@ -142,6 +142,20 @@ class LinkRepository:
             select(SiteNavItem).where(SiteNavItem.id == item_id),
         )
         return result.scalar_one_or_none()
+
+    async def increment_public_site_nav_click(
+        self,
+        item_id: int,
+    ) -> SiteNavItem | None:
+        result = await self.session.execute(
+            update(SiteNavItem)
+            .where(SiteNavItem.id == item_id)
+            .where(SiteNavItem.visibility == "public")
+            .values(click_count=SiteNavItem.click_count + 1),
+        )
+        if result.rowcount != 1:
+            return None
+        return await self.get_site_nav_item(item_id)
 
     async def create_site_nav_item(
         self,

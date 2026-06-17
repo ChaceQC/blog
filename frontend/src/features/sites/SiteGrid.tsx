@@ -1,5 +1,6 @@
 import { ArrowUpRight } from 'lucide-react'
 
+import { publicSiteItemVisitUrl } from './api.ts'
 import type { SiteItem } from './types.ts'
 
 type SiteGridProps = {
@@ -12,10 +13,10 @@ export function SiteGrid({ sites }: SiteGridProps) {
       {sites.map((site) => (
         <a
           className="site-tile"
-          href={site.url}
+          href={publicSiteItemVisitUrl(site.id)}
           key={site.id}
-          rel="noreferrer"
-          target="_blank"
+          rel={site.open_target === 'blank' ? 'noreferrer' : undefined}
+          target={site.open_target === 'blank' ? '_blank' : '_self'}
         >
           <span>
             <strong>{site.title}</strong>
