@@ -43,6 +43,23 @@ class LinkRepository:
         )
         return result.all()
 
+    async def list_healthy_friend_links_for_check(
+        self,
+        *,
+        limit: int,
+    ) -> Sequence[FriendLink]:
+        result = await self.session.execute(
+            select(FriendLink)
+            .where(FriendLink.status == "healthy")
+            .order_by(
+                FriendLink.last_checked_at.is_not(None),
+                FriendLink.last_checked_at.asc(),
+                FriendLink.id.asc(),
+            )
+            .limit(limit),
+        )
+        return result.scalars().all()
+
     async def get_friend_link(self, link_id: int) -> FriendLink | None:
         result = await self.session.execute(
             select(FriendLink).where(FriendLink.id == link_id),

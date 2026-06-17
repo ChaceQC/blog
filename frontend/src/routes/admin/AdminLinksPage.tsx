@@ -169,6 +169,7 @@ export function AdminLinksPage() {
                 <span>
                   <strong>{link.name}</strong>
                   <small>{link.url}</small>
+                  <small>{formatFriendLinkCheck(link)}</small>
                 </span>
                 <StatusBadge tone={link.status}>{linkStatusLabels[link.status]}</StatusBadge>
               </button>
@@ -276,6 +277,18 @@ export function AdminLinksPage() {
                   />
                 </label>
               </form>
+              {selectedLink ? (
+                <dl className="detail-list">
+                  <div>
+                    <dt>状态检查</dt>
+                    <dd>{formatFriendLinkCheck(selectedLink)}</dd>
+                  </div>
+                  <div>
+                    <dt>最近检查</dt>
+                    <dd>{formatDateTime(selectedLink.last_checked_at)}</dd>
+                  </div>
+                </dl>
+              ) : null}
               <div className="form-actions">
                 <button
                   className="text-button"
@@ -356,4 +369,31 @@ function formToPayload(
 function emptyToNull(value: string): string | null {
   const trimmed = value.trim()
   return trimmed === '' ? null : trimmed
+}
+
+function formatFriendLinkCheck(link: AdminFriendLink): string {
+  if (!link.last_checked_at) {
+    return '未检查'
+  }
+  if (link.last_status_code === 0) {
+    return `访问失败 · ${formatDateTime(link.last_checked_at)}`
+  }
+  if (
+    link.last_status_code !== null &&
+    link.last_status_code >= 200 &&
+    link.last_status_code < 400
+  ) {
+    return `正常 ${link.last_status_code} · ${formatDateTime(link.last_checked_at)}`
+  }
+  return `异常 ${link.last_status_code ?? '未知'} · ${formatDateTime(link.last_checked_at)}`
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) {
+    return '未记录'
+  }
+  return new Intl.DateTimeFormat('zh-CN', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(new Date(value))
 }

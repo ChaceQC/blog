@@ -1,0 +1,11 @@
+[Unit]
+Description=Run blog friend link status check daily
+
+[Timer]
+OnCalendar=*-*-* 04:40:00
+Persistent=true
+RandomizedDelaySec=30m
+Unit=blog-check-friend-links.service
+
+[Install]
+WantedBy=timers.target

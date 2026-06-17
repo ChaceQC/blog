@@ -4,6 +4,11 @@
 
 ### 已完成
 
+- 新增友链状态检查服务 `FriendLinkHealthService`，只检查已通过友链，按最久未检查优先排序，写入 `last_checked_at` 与 `last_status_code`。
+- 新增友链状态检查任务 `backend/app/tasks/links.py` 和 CLI 子命令 `uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5`；任务优先使用 `HEAD`，遇到 `405` 时回退 `GET`，访问失败记录为状态码 `0`。
+- 后台友链列表和详情开始展示“未检查 / 正常 / 异常 / 访问失败”与最近检查时间，方便人工判断是否需要下架或修正。
+- 新增 `deploy/systemd/blog-check-friend-links.service` 与 `.timer`，生产示例默认每天 04:40 检查已通过友链，并同步更新部署说明。
+- 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，记录友链状态检查 CLI、systemd timer 和后续 RSS/sitemap 计划。
 - 新增公开友链申请接口 `POST /api/public/friend-links/applications`：请求体使用 public scope `content-v1` 加密，后端校验站点 URL、头像 URL 和 RSS URL 仅允许 `http/https`，固定创建 `pending` 状态友链。
 - 公开友链申请入口接入现有限流服务，默认 `BLOG_FRIEND_LINK_APPLICATION_RATE_LIMIT_MAX_ATTEMPTS=5`、`BLOG_FRIEND_LINK_APPLICATION_RATE_LIMIT_WINDOW_SECONDS=600`，命中返回 `429` 并写入 `security_events`。
 - 前台 `/links` 新增友链申请表单，可提交站点名称、URL、头像 URL、RSS URL 和描述；提交成功后显示审核提示，公开列表仍只展示已通过友链。
@@ -88,7 +93,7 @@
 
 ### 进行中
 
-- M1 内容管理继续推进，友链公开申请、后台创建编辑审核、排序、头像 URL、描述和公开展示已形成基础闭环；下一步补齐友链状态检查任务。
+- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查和导航条目基础能力已形成闭环；下一步补齐 RSS 与 sitemap 初版。
 
 ### 阻塞与风险
 
@@ -103,13 +108,21 @@
 - 真实运行库闭环验证会创建一篇测试文章和一个公开上传文件；脚本默认会把测试文章归档，但上传文件与访问日志会保留，后续如需清理应先确认是否仍被 `file_usages` 引用。
 - 本次运行库验证中复用了同一张验证图片文件 `file_id=10`；验证文章已归档，但验证图片和访问日志保留，后续文件清理前需要确认引用状态。
 - 公开友链申请入口已接入应用限流，但公开加密会话协商仍会先发生；若后续遇到明显垃圾申请，需要继续评估验证码、黑名单或更细粒度的 URL 去重策略。
+- `check-friend-links` 会访问外部站点，可能受网络波动、对方反爬、HEAD 支持不完整或临时 5xx 影响；本任务只记录状态码和失败，不自动修改人工审核状态。
 
 ### 下一步
 
-- 友链状态检查任务：新增后台维护任务和 CLI 子命令，定期访问已通过友链 URL，写入最后检查时间、HTTP 状态码和异常状态，并在后台友链列表中展示检查结果。
+- RSS 与 sitemap 初版：基于已发布文章输出 `/rss.xml` 和 `/sitemap.xml`，覆盖文章永久链接、发布时间、更新时间和站点基础资料。
 
 ### 验证
 
+- 友链状态检查任务接入后已运行 `uv run ruff check .`，通过。
+- 友链状态检查任务接入后已运行 `uv run pytest tests\test_link_health.py tests\test_admin_links_api.py`，9 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 友链状态检查任务接入后已运行后端全量 `uv run pytest`，91 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 相关上游弃用警告。
+- 友链状态检查任务接入后已运行 `uv run python -m app.cli --help`，确认 `check-friend-links` 子命令已注册。
+- 友链状态检查后台展示接入后已运行 `npm.cmd run lint`，通过。
+- 友链状态检查后台展示接入后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
+- 友链状态检查 systemd 示例接入后已运行文本结构检查，确认 service 包含 `WorkingDirectory=/opt/blog` 与 `check-friend-links` 命令，timer 指向 `blog-check-friend-links.service` 并包含 `OnCalendar`。
 - 公开友链申请入口新增后已运行 `uv run ruff check .`，通过。
 - 公开友链申请入口新增后已运行 `uv run pytest tests\test_public_content_api.py tests\test_admin_links_api.py tests\test_rate_limit.py`，20 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
 - 公开友链申请入口新增后已运行 `uv run pytest`，89 个测试通过、2 个 Redis 集成测试因未配置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 相关上游弃用警告。

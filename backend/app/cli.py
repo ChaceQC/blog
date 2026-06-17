@@ -16,6 +16,7 @@ from app.tasks.files import (
     cleanup_deleted_files,
     cleanup_orphan_files,
 )
+from app.tasks.links import FriendLinkHealthCheckCommand, check_friend_links
 
 
 def main() -> None:
@@ -33,6 +34,9 @@ def main() -> None:
         return
     if args.command == "cleanup-orphan-files":
         asyncio.run(_cleanup_orphan_files(args))
+        return
+    if args.command == "check-friend-links":
+        asyncio.run(_check_friend_links(args))
         return
 
     parser.print_help()
@@ -87,6 +91,22 @@ def _build_parser() -> argparse.ArgumentParser:
         "--delete",
         action="store_true",
         help="实际删除孤儿文件；省略时只演练扫描结果",
+    )
+    check_links = subparsers.add_parser(
+        "check-friend-links",
+        help="检查已通过友链的 HTTP 状态",
+    )
+    check_links.add_argument(
+        "--limit",
+        type=_positive_int,
+        default=100,
+        help="单次最多检查的友链数量，默认 100",
+    )
+    check_links.add_argument(
+        "--timeout-seconds",
+        type=_positive_float,
+        default=5.0,
+        help="单个友链请求超时时间，默认 5 秒",
     )
     return parser
 
@@ -154,6 +174,22 @@ async def _cleanup_orphan_files(args: argparse.Namespace) -> None:
         print(f"孤儿文件示例：{preview}{suffix}")
 
 
+async def _check_friend_links(args: argparse.Namespace) -> None:
+    result = await check_friend_links(
+        FriendLinkHealthCheckCommand(
+            limit=args.limit,
+            timeout_seconds=args.timeout_seconds,
+        ),
+    )
+    print(
+        "已完成友链状态检查："
+        f"扫描 {result.scanned_links} 条，"
+        f"正常 {result.healthy_links} 条，"
+        f"异常 {result.unhealthy_links} 条，"
+        f"访问失败 {result.failed_links} 条",
+    )
+
+
 def _prompt_password() -> str:
     password = getpass("管理员密码：")
     confirmation = getpass("再次输入密码：")
@@ -175,6 +211,13 @@ def _non_negative_int(value: str) -> int:
     parsed = int(value)
     if parsed < 0:
         raise argparse.ArgumentTypeError("不能小于 0")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("必须大于 0")
     return parsed
 
 

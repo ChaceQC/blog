@@ -20,6 +20,7 @@ uv run python -m app.cli --help
 uv run python -m app.cli cleanup-encryption-sessions
 uv run python -m app.cli cleanup-deleted-files --older-than-days 7 --limit 100
 uv run python -m app.cli cleanup-orphan-files --limit 1000
+uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 $env:BLOG_TEST_REDIS_URL='redis://127.0.0.1:6379/15'
 uv run pytest tests/test_rate_limit_redis_integration.py
 $env:BLOG_VERIFY_ADMIN_USERNAME='admin'
@@ -55,7 +56,7 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 
 ## 后台维护任务
 
-后台维护任务放在 `app/tasks`，供 CLI、cron 或 systemd timer 调用，不通过公开 HTTP 入口触发。当前已提供过期应用层加密会话清理任务、软删除文件物理清理任务和本地孤儿文件扫描清理任务：
+后台维护任务放在 `app/tasks`，供 CLI、cron 或 systemd timer 调用，不通过公开 HTTP 入口触发。当前已提供过期应用层加密会话清理任务、软删除文件物理清理任务、本地孤儿文件扫描清理任务和友链状态检查任务：
 
 ```powershell
 $env:PYTHONUTF8='1'
@@ -63,9 +64,10 @@ uv run python -m app.cli cleanup-encryption-sessions
 uv run python -m app.cli cleanup-deleted-files --older-than-days 7 --limit 100
 uv run python -m app.cli cleanup-orphan-files --limit 1000
 uv run python -m app.cli cleanup-orphan-files --limit 1000 --delete
+uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 ```
 
-`cleanup-encryption-sessions` 会删除 `encryption_sessions` 中已过期的会话记录，并输出清理数量。`cleanup-deleted-files` 只清理已软删除、超过保留天数、没有 `file_usages` 引用且 object key 解析后仍位于 `BLOG_UPLOAD_ROOT` 内的本地文件；物理文件缺失时会清理对应数据库软删记录，路径不安全或仍有引用时会跳过。默认保留 7 天，单次最多扫描 100 条。`cleanup-orphan-files` 扫描 `BLOG_UPLOAD_ROOT` 下 `public` 与 `private` 目录中的本地文件，找出没有 active/deleted 数据库记录的孤儿文件；默认只 dry-run 汇总并展示示例，只有显式传入 `--delete` 才会删除，单次默认最多扫描 1000 个本地文件。生产部署可使用 `deploy/systemd` 中的 timer 示例：加密会话每小时清理、软删除文件每天清理、孤儿文件每周 dry-run 扫描。后续友链健康检查和 sitemap 刷新也应沿用同一类维护任务入口。
+`cleanup-encryption-sessions` 会删除 `encryption_sessions` 中已过期的会话记录，并输出清理数量。`cleanup-deleted-files` 只清理已软删除、超过保留天数、没有 `file_usages` 引用且 object key 解析后仍位于 `BLOG_UPLOAD_ROOT` 内的本地文件；物理文件缺失时会清理对应数据库软删记录，路径不安全或仍有引用时会跳过。默认保留 7 天，单次最多扫描 100 条。`cleanup-orphan-files` 扫描 `BLOG_UPLOAD_ROOT` 下 `public` 与 `private` 目录中的本地文件，找出没有 active/deleted 数据库记录的孤儿文件；默认只 dry-run 汇总并展示示例，只有显式传入 `--delete` 才会删除，单次默认最多扫描 1000 个本地文件。`check-friend-links` 会检查已通过友链的 HTTP 状态，写入 `last_checked_at` 和 `last_status_code`；访问失败记录为 `0`，不会自动把人工审核状态改成拒绝。生产部署可使用 `deploy/systemd` 中的 timer 示例：加密会话每小时清理、软删除文件每天清理、孤儿文件每周 dry-run 扫描、友链状态每天检查。后续 sitemap 刷新也应沿用同一类维护任务入口。
 
 ## 后台内容管理
 

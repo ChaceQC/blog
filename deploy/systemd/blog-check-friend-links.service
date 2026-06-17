@@ -1,0 +1,9 @@
+[Unit]
+Description=Blog check friend link HTTP status
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/blog
+ExecStart=/usr/bin/docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml exec -T backend uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5

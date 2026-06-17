@@ -35,11 +35,13 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now blog-cleanup-encryption-sessions.timer
 sudo systemctl enable --now blog-cleanup-deleted-files.timer
 sudo systemctl enable --now blog-scan-orphan-files.timer
+sudo systemctl enable --now blog-check-friend-links.timer
 ```
 
 - `blog-cleanup-encryption-sessions.timer`：每小时清理过期加密会话。
 - `blog-cleanup-deleted-files.timer`：每天清理超过 7 天、无引用且路径安全的软删除文件。
 - `blog-scan-orphan-files.timer`：每周 dry-run 扫描孤儿文件，只输出汇总和示例，不自动删除。
+- `blog-check-friend-links.timer`：每天检查已通过友链的 HTTP 状态，写入最近检查时间和状态码，不自动改变人工审核状态。
 
 查看任务：
 
