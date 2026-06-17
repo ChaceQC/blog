@@ -1,5 +1,5 @@
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
@@ -27,6 +27,20 @@ class ContentRepositoryProtocol(Protocol):
     async def list_public_posts(self, *, limit: int, offset: int) -> Sequence[Post]: ...
 
     async def list_public_feed_posts(self, *, limit: int) -> Sequence[Post]: ...
+
+    async def list_public_categories(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> Sequence[Mapping[str, object]]: ...
+
+    async def list_public_tags(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> Sequence[Mapping[str, object]]: ...
 
     async def get_post(self, post_id: int) -> Post | None: ...
 
@@ -150,6 +164,25 @@ class ContentService:
 
     async def list_public_feed_posts(self, *, limit: int) -> Sequence[Post]:
         return await self.repository.list_public_feed_posts(limit=limit)
+
+    async def list_public_categories(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> Sequence[Mapping[str, object]]:
+        return await self.repository.list_public_categories(
+            limit=limit,
+            offset=offset,
+        )
+
+    async def list_public_tags(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> Sequence[Mapping[str, object]]:
+        return await self.repository.list_public_tags(limit=limit, offset=offset)
 
     async def get_post(self, post_id: int) -> Post:
         post = await self.repository.get_post(post_id)

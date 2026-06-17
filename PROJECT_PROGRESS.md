@@ -4,6 +4,11 @@
 
 ### 已完成
 
+- 新增公开分类接口 `GET /api/public/categories`，使用 public scope `content-v1` 加密响应，按已公开且已到发布时间的文章聚合分类并返回 `id`、`name`、`slug` 和 `post_count`。
+- 新增公开标签接口 `GET /api/public/tags`，使用同一公开文章过滤口径聚合标签并返回公开文章数量，避免草稿、私密文章和未到点定时文章进入前台归档数据。
+- `ContentRepository` 收敛公开文章过滤条件，公开文章列表、详情、RSS/sitemap feed、分类聚合和标签聚合复用同一发布可见性规则。
+- 前端 `features/posts` 补充 `PublicTaxonomyItem` 类型和 `listPublicCategories`、`listPublicTags` 请求封装，供下一步前台归档筛选入口复用。
+- 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，记录公开分类/标签接口字段、加密响应方式和下一步前台归档筛选计划。
 - 新增前端公开页面 SEO hook `usePageSeo`，统一维护 `document.title`、`description`、`keywords`、canonical 和基础 Open Graph 元信息。
 - 移除 `PublicLayout` 对 `document.title` 的全局覆盖，避免公开子页面设置的页面级标题被站点标题覆盖。
 - 首页、文章列表、文章详情、友链、文件和站点目录已接入 `usePageSeo`；文章详情使用文章 SEO 标题/描述/关键词、canonical URL、`og:type=article` 和封面图作为分享元信息。
@@ -112,7 +117,7 @@
 
 ### 进行中
 
-- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目、RSS/sitemap/robots.txt 初版、生产 Nginx SEO 出口反代、公开页面 canonical/Open Graph 基线和公开文章列表分类标签展示已形成基础闭环；下一步补齐公开分类与标签接口。
+- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目、RSS/sitemap/robots.txt 初版、生产 Nginx SEO 出口反代、公开页面 canonical/Open Graph 基线、公开文章列表分类标签展示和公开分类/标签聚合接口已形成基础闭环；下一步接入前台归档筛选入口。
 
 ### 阻塞与风险
 
@@ -132,13 +137,19 @@
 - `/rss.xml`、`/sitemap.xml` 与 `/robots.txt` 的绝对链接依赖 `BLOG_PUBLIC_BASE_URL`，生产部署前必须确认该值为公网 HTTPS 域名。
 - 生产 Nginx 已补充根级 SEO 文件反代规则；后续如果改为静态预渲染或 CDN 缓存，需要同步检查这些路径是否仍返回后端生成内容或等价静态文件。
 - 当前 canonical 与 Open Graph 由 React 客户端运行时写入，能改善浏览器内分享状态，但对不执行 JavaScript 的搜索引擎或社交抓取器仍不如 SSR/SSG；后续若 SEO 要求提高，需要评估预渲染或服务端渲染。
+- 公开分类与标签接口目前只提供聚合数据，前台文章列表还没有按分类或标签筛选；下一步需要同步设计 URL 查询参数、接口筛选参数和列表空状态。
 
 ### 下一步
 
-- 公开分类与标签接口：补齐 `GET /api/public/categories` 和 `GET /api/public/tags`，用于前台归档筛选和后续 sitemap 扩展。
+- 前台归档筛选入口：在文章列表或归档页读取 `GET /api/public/categories` 和 `GET /api/public/tags`，并补充按分类、标签筛选公开文章的接口参数与 UI 状态。
 
 ### 验证
 
+- 公开分类与标签接口接入后已运行 `uv run ruff check .`，通过。
+- 公开分类与标签接口接入后已运行 `uv run pytest tests\test_public_content_api.py tests\test_content_service.py`，20 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- 公开分类与标签接口接入后已运行后端全量 `uv run pytest`，96 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 相关上游弃用警告。
+- 公开分类与标签前端 API 封装接入后已运行 `npm.cmd run lint`，通过。
+- 公开分类与标签前端 API 封装接入后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - 公开页面 canonical/Open Graph 基线接入后已运行 `npm.cmd run lint`，通过。
 - 公开页面 canonical/Open Graph 基线接入后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - robots.txt 与 Nginx SEO 反代接入后已运行 `uv run ruff check .`，通过。

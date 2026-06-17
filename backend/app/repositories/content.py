@@ -2,7 +2,7 @@ import re
 from collections.abc import Sequence
 from hashlib import sha1
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import utc_now
@@ -31,14 +31,7 @@ class ContentRepository:
         result = await self.session.execute(
             select(Post)
             .where(
-                Post.deleted_at.is_(None),
-                or_(
-                    Post.status == "published",
-                    Post.status == "scheduled",
-                ),
-                Post.visibility == "public",
-                Post.published_at.is_not(None),
-                Post.published_at <= now,
+                *_public_post_filters(now),
             )
             .order_by(Post.published_at.desc(), Post.id.desc())
             .limit(limit)
@@ -53,14 +46,7 @@ class ContentRepository:
         result = await self.session.execute(
             select(Post)
             .where(
-                Post.deleted_at.is_(None),
-                or_(
-                    Post.status == "published",
-                    Post.status == "scheduled",
-                ),
-                Post.visibility == "public",
-                Post.published_at.is_not(None),
-                Post.published_at <= now,
+                *_public_post_filters(now),
             )
             .order_by(Post.published_at.desc(), Post.id.desc())
             .limit(limit),
@@ -68,6 +54,54 @@ class ContentRepository:
         posts = list(result.scalars().all())
         await self._attach_post_taxonomy(posts)
         return posts
+
+    async def list_public_categories(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> Sequence[dict[str, object]]:
+        now = utc_now()
+        result = await self.session.execute(
+            select(
+                Category.id,
+                Category.name,
+                Category.slug,
+                func.count(Post.id).label("post_count"),
+            )
+            .join(PostCategory, PostCategory.category_id == Category.id)
+            .join(Post, Post.id == PostCategory.post_id)
+            .where(*_public_post_filters(now))
+            .group_by(Category.id, Category.name, Category.slug, Category.sort_order)
+            .order_by(Category.sort_order, Category.name)
+            .limit(limit)
+            .offset(offset),
+        )
+        return [dict(row) for row in result.mappings().all()]
+
+    async def list_public_tags(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> Sequence[dict[str, object]]:
+        now = utc_now()
+        result = await self.session.execute(
+            select(
+                Tag.id,
+                Tag.name,
+                Tag.slug,
+                func.count(Post.id).label("post_count"),
+            )
+            .join(PostTag, PostTag.tag_id == Tag.id)
+            .join(Post, Post.id == PostTag.post_id)
+            .where(*_public_post_filters(now))
+            .group_by(Tag.id, Tag.name, Tag.slug)
+            .order_by(Tag.name)
+            .limit(limit)
+            .offset(offset),
+        )
+        return [dict(row) for row in result.mappings().all()]
 
     async def get_post(self, post_id: int) -> Post | None:
         result = await self.session.execute(
@@ -90,14 +124,7 @@ class ContentRepository:
         result = await self.session.execute(
             select(Post).where(
                 Post.slug == slug,
-                Post.deleted_at.is_(None),
-                or_(
-                    Post.status == "published",
-                    Post.status == "scheduled",
-                ),
-                Post.visibility == "public",
-                Post.published_at.is_not(None),
-                Post.published_at <= now,
+                *_public_post_filters(now),
             ),
         )
         post = result.scalar_one_or_none()
@@ -329,6 +356,19 @@ def _slug_from_label(label: str, *, prefix: str) -> str:
         return slug[:80]
     digest = sha1(label.encode("utf-8")).hexdigest()[:12]
     return f"{prefix}-{digest}"
+
+
+def _public_post_filters(now) -> tuple[object, ...]:
+    return (
+        Post.deleted_at.is_(None),
+        or_(
+            Post.status == "published",
+            Post.status == "scheduled",
+        ),
+        Post.visibility == "public",
+        Post.published_at.is_not(None),
+        Post.published_at <= now,
+    )
 
 
 def _rows_to_map(rows: Sequence[tuple[int, str]]) -> dict[int, list[str]]:

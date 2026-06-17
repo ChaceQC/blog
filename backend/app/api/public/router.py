@@ -28,6 +28,8 @@ from app.schemas.content import (
     PublicPostDetail,
     PublicPostItem,
     PublicPostListResponse,
+    PublicTaxonomyItem,
+    PublicTaxonomyListResponse,
 )
 from app.schemas.encryption import EncryptedApiRequest
 from app.schemas.links import (
@@ -71,6 +73,64 @@ PublicLinkServiceDependency = Annotated[
 @router.get("/status")
 async def public_status() -> dict[str, str]:
     return {"status": "public-api-ready"}
+
+
+@router.get("/categories")
+async def list_public_categories(
+    request: Request,
+    service: PublicContentServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    categories = await service.list_public_categories(limit=limit, offset=offset)
+    response = await encrypted_response(
+        PublicTaxonomyListResponse(
+            items=[PublicTaxonomyItem.model_validate(item) for item in categories],
+        ),
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+    await _record_public_access(
+        logs,
+        request=request,
+        access_type="public_categories_list",
+        status_code=status.HTTP_200_OK,
+        entity_type="category",
+        detail_json={"limit": limit, "offset": offset, "count": len(categories)},
+    )
+    return response
+
+
+@router.get("/tags")
+async def list_public_tags(
+    request: Request,
+    service: PublicContentServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    tags = await service.list_public_tags(limit=limit, offset=offset)
+    response = await encrypted_response(
+        PublicTaxonomyListResponse(
+            items=[PublicTaxonomyItem.model_validate(item) for item in tags],
+        ),
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+    await _record_public_access(
+        logs,
+        request=request,
+        access_type="public_tags_list",
+        status_code=status.HTTP_200_OK,
+        entity_type="tag",
+        detail_json={"limit": limit, "offset": offset, "count": len(tags)},
+    )
+    return response
 
 
 @router.get("/posts")

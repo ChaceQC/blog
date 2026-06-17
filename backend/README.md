@@ -85,6 +85,11 @@ uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 
 ## 公开订阅与站点地图
 
+公开分类、标签和文章读取接口使用 public scope `content-v1` 加密响应，调用方需要先协商 `/api/public/encryption/sessions` 并携带 `X-Encryption-Session`：
+
+- `GET /api/public/categories`：返回已公开且已到发布时间文章使用到的分类，包含 `id`、`name`、`slug` 和 `post_count`。
+- `GET /api/public/tags`：返回已公开且已到发布时间文章使用到的标签，包含 `id`、`name`、`slug` 和 `post_count`。
+
 公开 RSS、sitemap 和 robots.txt 直接挂在根路径，不要求 `X-Encryption-Session`，方便订阅客户端和搜索引擎抓取：
 
 - `GET /rss.xml`：输出 RSS 2.0，站点标题与描述来自公开站点资料，文章条目只包含已公开且已到发布时间的文章。

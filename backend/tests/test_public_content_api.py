@@ -132,6 +132,32 @@ class FakePublicContentService:
             ),
         ]
 
+    async def list_public_categories(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[dict[str, object]]:
+        assert limit == 2
+        assert offset == 0
+        return [
+            {"id": 1, "name": "技术", "slug": "category-a", "post_count": 3},
+            {"id": 2, "name": "随笔", "slug": "category-b", "post_count": 1},
+        ]
+
+    async def list_public_tags(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[dict[str, object]]:
+        assert limit == 2
+        assert offset == 0
+        return [
+            {"id": 1, "name": "FastAPI", "slug": "fastapi", "post_count": 2},
+            {"id": 2, "name": "React", "slug": "react", "post_count": 1},
+        ]
+
     async def get_public_post_by_slug(self, slug: str) -> object:
         if slug != "public-post":
             raise ContentNotFoundError("post not found")
@@ -360,6 +386,68 @@ def test_public_posts_returns_published_post_list() -> None:
         in str(manager.payload["items"][0]["cover_image_url"])
     )
     assert logs.items[0]["access_type"] == "public_posts_list"
+
+
+def test_public_categories_return_encrypted_list() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_content_service] = (
+        lambda: FakePublicContentService()
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get(
+            "/api/public/categories?limit=2",
+            headers={"X-Encryption-Session": "public-session"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload is not None
+    assert manager.payload["items"][0] == {
+        "id": 1,
+        "name": "技术",
+        "slug": "category-a",
+        "post_count": 3,
+    }
+    assert logs.items[0]["access_type"] == "public_categories_list"
+    assert logs.items[0]["detail_json"] == {"limit": 2, "offset": 0, "count": 2}
+
+
+def test_public_tags_return_encrypted_list() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_content_service] = (
+        lambda: FakePublicContentService()
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get(
+            "/api/public/tags?limit=2",
+            headers={"X-Encryption-Session": "public-session"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload is not None
+    assert manager.payload["items"][0] == {
+        "id": 1,
+        "name": "FastAPI",
+        "slug": "fastapi",
+        "post_count": 2,
+    }
+    assert logs.items[0]["access_type"] == "public_tags_list"
+    assert logs.items[0]["detail_json"] == {"limit": 2, "offset": 0, "count": 2}
 
 
 def test_public_post_detail_returns_html_content() -> None:

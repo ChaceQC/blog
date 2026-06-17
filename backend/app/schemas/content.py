@@ -121,6 +121,21 @@ class PublicPostListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class PublicTaxonomyItem(BaseModel):
+    id: int
+    name: str
+    slug: str
+    post_count: int
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PublicTaxonomyListResponse(BaseModel):
+    items: list[PublicTaxonomyItem]
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class PageCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=1, max_length=220, pattern=SLUG_PATTERN)
