@@ -45,6 +45,8 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 
 ## 安全日志与限流
 
+后端会为所有响应设置 `X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy: strict-origin-when-cross-origin` 和禁用摄像头、麦克风、地理位置的 `Permissions-Policy`。生产环境还会设置 `Strict-Transport-Security` 与 Content Security Policy；本地开发环境不设置 CSP，避免影响 FastAPI `/docs` 调试页。
+
 后台只读日志接口：
 
 - `GET /api/admin/audit-logs`：操作审计日志，需要 `audit_log:read` 权限和 `sensitive-v1` 加密会话。

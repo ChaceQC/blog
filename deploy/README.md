@@ -55,6 +55,8 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml co
 - 精确反代 `/rss.xml`、`/sitemap.xml` 和 `/robots.txt`，避免被 SPA 的 `index.html` 兜底吞掉。
 - 设置上传体积限制、基础安全响应头和代理头。
 
+后端生产响应也会设置 HSTS 与 Content Security Policy，Nginx 的同类响应头保留为公网入口兜底；部署前仍应确认公网只暴露 Nginx `80/443`，后端、MySQL、Redis 不映射到宿主公网端口。
+
 生产 `BLOG_PUBLIC_BASE_URL` 必须与 Nginx 对外 HTTPS 域名一致，否则 RSS、sitemap、robots.txt 和签名链接会生成错误的绝对地址。
 
 ## 维护脚本

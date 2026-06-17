@@ -178,6 +178,8 @@ npm.cmd run build
 - `BLOG_RATE_LIMIT_BACKEND`：限流后端，支持 `memory` 和 `redis`。
 - `BLOG_REDIS_URL`：Redis 连接串，生产示例为 `redis://redis:6379/0`。
 
+后端所有响应都会设置 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 和 `Permissions-Policy`；生产环境额外设置 HSTS 与 Content Security Policy，Nginx 仍保留同等安全响应头作为公网入口兜底。
+
 真实 `.env`、密钥、证书私钥、备份文件和上传文件不得提交到 Git。
 
 ## 数据库迁移
@@ -284,7 +286,7 @@ cp deploy/env/nginx.env.example deploy/env/nginx.env
 
 至少修改以下内容：
 
-- `deploy/env/backend.env`：`BLOG_SECRET_KEY`、`BLOG_DATABASE_URL`、`BLOG_PUBLIC_BASE_URL`、CORS、Trusted Host、Cookie 安全配置、上传目录、Redis 配置。
+- `deploy/env/backend.env`：`BLOG_SECRET_KEY`、`BLOG_DATABASE_URL`、`BLOG_PUBLIC_BASE_URL`、CORS、Trusted Host、Cookie 安全配置、上传目录、Redis 配置；生产环境必须保持 `BLOG_DEBUG=false`、`BLOG_DOCS_ENABLED=false` 和安全 Cookie。
 - `deploy/env/mysql.env`：MySQL root 密码、业务库、业务账号和密码。
 - `deploy/env/nginx.env`：域名、证书路径和反向代理相关配置。
 
