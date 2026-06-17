@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
+from app.core.site_nav_tags import normalize_site_nav_tags_json
 from app.models.link import FriendLink
 from app.models.site import SiteNavItem
 
@@ -325,13 +326,14 @@ class LinkService:
             open_target=command.open_target,
             visibility=command.visibility,
         )
+        tags_json = self._normalize_site_nav_tags(command.tags_json)
         item = await self.repository.create_site_nav_item(
             group_id=command.group_id,
             title=command.title,
             url=command.url,
             icon_url=command.icon_url,
             description=command.description,
-            tags_json=command.tags_json,
+            tags_json=tags_json,
             open_target=command.open_target,
             visibility=command.visibility,
             sort_order=command.sort_order,
@@ -356,6 +358,12 @@ class LinkService:
         item = await self.repository.get_site_nav_item(item_id)
         if item is None:
             raise SiteNavItemNotFoundError("site nav item not found")
+
+        if "tags_json" in changes:
+            changes = {
+                **changes,
+                "tags_json": self._normalize_site_nav_tags(changes["tags_json"]),
+            }
 
         for field in (
             "group_id",
@@ -412,6 +420,15 @@ class LinkService:
             raise InvalidSiteNavItemValueError("invalid site nav open target")
         if visibility is not None and visibility not in ALLOWED_SITE_NAV_VISIBILITIES:
             raise InvalidSiteNavItemValueError("invalid site nav visibility")
+
+    def _normalize_site_nav_tags(
+        self,
+        tags_json: object,
+    ) -> dict[str, list[str]] | None:
+        try:
+            return normalize_site_nav_tags_json(tags_json)
+        except ValueError as exc:
+            raise InvalidSiteNavItemValueError("invalid site nav tags") from exc
 
     def _site_nav_item_record(
         self,

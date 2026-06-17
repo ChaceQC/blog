@@ -3,6 +3,10 @@ import { Navigation, Save } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
+import {
+  siteNavTagsPayload,
+  siteNavTagsToText,
+} from '../sites/siteNavTags.ts'
 import { AdminSiteNavGroupsPanel } from './AdminSiteNavGroupsPanel.tsx'
 import {
   createAdminSiteNavItem,
@@ -15,6 +19,7 @@ import { useAuth } from '../auth/useAuth.ts'
 import type {
   AdminSiteNavGroup,
   AdminSiteNavItem,
+  AdminSiteNavOpenTarget,
   AdminSiteNavVisibility,
   SiteNavItemWritePayload,
 } from './types.ts'
@@ -27,6 +32,8 @@ type SiteNavForm = {
   url: string
   iconUrl: string
   description: string
+  tagsText: string
+  openTarget: AdminSiteNavOpenTarget
   visibility: AdminSiteNavVisibility
   sortOrder: number
 }
@@ -37,6 +44,8 @@ const emptySiteForm: SiteNavForm = {
   url: '',
   iconUrl: '',
   description: '',
+  tagsText: '',
+  openTarget: 'blank',
   visibility: 'public',
   sortOrder: 0,
 }
@@ -86,7 +95,7 @@ export function AdminSiteNavPanel() {
       if (!session) {
         throw new Error('当前会话已失效')
       }
-      const payload = siteFormToPayload(siteForm, selectedSite)
+      const payload = siteFormToPayload(siteForm)
       if (isCreatingSite || !selectedSite) {
         return createAdminSiteNavItem(payload, session.csrfToken)
       }
@@ -143,7 +152,9 @@ export function AdminSiteNavPanel() {
               <strong>{site.title}</strong>
               <small>{site.description ?? '暂无描述'}</small>
             </span>
-            <small>{site.group_name ?? '未分组'}</small>
+            <small>
+              {site.group_name ?? '未分组'} · {site.open_target === 'blank' ? '新标签' : '当前页'}
+            </small>
           </button>
         ))}
       </div>
@@ -184,38 +195,66 @@ export function AdminSiteNavPanel() {
               value={siteForm.description}
             />
           </label>
-          <label>
-            分组
-            <select
-              onChange={(event) =>
-                updateSiteForm('groupId', parseOptionalId(event.target.value))
-              }
-              value={siteForm.groupId ?? ''}
-            >
-              <option value="">未分组</option>
-              {groups.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            可见性
-            <select
-              onChange={(event) =>
-                updateSiteForm(
-                  'visibility',
-                  event.target.value as AdminSiteNavVisibility,
-                )
-              }
-              value={siteForm.visibility}
-            >
-              <option value="public">公开</option>
-              <option value="hidden">隐藏</option>
-              <option value="private">后台可见</option>
-            </select>
-          </label>
+          <div className="form-grid form-grid--two">
+            <label>
+              分组
+              <select
+                onChange={(event) =>
+                  updateSiteForm('groupId', parseOptionalId(event.target.value))
+                }
+                value={siteForm.groupId ?? ''}
+              >
+                <option value="">未分组</option>
+                {groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              打开方式
+              <select
+                onChange={(event) =>
+                  updateSiteForm(
+                    'openTarget',
+                    event.target.value as AdminSiteNavOpenTarget,
+                  )
+                }
+                value={siteForm.openTarget}
+              >
+                <option value="blank">新标签打开</option>
+                <option value="self">当前页打开</option>
+              </select>
+            </label>
+          </div>
+          <div className="form-grid form-grid--two">
+            <label>
+              可见性
+              <select
+                onChange={(event) =>
+                  updateSiteForm(
+                    'visibility',
+                    event.target.value as AdminSiteNavVisibility,
+                  )
+                }
+                value={siteForm.visibility}
+              >
+                <option value="public">公开</option>
+                <option value="hidden">隐藏</option>
+                <option value="private">后台可见</option>
+              </select>
+            </label>
+            <label>
+              标签
+              <input
+                onChange={(event) =>
+                  updateSiteForm('tagsText', event.target.value)
+                }
+                value={siteForm.tagsText}
+              />
+            </label>
+          </div>
           <div className="form-grid form-grid--two">
             <label>
               图标 URL
@@ -240,7 +279,10 @@ export function AdminSiteNavPanel() {
             <button
               className="text-button"
               disabled={
-                !session || saveSiteMutation.isPending || siteForm.title === ''
+                !session ||
+                saveSiteMutation.isPending ||
+                siteForm.title.trim() === '' ||
+                siteForm.url.trim() === ''
               }
               onClick={() => saveSiteMutation.mutate()}
               type="button"
@@ -273,23 +315,22 @@ function siteToForm(site: AdminSiteNavItem): SiteNavForm {
     url: site.url,
     iconUrl: site.icon_url ?? '',
     description: site.description ?? '',
+    tagsText: siteNavTagsToText(site.tags_json),
+    openTarget: site.open_target,
     visibility: site.visibility,
     sortOrder: site.sort_order,
   }
 }
 
-function siteFormToPayload(
-  form: SiteNavForm,
-  site: AdminSiteNavItem | null,
-): SiteNavItemWritePayload {
+function siteFormToPayload(form: SiteNavForm): SiteNavItemWritePayload {
   return {
     group_id: form.groupId,
     title: form.title,
     url: form.url,
     icon_url: emptyToNull(form.iconUrl),
     description: emptyToNull(form.description),
-    tags_json: site?.tags_json ?? null,
-    open_target: 'blank',
+    tags_json: siteNavTagsPayload(form.tagsText),
+    open_target: form.openTarget,
     visibility: form.visibility,
     sort_order: Number.isFinite(form.sortOrder) ? form.sortOrder : 0,
   }

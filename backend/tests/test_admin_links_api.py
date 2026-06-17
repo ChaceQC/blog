@@ -135,6 +135,8 @@ class FakeLinkService:
     async def create_site_nav_item(self, command: CreateSiteNavItemCommand) -> object:
         assert command.title == "新导航"
         assert command.url == "https://nav.example.test"
+        assert command.tags_json == {"items": ["工具", "博客"]}
+        assert command.open_target == "self"
         return SimpleNamespace(
             id=2,
             group_id=command.group_id,
@@ -168,9 +170,9 @@ class FakeLinkService:
             group_slug=None,
             title=changes["title"],
             url=changes.get("url", "https://github.com/ChaceQC/blog"),
-            icon_url=None,
+            icon_url=changes.get("icon_url"),
             description=changes.get("description"),
-            tags_json=None,
+            tags_json=changes.get("tags_json"),
             open_target=changes.get("open_target", "blank"),
             visibility=changes.get("visibility", "public"),
             click_count=0,
@@ -717,8 +719,10 @@ def test_create_admin_site_item_decrypts_content_request() -> None:
         decrypted_payload={
             "title": "新导航",
             "url": "https://nav.example.test",
+            "icon_url": "https://nav.example.test/icon.svg",
             "description": "新的导航入口",
-            "open_target": "blank",
+            "tags_json": {"items": [" 工具 ", "博客", "工具"]},
+            "open_target": "self",
             "visibility": "public",
             "sort_order": 0,
         },
@@ -750,7 +754,13 @@ def test_create_admin_site_item_decrypts_content_request() -> None:
     assert manager.request_payload is not None
     assert manager.payload is not None
     assert manager.payload["title"] == "新导航"
+    assert manager.payload["icon_url"] == "https://nav.example.test/icon.svg"
+    assert manager.payload["tags_json"] == {"items": ["工具", "博客"]}
+    assert manager.payload["open_target"] == "self"
     assert logs.audit_items[0]["action"] == "site_nav.create"
+    assert logs.audit_items[0]["after_json"]["tags_json"] == {
+        "items": ["工具", "博客"],
+    }
 
 
 def test_update_admin_site_item_decrypts_content_request() -> None:
@@ -761,6 +771,7 @@ def test_update_admin_site_item_decrypts_content_request() -> None:
         decrypted_payload={
             "title": "更新后的导航",
             "description": "更新后的导航描述",
+            "tags_json": {"tags": ["项目", "Demo"]},
             "visibility": "hidden",
         },
     )
@@ -791,4 +802,45 @@ def test_update_admin_site_item_decrypts_content_request() -> None:
     assert manager.request_payload is not None
     assert manager.payload is not None
     assert manager.payload["title"] == "更新后的导航"
+    assert manager.payload["tags_json"] == {"items": ["项目", "Demo"]}
     assert logs.audit_items[0]["action"] == "site_nav.update"
+    assert "tags_json" in logs.audit_items[0]["after_json"]["changed_fields"]
+
+
+def test_create_admin_site_item_rejects_invalid_tags() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    manager = FakeEncryptionSessionManager(
+        decrypted_payload={
+            "title": "新导航",
+            "url": "https://nav.example.test",
+            "tags_json": {"items": ["x" * 25]},
+            "open_target": "blank",
+            "visibility": "public",
+            "sort_order": 0,
+        },
+    )
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_link_service] = lambda: FakeLinkService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+
+    try:
+        response = client.post(
+            "/api/admin/site-items",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "content-session",
+            },
+            json={
+                "session_id": "content-session",
+                "profile": "content-v1",
+                "nonce": "test-nonce",
+                "ciphertext": "test-ciphertext",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "invalid encrypted request payload"

@@ -85,7 +85,7 @@ uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 - `GET /api/admin/friend-link-groups`、`POST /api/admin/friend-link-groups`、`PATCH /api/admin/friend-link-groups/{id}`：友链分组管理，需要 `friend_link:review` 权限，写操作需要 `X-CSRF-Token`。
 - `GET /api/admin/friend-links`、`POST /api/admin/friend-links`、`PATCH /api/admin/friend-links/{id}`、`PATCH /api/admin/friend-links/{id}/review`：友链管理和审核，需要 `friend_link:review` 权限，写操作需要 `X-CSRF-Token`。
 - `GET /api/admin/site-groups`、`POST /api/admin/site-groups`、`PATCH /api/admin/site-groups/{id}`：小网站导航分组管理，需要 `site_nav:write` 权限，写操作需要 `X-CSRF-Token`。
-- `GET /api/admin/site-items`、`POST /api/admin/site-items`、`PATCH /api/admin/site-items/{id}`：小网站导航条目管理，需要 `site_nav:write` 权限，写操作需要 `X-CSRF-Token`。
+- `GET /api/admin/site-items`、`POST /api/admin/site-items`、`PATCH /api/admin/site-items/{id}`：小网站导航条目管理，需要 `site_nav:write` 权限，写操作需要 `X-CSRF-Token`；创建和更新会把 `tags_json` 规范化为 `{ "items": ["标签"] }`，最多 8 个标签、单个标签最多 24 个字符。
 
 创建、更新和预览请求体必须是 `content-v1` 加密信封，解密后再进行 Pydantic 字段校验。文章创建和更新可传入 `cover_file_id`、`category_names`、`tag_names`、`seo_title`、`seo_description`、`seo_keywords` 和 `published_at`；后端会自动创建缺失的分类/标签并维护 `post_categories`、`post_tags` 关联。`status=scheduled` 且 `published_at` 晚于当前时间时不会进入公开文章列表或详情；`status=published` 会按 `published_at` 或当前时间公开。创建、更新和发布文章时会把封面文件与正文图片引用同步写入 `file_usages`。`content_html` 由 `markdown-it-py` 渲染 Markdown，启用标题、列表、强调、分隔线、表格等常用语法，`mdit-py-plugins` 保留行内与块级 LaTeX 公式节点，再由 `bleach` 统一执行 HTML sanitize。文章 Markdown 内图片应保存为 `/api/public/posts/{slug}/files/{file_id}/render` 稳定引用；公开文章详情会为实际 HTML 图片地址补上 `expires` 与 `token`，后台实时预览会改写为 `/api/admin/files/{id}/preview` 签名地址，裸访问渲染接口会被拒绝。
 
@@ -94,7 +94,7 @@ uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 公开分类、标签、文章和页面读取接口使用 public scope `content-v1` 加密响应，调用方需要先协商 `/api/public/encryption/sessions` 并携带 `X-Encryption-Session`：
 
 - `GET /api/public/posts`：返回已公开且已到发布时间的文章列表，支持通过 `category={slug}` 和 `tag={slug}` 按分类、标签筛选；列表响应包含 `items` 和 `total`，供前台直接显示总页数。
-- `GET /api/public/friend-links`、`GET /api/public/site-items` 和 `GET /api/public/files`：公开友链、站点目录和公开文件列表响应同样包含 `items` 和 `total`，前台分页不需要额外多取一条记录判断下一页。
+- `GET /api/public/friend-links`、`GET /api/public/site-items` 和 `GET /api/public/files`：公开友链、站点目录和公开文件列表响应同样包含 `items` 和 `total`，前台分页不需要额外多取一条记录判断下一页；站点目录条目会返回 `icon_url`、`tags_json` 和 `open_target` 供前台展示图标、标签和打开方式。
 - `GET /api/public/site-items/{id}/visit`：公开导航跳转入口，只有公开条目会递增 `click_count` 并 302 跳转到真实 URL，隐藏或私有条目返回 404。
 - `GET /api/public/categories`：返回已公开且已到发布时间文章使用到的分类，包含 `id`、`name`、`slug` 和 `post_count`。
 - `GET /api/public/categories/{slug}`：返回单个公开分类归档信息；分类不存在或没有公开文章时返回 404。

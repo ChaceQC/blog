@@ -7,6 +7,8 @@
 - 新增后台友链分组和小网站导航分组 API：`GET/POST/PATCH /api/admin/friend-link-groups` 与 `GET/POST/PATCH /api/admin/site-groups`，均使用 `content-v1` 加密响应，写操作使用加密请求体、CSRF、对应后台权限和操作审计。
 - 新增独立的 `LinkGroupRepository` 与 `LinkGroupService`，复用初始迁移中已有的 `friend_link_groups` 与 `site_nav_groups` 表；本次不需要新增 Alembic 迁移。
 - 后台 `/admin/links` 已接入分组管理：友链和导航条目表单可选择分组，页面内可新建和编辑友链分组、导航分组；同时将友链列表/编辑逻辑拆到 `features/links/AdminFriendLinksPanel.tsx`，避免路由页面继续堆积业务逻辑。
+- 小网站导航条目补齐图标、标签和打开方式编辑体验：后台表单可维护 `icon_url`、`tags_json.items`、`open_target`、可见性和排序，公开 `/sites` 卡片会展示图标与 `#标签`，点击仍走公开跳转入口统计。
+- 新增 `backend/app/core/site_nav_tags.py`，统一把导航标签 JSON 规范化为 `{ "items": [...] }`，兼容旧的 `tags` 键，并限制最多 8 个标签、单个标签最多 24 个字符；本次继续复用已有 `site_nav_items.tags_json` 字段，不需要新增 Alembic 迁移。
 - 新增公开小网站导航跳转入口 `GET /api/public/site-items/{item_id}/visit`：仅公开条目可访问，后端原子递增 `site_nav_items.click_count` 后记录 `public_site_item_visit` 访问日志，并 302 跳转到真实 URL；隐藏、私有或不存在的条目返回 404。
 - 前台站点目录卡片改为使用公开跳转入口，点击会进入后端计数链路，同时按条目 `open_target` 决定当前页或新标签打开。
 - 补充公开站点跳转接口测试，覆盖点击计数跳转成功、访问日志写入和缺失条目 404；同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md` 的小网站导航与公开 API 说明。
@@ -165,7 +167,7 @@
 
 ### 进行中
 
-- M1 认证与后台框架已完成；M2 文章与页面、M3 文件管理已完成真实 MySQL 临时库闭环验收。M4 已补齐公开友链申请、友链健康检查、友链/导航分组管理和小网站导航点击统计，下一步继续推进导航图标/标签编辑和真实运行库验收。
+- M1 认证与后台框架已完成；M2 文章与页面、M3 文件管理已完成真实 MySQL 临时库闭环验收。M4 已补齐公开友链申请、友链健康检查、友链/导航分组管理、小网站导航图标/标签编辑和点击统计，下一步进入真实运行库验收。
 
 ### 阻塞与风险
 
@@ -181,6 +183,7 @@
 - 本次运行库验证中复用了同一张验证图片文件 `file_id=10`；验证文章已归档，但验证图片和访问日志保留，后续文件清理前需要确认引用状态。
 - 公开友链申请入口已接入应用限流，但公开加密会话协商仍会先发生；若后续遇到明显垃圾申请，需要继续评估验证码、黑名单或更细粒度的 URL 去重策略。
 - `check-friend-links` 会访问外部站点，可能受网络波动、对方反爬、HEAD 支持不完整或临时 5xx 影响；本任务只记录状态码和失败，不自动修改人工审核状态。
+- 公开站点导航图标当前使用外部 `icon_url` 直接加载，若对方站点防盗链、图标失效或网络不可达，前台只会缺失图标，不影响标题、描述、标签和跳转。
 - RSS 与 sitemap 当前直接实时查询数据库生成 XML，适合当前规模；后续文章量明显增大或搜索引擎抓取频率升高时，再评估缓存或后台任务刷新静态文件。
 - `/rss.xml`、`/sitemap.xml` 与 `/robots.txt` 的绝对链接依赖 `BLOG_PUBLIC_BASE_URL`，生产部署前必须确认该值为公网 HTTPS 域名。
 - 生产 Nginx 已补充根级 SEO 文件反代规则；后续如果改为静态预渲染或 CDN 缓存，需要同步检查这些路径是否仍返回后端生成内容或等价静态文件。
@@ -191,9 +194,8 @@
 
 ### 下一步
 
-- M4 友链管理：使用真实运行库覆盖友链申请、后台分组选择、审核通过/拒绝和公开展示链路。
-- M4 小网站跳转：补齐导航条目的图标/标签编辑体验，并把导航分组、点击统计和移动端布局纳入真实运行库验证。
-- M4 验收：用真实运行库覆盖友链申请、后台审核、公开展示、站点导航展示、点击统计和移动端布局。
+- M4 真实运行库验收：创建临时库和临时上传目录，覆盖友链申请、后台分组选择、审核通过/拒绝、公开展示、站点导航图标/标签展示、点击统计和移动端布局。
+- M4 脚本化验收：将友链审核链路和站点导航点击统计补入真实运行库 HTTP 验证脚本，验证完成后清理临时账号、临时数据和本次启动的前后端服务。
 
 ### 验证
 
@@ -204,6 +206,10 @@
 - 友链和导航分组管理接入后已运行 `git diff --check`，未发现空白或行尾问题。
 - 小网站导航点击统计接入后已运行 `uv run pytest tests/test_public_content_api.py tests/test_admin_links_api.py`，29 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 小网站导航点击统计接入后已运行 `npm.cmd run lint`，通过。
+- 导航图标/标签编辑接入后已运行 `uv run ruff check app tests/test_admin_links_api.py tests/test_public_content_api.py`，通过。
+- 导航图标/标签编辑接入后已运行 `uv run pytest tests/test_admin_links_api.py tests/test_public_content_api.py`，36 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告和一次 `HTTP_422_UNPROCESSABLE_ENTITY` 常量弃用提示。
+- 导航图标/标签编辑接入后已运行 `npm.cmd run lint`，通过。
+- 导航图标/标签编辑接入后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - 真实运行库脚本扩展后已运行 `uv run ruff check scripts\verify_runtime_publish_flow.py`，通过。
 - 真实运行库脚本扩展后已运行 `uv run python scripts\verify_runtime_publish_flow.py --help`，通过。
 - 已创建真实 MySQL 临时库 `blog_codex_m2m3_verify_20260617184907`，设置临时上传目录 `backend/var/m2m3-verify-20260617184907`，运行 `uv run alembic upgrade head`，从空库迁移到 `20260617_0005`。

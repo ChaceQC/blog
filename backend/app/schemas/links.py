@@ -4,6 +4,8 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.site_nav_tags import normalize_site_nav_tags_json
+
 FriendLinkStatus = Literal["pending", "healthy", "rejected"]
 SiteNavOpenTarget = Literal["blank", "self"]
 SiteNavVisibility = Literal["public", "hidden", "private"]
@@ -269,6 +271,11 @@ class SiteNavItemCreateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @field_validator("tags_json", mode="before")
+    @classmethod
+    def _normalize_tags_json(cls, value: object) -> dict[str, list[str]] | None:
+        return normalize_site_nav_tags_json(value)
+
 
 class SiteNavItemUpdateRequest(BaseModel):
     group_id: int | None = Field(default=None, ge=1)
@@ -282,3 +289,8 @@ class SiteNavItemUpdateRequest(BaseModel):
     sort_order: int | None = Field(default=None, ge=0, le=10000)
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("tags_json", mode="before")
+    @classmethod
+    def _normalize_tags_json(cls, value: object) -> dict[str, list[str]] | None:
+        return normalize_site_nav_tags_json(value)
