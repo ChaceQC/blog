@@ -4,6 +4,11 @@
 
 ### 已完成
 
+- 扩展真实运行库 HTTP 闭环脚本 `backend/scripts/verify_runtime_publish_flow.py`：在原有文章发布、分类/标签、封面缩略图、正文图片渲染、公开文件短链、后台下载和访问日志覆盖基础上，新增后台创建公开页面、公开页面详情、RSS、sitemap、robots.txt、前端文章/页面 SEO 元信息、私有文件不进公开列表、后台私有文件鉴权下载、文件引用追踪、后台文章/文件列表大数量分页和桌面/移动端无横向溢出检查。
+- 按用户要求创建真实 MySQL 临时库 `blog_codex_m2m3_verify_20260617184907`，迁移到 Alembic head，创建一次性后台管理员 `codex_m2m3_verify`，启动本地后端 `18080` 与前端 `15173` 后运行增强后的真实运行库闭环脚本通过；脚本输出 `post_id=12`、`post_slug=runtime-flow-verify-5617afdd`、`page_id=3`、`page_slug=runtime-flow-verify-page-1896bdf8`、`file_id=24`、`private_file_id=25`，并检查 `/admin/posts`、`/admin/files` 的 desktop/mobile 分页。
+- 在同一真实临时库运行公开页分页与移动端溢出回归脚本 `backend/scripts/verify_public_page_pagination.py` 通过；脚本临时前缀为 `codex_public_pages_d056f63e`，`/links?page=2`、`/sites?page=2`、`/files?page=2` 在桌面和移动端均显示第二页分页条，`scroll_width` 等于 `client_width`，`remaining_seed_rows` 为 0。
+- 真实库验收结束后已关闭本次启动的后端 `18080` 与前端 `15173` 服务，确认 `18080`、`15173`、`14173` 均未监听；已删除临时数据库 `blog_codex_m2m3_verify_20260617184907` 和临时上传目录 `backend/var/m2m3-verify-20260617184907`。
+- 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，将真实运行库脚本覆盖范围扩展到 M2/M3 验收项，并把下一步推进方向调整为 M4 友链与小网站跳转完善。
 - 新增公开页分页与移动端密度回归脚本 `backend/scripts/verify_public_page_pagination.py`：脚本会向当前后端配置的运行库写入随机前缀临时友链、站点目录和公开文件，使用 Playwright/Edge 检查 `/links?page=2`、`/sites?page=2`、`/files?page=2` 在桌面和移动端视口下的分页状态与横向溢出，最后清理临时数据。
 - 后端开发依赖补充 `playwright>=1.56.0`，用于运行公开页浏览器级回归脚本；脚本默认使用本机 `msedge` 通道，不下载或提交浏览器二进制。
 - 同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md`，记录公开页分页回归脚本的启动前提、环境变量和下一步推进方向。
@@ -154,7 +159,7 @@
 
 ### 进行中
 
-- M1 认证与后台框架已完成；当前进入 M2/M3 收尾验收。M2 文章与页面已覆盖文章 CRUD、Markdown/LaTeX 预览、发布流程、分类标签、页面后台管理、公开页面详情、前台文章列表/详情/归档、RSS 和 sitemap；M3 文件管理已覆盖上传、列表、软删除、复制链接、图片元数据、哈希去重、文章封面与正文图片引用追踪、本地存储、公开短时访问、后台私有文件下载和清理任务。下一步按 M2 优先、M3 随后的顺序补齐真实运行库验收脚本和文件管理回归。
+- M1 认证与后台框架已完成；M2 文章与页面、M3 文件管理已完成真实 MySQL 临时库闭环验收。下一步进入 M4：友链与小网站跳转的分组、审核、排序、公开展示、点击统计和移动端布局验收。
 
 ### 阻塞与风险
 
@@ -180,12 +185,23 @@
 
 ### 下一步
 
-- M2 验收：扩展真实运行库 HTTP 闭环脚本，覆盖后台创建页面、公开页面访问、文章发布、分类/标签、RSS、sitemap、robots.txt 和公开 SEO 元信息。
-- M3 收尾：扩展文件管理回归，覆盖后台文章和文件页的大数量分页、复制链接/文章引用、公开文件短时访问、私有文件后台下载、引用追踪和移动端无横向溢出。
-- M3 验收完成后再进入 M4：友链与小网站跳转的分组、审核、排序、公开展示和点击统计完善。
+- M4 友链管理：完善友链分组、审核、排序、公开展示和必要的垃圾申请防护策略。
+- M4 小网站跳转：完善导航分组、条目、图标、公开导航页和点击统计。
+- M4 验收：用真实运行库覆盖友链申请、后台审核、公开展示、站点导航展示、点击统计和移动端布局。
 
 ### 验证
 
+- 真实运行库脚本扩展后已运行 `uv run ruff check scripts\verify_runtime_publish_flow.py`，通过。
+- 真实运行库脚本扩展后已运行 `uv run python scripts\verify_runtime_publish_flow.py --help`，通过。
+- 已创建真实 MySQL 临时库 `blog_codex_m2m3_verify_20260617184907`，设置临时上传目录 `backend/var/m2m3-verify-20260617184907`，运行 `uv run alembic upgrade head`，从空库迁移到 `20260617_0005`。
+- 已在真实临时库创建一次性后台管理员 `codex_m2m3_verify`，启动本地后端 `uv run python main.py` 与前端 `npm.cmd run dev -- --host 127.0.0.1 --port 15173`，后端 `/healthz` 返回 200，前端首页返回 200。
+- 已在真实临时库运行增强后的 `uv run python scripts\verify_runtime_publish_flow.py --timeout 30`，通过；覆盖后台创建页面、公开页面访问、文章发布、分类/标签、RSS、sitemap、robots.txt、前端 SEO 元信息、公开/私有文件访问、文件引用追踪、后台文章/文件列表分页和访问日志。
+- 已在真实临时库运行 `uv run python scripts\verify_public_page_pagination.py --timeout 30`，通过；`/links?page=2`、`/sites?page=2`、`/files?page=2` 在 desktop/mobile 视口均无横向溢出，临时种子数据清理后 `remaining_seed_rows` 为 0。
+- 真实库验收结束后已停止本次启动的后端与前端服务，确认 `18080`、`15173`、`14173` 均未监听；已删除临时数据库与临时上传目录。
+- 本次 M2/M3 验收脚本与文档更新后已运行后端全量 `uv run ruff check .`，通过。
+- 本次 M2/M3 验收脚本与文档更新后已运行后端全量 `uv run pytest`，104 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 和 cookies 相关上游弃用警告。
+- 本次 M2/M3 验收脚本与文档更新后已运行 `npm.cmd run lint`，通过。
+- 本次 M2/M3 验收脚本与文档更新后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - 操作审计闭环补齐后已运行 `uv run ruff check app tests\test_admin_logs_api.py tests\test_admin_content_api.py tests\test_admin_files_api.py tests\test_admin_links_api.py tests\test_admin_settings_api.py`，通过。
 - 操作审计闭环补齐后已运行 `uv run pytest tests\test_admin_logs_api.py tests\test_admin_content_api.py tests\test_admin_files_api.py tests\test_admin_links_api.py tests\test_admin_settings_api.py`，31 个测试通过；仍存在 FastAPI/Starlette TestClient 和 cookies 相关上游弃用警告。
 - 操作审计闭环补齐后已运行 `npm.cmd run lint`，通过。
