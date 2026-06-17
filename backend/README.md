@@ -85,12 +85,13 @@ uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 
 ## 公开订阅与站点地图
 
-公开 RSS 和 sitemap 直接挂在根路径，不要求 `X-Encryption-Session`，方便订阅客户端和搜索引擎抓取：
+公开 RSS、sitemap 和 robots.txt 直接挂在根路径，不要求 `X-Encryption-Session`，方便订阅客户端和搜索引擎抓取：
 
 - `GET /rss.xml`：输出 RSS 2.0，站点标题与描述来自公开站点资料，文章条目只包含已公开且已到发布时间的文章。
 - `GET /sitemap.xml`：输出 sitemap XML，包含首页、文章列表页和已公开文章永久链接。
+- `GET /robots.txt`：允许常规公开内容抓取，屏蔽 `/admin` 与 `/api/admin/`，并声明 sitemap 地址。
 
-两个 XML 端点的绝对 URL 均由 `BLOG_PUBLIC_BASE_URL` 生成；文章条目会使用发布时间、更新时间、SEO 标题、SEO 描述、分类和标签，并写入 `access_logs`。
+这些公开 SEO 端点的绝对 URL 均由 `BLOG_PUBLIC_BASE_URL` 生成；RSS 文章条目会使用发布时间、更新时间、SEO 标题、SEO 描述、分类和标签，并写入 `access_logs`。
 
 ## 后台文件管理
 

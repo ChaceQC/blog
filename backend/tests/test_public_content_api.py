@@ -308,6 +308,26 @@ def test_sitemap_returns_public_post_urls_xml() -> None:
     assert logs.items[0]["access_type"] == "public_sitemap"
 
 
+def test_robots_txt_points_to_sitemap_and_hides_admin_paths() -> None:
+    client = TestClient(app)
+    logs = FakeLogService()
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get("/robots.txt")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "User-agent: *" in response.text
+    assert "Allow: /" in response.text
+    assert "Disallow: /admin" in response.text
+    assert "Disallow: /api/admin/" in response.text
+    assert "Sitemap: http://127.0.0.1:15173/sitemap.xml" in response.text
+    assert logs.items[0]["access_type"] == "public_robots"
+
+
 def test_public_posts_returns_published_post_list() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()

@@ -4,6 +4,10 @@
 
 ### 已完成
 
+- 新增 `GET /robots.txt` 根级公开端点，不要求应用层加密会话；默认允许常规公开内容抓取，屏蔽 `/admin` 与 `/api/admin/`，并声明由 `BLOG_PUBLIC_BASE_URL` 生成的 `/sitemap.xml` 绝对地址。
+- `robots.txt` 访问会写入 `access_logs`，记录为 `public_robots`。
+- 生产 Nginx 站点模板新增根级 `/rss.xml`、`/sitemap.xml`、`/robots.txt` 精确反代规则，避免公开 SEO 文件被前端 SPA `index.html` 兜底吞掉。
+- 同步更新根目录 `README.md`、后端 `README.md`、部署 `README.md` 和 `PROJECT_PLAN.md`，记录 robots.txt 与 Nginx 反代规则，并将下一步调整为公开页面 canonical 与 Open Graph 元信息基线。
 - 重新设计公开文章列表分类标签 UI：顶部状态旁展示分类归属，摘要下方使用低对比 `#标签` 注脚，不再显示“分类 / 标签”字段名前缀。
 - 公开文章列表会过滤“定时发布”这类发布流程词，避免把验证用发布语义当作前台内容标签展示。
 - 补充分类小圆点、标签细下划线与 hover 状态，保持移动端和桌面端都能自然换行。
@@ -103,7 +107,7 @@
 
 ### 进行中
 
-- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目、RSS/sitemap 初版和公开文章列表分类标签展示已形成基础闭环；下一步补齐 `robots.txt` 并检查生产反代规则。
+- M1 内容管理继续推进，文章发布、文件管理、友链公开申请/审核/状态检查、导航条目、RSS/sitemap/robots.txt 初版、生产 Nginx SEO 出口反代和公开文章列表分类标签展示已形成基础闭环；下一步补齐公开页面 canonical 与 Open Graph 元信息基线。
 
 ### 阻塞与风险
 
@@ -120,14 +124,18 @@
 - 公开友链申请入口已接入应用限流，但公开加密会话协商仍会先发生；若后续遇到明显垃圾申请，需要继续评估验证码、黑名单或更细粒度的 URL 去重策略。
 - `check-friend-links` 会访问外部站点，可能受网络波动、对方反爬、HEAD 支持不完整或临时 5xx 影响；本任务只记录状态码和失败，不自动修改人工审核状态。
 - RSS 与 sitemap 当前直接实时查询数据库生成 XML，适合当前规模；后续文章量明显增大或搜索引擎抓取频率升高时，再评估缓存或后台任务刷新静态文件。
-- `/rss.xml` 与 `/sitemap.xml` 的绝对链接依赖 `BLOG_PUBLIC_BASE_URL`，生产部署前必须确认该值为公网 HTTPS 域名。
+- `/rss.xml`、`/sitemap.xml` 与 `/robots.txt` 的绝对链接依赖 `BLOG_PUBLIC_BASE_URL`，生产部署前必须确认该值为公网 HTTPS 域名。
+- 生产 Nginx 已补充根级 SEO 文件反代规则；后续如果改为静态预渲染或 CDN 缓存，需要同步检查这些路径是否仍返回后端生成内容或等价静态文件。
 
 ### 下一步
 
-- `robots.txt` 初版：声明 `/sitemap.xml`，允许常规公开内容抓取，并检查生产 Nginx 对 `/rss.xml`、`/sitemap.xml` 和 `/robots.txt` 的反代规则。
+- 公开页面 canonical 与 Open Graph 元信息基线：文章详情、文章列表、友链和站点目录补齐可分享标题、描述、canonical URL 与基础 `og:*`。
 
 ### 验证
 
+- robots.txt 与 Nginx SEO 反代接入后已运行 `uv run ruff check .`，通过。
+- robots.txt 与 Nginx SEO 反代接入后已运行 `uv run pytest tests\test_public_content_api.py tests\test_content_service.py`，18 个测试通过；仍存在 FastAPI TestClient 依赖的上游弃用警告。
+- robots.txt 与 Nginx SEO 反代接入后已运行 `docker compose -f deploy\docker-compose.yml -f deploy\docker-compose.prod.yml config --quiet`，通过。
 - 公开文章列表分类标签展示调整后已运行 `npm.cmd run lint`，通过。
 - 公开文章列表分类标签展示调整后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
 - RSS/sitemap 初版接入后已运行 `uv run ruff check .`，通过。

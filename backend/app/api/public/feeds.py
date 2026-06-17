@@ -62,6 +62,22 @@ async def sitemap(
     return Response(content=xml, media_type="application/xml")
 
 
+@router.get("/robots.txt")
+async def robots_txt(
+    request: Request,
+    settings: SettingsDependency,
+    logs: LogServiceDependency,
+) -> Response:
+    text = _render_robots(base_url=settings.public_base_url)
+    await _record_feed_access(
+        logs,
+        request=request,
+        access_type="public_robots",
+        count=0,
+    )
+    return Response(content=text, media_type="text/plain; charset=utf-8")
+
+
 def _render_rss(
     *,
     posts: list[Post],
@@ -87,6 +103,20 @@ def _render_rss(
             items,
             "  </channel>",
             "</rss>",
+            "",
+        ],
+    )
+
+
+def _render_robots(*, base_url: str) -> str:
+    normalized_base_url = _normalize_base_url(base_url)
+    return "\n".join(
+        [
+            "User-agent: *",
+            "Allow: /",
+            "Disallow: /admin",
+            "Disallow: /api/admin/",
+            f"Sitemap: {normalized_base_url}/sitemap.xml",
             "",
         ],
     )

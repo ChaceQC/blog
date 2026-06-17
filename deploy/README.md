@@ -56,6 +56,10 @@ journalctl -u blog-cleanup-deleted-files.service
 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml exec -T backend uv run python -m app.cli cleanup-orphan-files --limit 1000 --delete
 ```
 
+## 公开 SEO 入口
+
+Nginx 站点模板会把根级 `/rss.xml`、`/sitemap.xml` 和 `/robots.txt` 精确反代到后端，避免这些公开 SEO 文件被前端 SPA 的 `try_files ... /index.html` 兜底吞掉。`/robots.txt` 会声明 sitemap 地址并屏蔽后台路径，绝对地址由后端 `BLOG_PUBLIC_BASE_URL` 生成。
+
 ## 安全边界
 
 - 公网只开放 Nginx 的 `80/443`。
