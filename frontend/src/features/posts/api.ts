@@ -3,6 +3,7 @@ import { apiGetEncrypted } from '../../api/client.ts'
 import type {
   PublicPostDetail,
   PublicPostListResponse,
+  PublicTaxonomyItem,
   PublicTaxonomyListResponse,
 } from './types.ts'
 
@@ -53,6 +54,14 @@ export function listPublicCategories(
   )
 }
 
+export function getPublicCategory(slug: string): Promise<PublicTaxonomyItem> {
+  return apiGetEncrypted<PublicTaxonomyItem>(
+    `/public/categories/${encodeURIComponent(slug)}`,
+    'content-v1',
+    { encryptionScope: 'public' },
+  )
+}
+
 export function listPublicTags(
   params: { limit?: number; offset?: number } = {},
 ): Promise<PublicTaxonomyListResponse> {
@@ -62,6 +71,14 @@ export function listPublicTags(
 
   return apiGetEncrypted<PublicTaxonomyListResponse>(
     `/public/tags?${query.toString()}`,
+    'content-v1',
+    { encryptionScope: 'public' },
+  )
+}
+
+export function getPublicTag(slug: string): Promise<PublicTaxonomyItem> {
+  return apiGetEncrypted<PublicTaxonomyItem>(
+    `/public/tags/${encodeURIComponent(slug)}`,
     'content-v1',
     { encryptionScope: 'public' },
   )

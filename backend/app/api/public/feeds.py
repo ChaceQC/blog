@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from email.utils import format_datetime
 from html import escape
@@ -52,12 +53,21 @@ async def sitemap(
     logs: LogServiceDependency,
 ) -> Response:
     posts = list(await content.list_public_feed_posts(limit=FEED_POST_LIMIT))
-    xml = _render_sitemap(posts=posts, base_url=settings.public_base_url)
+    categories = list(
+        await content.list_public_categories(limit=FEED_POST_LIMIT, offset=0),
+    )
+    tags = list(await content.list_public_tags(limit=FEED_POST_LIMIT, offset=0))
+    xml = _render_sitemap(
+        posts=posts,
+        categories=categories,
+        tags=tags,
+        base_url=settings.public_base_url,
+    )
     await _record_feed_access(
         logs,
         request=request,
         access_type="public_sitemap",
-        count=len(posts),
+        count=len(posts) + len(categories) + len(tags),
     )
     return Response(content=xml, media_type="application/xml")
 
@@ -144,7 +154,13 @@ def _render_rss_item(*, post: Post, base_url: str) -> str:
     return "\n".join(parts)
 
 
-def _render_sitemap(*, posts: list[Post], base_url: str) -> str:
+def _render_sitemap(
+    *,
+    posts: list[Post],
+    categories: list[Mapping[str, object]],
+    tags: list[Mapping[str, object]],
+    base_url: str,
+) -> str:
     normalized_base_url = _normalize_base_url(base_url)
     latest_post_at = _latest_datetime(posts)
     urls = [
@@ -166,6 +182,26 @@ def _render_sitemap(*, posts: list[Post], base_url: str) -> str:
             priority="0.7",
         )
         for post in posts
+    )
+    urls.extend(
+        _render_sitemap_url(
+            loc=_taxonomy_url(
+                base_url=normalized_base_url,
+                kind="categories",
+                item=category,
+            ),
+            lastmod=latest_post_at,
+            priority="0.6",
+        )
+        for category in categories
+    )
+    urls.extend(
+        _render_sitemap_url(
+            loc=_taxonomy_url(base_url=normalized_base_url, kind="tags", item=tag),
+            lastmod=latest_post_at,
+            priority="0.5",
+        )
+        for tag in tags
     )
     return "\n".join(
         [
@@ -214,6 +250,10 @@ def _site_profile(value: dict[str, Any]) -> dict[str, str]:
 
 def _post_url(*, base_url: str, post: Post) -> str:
     return f"{base_url}/posts/{post.slug}"
+
+
+def _taxonomy_url(*, base_url: str, kind: str, item: Mapping[str, object]) -> str:
+    return f"{base_url}/{kind}/{item['slug']}"
 
 
 def _normalize_base_url(base_url: str) -> str:

@@ -20,6 +20,7 @@ import { PostDetailPage } from '../routes/public/PostDetailPage.tsx'
 import { PostListPage } from '../routes/public/PostListPage.tsx'
 import { PublicLayout } from '../routes/public/PublicLayout.tsx'
 import { SitesPage } from '../routes/public/SitesPage.tsx'
+import { TaxonomyPostListPage } from '../routes/public/TaxonomyPostListPage.tsx'
 
 export const router = createBrowserRouter([
   {
@@ -29,6 +30,8 @@ export const router = createBrowserRouter([
       { index: true, element: <HomePage /> },
       { path: 'posts', element: <PostListPage /> },
       { path: 'posts/:slug', element: <PostDetailPage /> },
+      { path: 'categories/:slug', element: <TaxonomyPostListPage kind="category" /> },
+      { path: 'tags/:slug', element: <TaxonomyPostListPage kind="tag" /> },
       { path: 'links', element: <LinksPage /> },
       { path: 'files', element: <FilesPage /> },
       { path: 'sites', element: <SitesPage /> },

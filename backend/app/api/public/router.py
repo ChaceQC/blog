@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -105,6 +105,51 @@ async def list_public_categories(
     return response
 
 
+@router.get("/categories/{slug}")
+async def get_public_category(
+    slug: Annotated[
+        str,
+        Path(min_length=1, max_length=80, pattern=SLUG_PATTERN),
+    ],
+    request: Request,
+    service: PublicContentServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
+):
+    try:
+        category = await service.get_public_category_by_slug(slug)
+    except ContentNotFoundError as exc:
+        await _record_public_access(
+            logs,
+            request=request,
+            access_type="public_category_detail",
+            status_code=status.HTTP_404_NOT_FOUND,
+            entity_type="category",
+            detail_json={"slug": slug},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="category not found",
+        ) from exc
+
+    response = await encrypted_response(
+        PublicTaxonomyItem.model_validate(category),
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+    await _record_public_access(
+        logs,
+        request=request,
+        access_type="public_category_detail",
+        status_code=status.HTTP_200_OK,
+        entity_type="category",
+        entity_id=int(category["id"]),
+        detail_json={"slug": slug},
+    )
+    return response
+
+
 @router.get("/tags")
 async def list_public_tags(
     request: Request,
@@ -130,6 +175,51 @@ async def list_public_tags(
         status_code=status.HTTP_200_OK,
         entity_type="tag",
         detail_json={"limit": limit, "offset": offset, "count": len(tags)},
+    )
+    return response
+
+
+@router.get("/tags/{slug}")
+async def get_public_tag(
+    slug: Annotated[
+        str,
+        Path(min_length=1, max_length=80, pattern=SLUG_PATTERN),
+    ],
+    request: Request,
+    service: PublicContentServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
+):
+    try:
+        tag = await service.get_public_tag_by_slug(slug)
+    except ContentNotFoundError as exc:
+        await _record_public_access(
+            logs,
+            request=request,
+            access_type="public_tag_detail",
+            status_code=status.HTTP_404_NOT_FOUND,
+            entity_type="tag",
+            detail_json={"slug": slug},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="tag not found",
+        ) from exc
+
+    response = await encrypted_response(
+        PublicTaxonomyItem.model_validate(tag),
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+    await _record_public_access(
+        logs,
+        request=request,
+        access_type="public_tag_detail",
+        status_code=status.HTTP_200_OK,
+        entity_type="tag",
+        entity_id=int(tag["id"]),
+        detail_json={"slug": slug},
     )
     return response
 

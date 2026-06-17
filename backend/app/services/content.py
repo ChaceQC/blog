@@ -42,12 +42,22 @@ class ContentRepositoryProtocol(Protocol):
         offset: int,
     ) -> Sequence[Mapping[str, object]]: ...
 
+    async def get_public_category_by_slug(
+        self,
+        slug: str,
+    ) -> Mapping[str, object] | None: ...
+
     async def list_public_tags(
         self,
         *,
         limit: int,
         offset: int,
     ) -> Sequence[Mapping[str, object]]: ...
+
+    async def get_public_tag_by_slug(
+        self,
+        slug: str,
+    ) -> Mapping[str, object] | None: ...
 
     async def get_post(self, post_id: int) -> Post | None: ...
 
@@ -195,6 +205,12 @@ class ContentService:
             offset=offset,
         )
 
+    async def get_public_category_by_slug(self, slug: str) -> Mapping[str, object]:
+        category = await self.repository.get_public_category_by_slug(slug)
+        if category is None:
+            raise ContentNotFoundError("category not found")
+        return category
+
     async def list_public_tags(
         self,
         *,
@@ -202,6 +218,12 @@ class ContentService:
         offset: int,
     ) -> Sequence[Mapping[str, object]]:
         return await self.repository.list_public_tags(limit=limit, offset=offset)
+
+    async def get_public_tag_by_slug(self, slug: str) -> Mapping[str, object]:
+        tag = await self.repository.get_public_tag_by_slug(slug)
+        if tag is None:
+            raise ContentNotFoundError("tag not found")
+        return tag
 
     async def get_post(self, post_id: int) -> Post:
         post = await self.repository.get_post(post_id)

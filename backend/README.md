@@ -89,12 +89,14 @@ uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 
 - `GET /api/public/posts`：返回已公开且已到发布时间的文章列表，支持通过 `category={slug}` 和 `tag={slug}` 按分类、标签筛选。
 - `GET /api/public/categories`：返回已公开且已到发布时间文章使用到的分类，包含 `id`、`name`、`slug` 和 `post_count`。
+- `GET /api/public/categories/{slug}`：返回单个公开分类归档信息；分类不存在或没有公开文章时返回 404。
 - `GET /api/public/tags`：返回已公开且已到发布时间文章使用到的标签，包含 `id`、`name`、`slug` 和 `post_count`。
+- `GET /api/public/tags/{slug}`：返回单个公开标签归档信息；标签不存在或没有公开文章时返回 404。
 
 公开 RSS、sitemap 和 robots.txt 直接挂在根路径，不要求 `X-Encryption-Session`，方便订阅客户端和搜索引擎抓取：
 
 - `GET /rss.xml`：输出 RSS 2.0，站点标题与描述来自公开站点资料，文章条目只包含已公开且已到发布时间的文章。
-- `GET /sitemap.xml`：输出 sitemap XML，包含首页、文章列表页和已公开文章永久链接。
+- `GET /sitemap.xml`：输出 sitemap XML，包含首页、文章列表页、已公开文章永久链接、分类归档页和标签归档页。
 - `GET /robots.txt`：允许常规公开内容抓取，屏蔽 `/admin` 与 `/api/admin/`，并声明 sitemap 地址。
 
 这些公开 SEO 端点的绝对 URL 均由 `BLOG_PUBLIC_BASE_URL` 生成；RSS 文章条目会使用发布时间、更新时间、SEO 标题、SEO 描述、分类和标签，并写入 `access_logs`。

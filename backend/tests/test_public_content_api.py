@@ -151,12 +151,17 @@ class FakePublicContentService:
         limit: int,
         offset: int,
     ) -> list[dict[str, object]]:
-        assert limit == 2
+        assert limit in {2, 1000}
         assert offset == 0
         return [
             {"id": 1, "name": "技术", "slug": "category-a", "post_count": 3},
             {"id": 2, "name": "随笔", "slug": "category-b", "post_count": 1},
         ]
+
+    async def get_public_category_by_slug(self, slug: str) -> dict[str, object]:
+        if slug != "category-a":
+            raise ContentNotFoundError("category not found")
+        return {"id": 1, "name": "技术", "slug": "category-a", "post_count": 3}
 
     async def list_public_tags(
         self,
@@ -164,12 +169,17 @@ class FakePublicContentService:
         limit: int,
         offset: int,
     ) -> list[dict[str, object]]:
-        assert limit == 2
+        assert limit in {2, 1000}
         assert offset == 0
         return [
             {"id": 1, "name": "FastAPI", "slug": "fastapi", "post_count": 2},
             {"id": 2, "name": "React", "slug": "react", "post_count": 1},
         ]
+
+    async def get_public_tag_by_slug(self, slug: str) -> dict[str, object]:
+        if slug != "fastapi":
+            raise ContentNotFoundError("tag not found")
+        return {"id": 1, "name": "FastAPI", "slug": "fastapi", "post_count": 2}
 
     async def get_public_post_by_slug(self, slug: str) -> object:
         if slug != "public-post":
@@ -343,8 +353,13 @@ def test_sitemap_returns_public_post_urls_xml() -> None:
     assert (
         "<loc>http://127.0.0.1:15173/posts/public-post</loc>" in response.text
     )
+    assert (
+        "<loc>http://127.0.0.1:15173/categories/category-a</loc>" in response.text
+    )
+    assert "<loc>http://127.0.0.1:15173/tags/fastapi</loc>" in response.text
     assert "<lastmod>2026-06-17</lastmod>" in response.text
     assert logs.items[0]["access_type"] == "public_sitemap"
+    assert logs.items[0]["detail_json"] == {"count": 5}
 
 
 def test_robots_txt_points_to_sitemap_and_hides_admin_paths() -> None:
@@ -463,6 +478,54 @@ def test_public_categories_return_encrypted_list() -> None:
     assert logs.items[0]["detail_json"] == {"limit": 2, "offset": 0, "count": 2}
 
 
+def test_public_category_detail_returns_encrypted_item() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_content_service] = (
+        lambda: FakePublicContentService()
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get(
+            "/api/public/categories/category-a",
+            headers={"X-Encryption-Session": "public-session"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload == {
+        "id": 1,
+        "name": "技术",
+        "slug": "category-a",
+        "post_count": 3,
+    }
+    assert logs.items[0]["access_type"] == "public_category_detail"
+    assert logs.items[0]["entity_id"] == 1
+
+
+def test_public_category_detail_returns_404_for_missing_category() -> None:
+    client = TestClient(app)
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_content_service] = (
+        lambda: FakePublicContentService()
+    )
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get("/api/public/categories/missing-category")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "category not found"
+    assert logs.items[0]["status_code"] == 404
+
+
 def test_public_tags_return_encrypted_list() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
@@ -492,6 +555,54 @@ def test_public_tags_return_encrypted_list() -> None:
     }
     assert logs.items[0]["access_type"] == "public_tags_list"
     assert logs.items[0]["detail_json"] == {"limit": 2, "offset": 0, "count": 2}
+
+
+def test_public_tag_detail_returns_encrypted_item() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_content_service] = (
+        lambda: FakePublicContentService()
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get(
+            "/api/public/tags/fastapi",
+            headers={"X-Encryption-Session": "public-session"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload == {
+        "id": 1,
+        "name": "FastAPI",
+        "slug": "fastapi",
+        "post_count": 2,
+    }
+    assert logs.items[0]["access_type"] == "public_tag_detail"
+    assert logs.items[0]["entity_id"] == 1
+
+
+def test_public_tag_detail_returns_404_for_missing_tag() -> None:
+    client = TestClient(app)
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_content_service] = (
+        lambda: FakePublicContentService()
+    )
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get("/api/public/tags/missing-tag")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "tag not found"
+    assert logs.items[0]["status_code"] == 404
 
 
 def test_public_post_detail_returns_html_content() -> None:

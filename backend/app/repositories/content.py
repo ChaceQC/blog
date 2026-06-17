@@ -96,6 +96,23 @@ class ContentRepository:
         )
         return [dict(row) for row in result.mappings().all()]
 
+    async def get_public_category_by_slug(self, slug: str) -> dict[str, object] | None:
+        now = utc_now()
+        result = await self.session.execute(
+            select(
+                Category.id,
+                Category.name,
+                Category.slug,
+                func.count(Post.id).label("post_count"),
+            )
+            .join(PostCategory, PostCategory.category_id == Category.id)
+            .join(Post, Post.id == PostCategory.post_id)
+            .where(Category.slug == slug, *_public_post_filters(now))
+            .group_by(Category.id, Category.name, Category.slug),
+        )
+        row = result.mappings().one_or_none()
+        return dict(row) if row is not None else None
+
     async def list_public_tags(
         self,
         *,
@@ -119,6 +136,23 @@ class ContentRepository:
             .offset(offset),
         )
         return [dict(row) for row in result.mappings().all()]
+
+    async def get_public_tag_by_slug(self, slug: str) -> dict[str, object] | None:
+        now = utc_now()
+        result = await self.session.execute(
+            select(
+                Tag.id,
+                Tag.name,
+                Tag.slug,
+                func.count(Post.id).label("post_count"),
+            )
+            .join(PostTag, PostTag.tag_id == Tag.id)
+            .join(Post, Post.id == PostTag.post_id)
+            .where(Tag.slug == slug, *_public_post_filters(now))
+            .group_by(Tag.id, Tag.name, Tag.slug),
+        )
+        row = result.mappings().one_or_none()
+        return dict(row) if row is not None else None
 
     async def get_post(self, post_id: int) -> Post | None:
         result = await self.session.execute(
