@@ -8,7 +8,7 @@ services:
     env_file:
       - ./env/nginx.env
     environment:
-      NGINX_ENVSUBST_FILTER: "^BLOG_DOMAIN$"
+      NGINX_ENVSUBST_FILTER: "^BLOG_(DOMAIN|SSL_CERTIFICATE|SSL_CERTIFICATE_KEY)$"
     depends_on:
       backend:
         condition: service_started

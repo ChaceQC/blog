@@ -257,80 +257,201 @@ uv run python scripts/verify_public_page_pagination.py
 
 ## 生产部署
 
-生产目标环境为 Linux Debian。推荐部署目录为 `/opt/blog`，以下命令假设代码已位于该目录。
+生产目标环境为 Linux Debian。以下流程假设部署到 `/home/project/blog`，公网域名为 `blog.chacewebsite.cn`，宿主机已有证书 `/etc/nginx/ssl/blog.pem` 和 `/etc/nginx/ssl/blog.key`。
 
-### 1. 准备环境
+### 1. 准备系统依赖
 
-安装 Docker Engine、Docker Compose plugin、Git 和基础工具：
+安装 Git、curl 和 Docker Engine。Debian 软件源中的 `docker.io` 版本可能偏旧，建议按 Docker 官方仓库安装：
 
 ```bash
 sudo apt update
-sudo apt install -y ca-certificates curl gnupg git
+sudo apt install -y ca-certificates curl gnupg git openssl
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
-按 Docker 官方文档安装 Docker Engine 后，确认：
+确认 Docker 和 Compose plugin 可用：
 
 ```bash
 docker --version
 docker compose version
 ```
 
-### 2. 准备配置
+如果当前用户需要直接执行 Docker 命令：
 
 ```bash
-cd /opt/blog
+sudo usermod -aG docker "$USER"
+newgrp docker
+```
+
+### 2. 从 Git 拉取代码
+
+空目录首次部署：
+
+```bash
+sudo mkdir -p /home/project/blog
+sudo chown -R "$USER":"$USER" /home/project/blog
+git clone https://github.com/ChaceQC/blog.git /home/project/blog
+cd /home/project/blog
+```
+
+如果目录里已经是这个仓库，部署前先更新到远端最新版本：
+
+```bash
+cd /home/project/blog
+git fetch origin
+git pull --ff-only
+```
+
+### 3. 准备生产环境变量
+
+```bash
+cd /home/project/blog
 cp deploy/env/backend.env.example deploy/env/backend.env
 cp deploy/env/mysql.env.example deploy/env/mysql.env
 cp deploy/env/nginx.env.example deploy/env/nginx.env
 ```
 
-至少修改以下内容：
-
-- `deploy/env/backend.env`：`BLOG_SECRET_KEY`、`BLOG_DATABASE_URL`、`BLOG_PUBLIC_BASE_URL`、CORS、Trusted Host、Cookie 安全配置、上传目录、Redis 配置；生产环境必须保持 `BLOG_DEBUG=false`、`BLOG_DOCS_ENABLED=false` 和安全 Cookie。
-- `deploy/env/mysql.env`：MySQL root 密码、业务库、业务账号和密码。
-- `deploy/env/nginx.env`：域名、证书路径和反向代理相关配置。
-
-生产 `BLOG_PUBLIC_BASE_URL` 必须使用公网 HTTPS 地址，例如 `https://example.com`。
-
-### 3. 启动服务
+生成两个强密码或密钥：
 
 ```bash
-cd /opt/blog
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build
+openssl rand -hex 32
+openssl rand -base64 32
 ```
 
-查看状态：
+编辑 `deploy/env/mysql.env`，至少替换这两项：
+
+```dotenv
+MYSQL_PASSWORD=替换为数据库业务用户密码
+MYSQL_ROOT_PASSWORD=替换为数据库root密码
+```
+
+编辑 `deploy/env/backend.env`，关键项应与真实域名和 MySQL 密码一致：
+
+```dotenv
+BLOG_SECRET_KEY=替换为32位以上强随机值
+BLOG_PUBLIC_BASE_URL=https://blog.chacewebsite.cn
+BLOG_ALLOWED_HOSTS=["blog.chacewebsite.cn"]
+BLOG_CORS_ORIGINS=["https://blog.chacewebsite.cn"]
+BLOG_DATABASE_URL=mysql+asyncmy://blog_app:替换为数据库业务用户密码@mysql:3306/blog?charset=utf8mb4
+BLOG_ADMIN_COOKIE_SECURE=true
+BLOG_DEBUG=false
+BLOG_DOCS_ENABLED=false
+BLOG_RATE_LIMIT_BACKEND=redis
+BLOG_REDIS_URL=redis://redis:6379/0
+BLOG_UPLOAD_ROOT=/data/blog/uploads
+```
+
+编辑 `deploy/env/nginx.env`：
+
+```dotenv
+BLOG_DOMAIN=blog.chacewebsite.cn
+BLOG_SSL_CERTIFICATE=/etc/nginx/ssl/blog.pem
+BLOG_SSL_CERTIFICATE_KEY=/etc/nginx/ssl/blog.key
+```
+
+### 4. 挂载已有 SSL 证书
+
+基础 Compose 文件默认只挂载项目内的 `deploy/certs/letsencrypt`，如果使用宿主机 `/etc/nginx/ssl` 中的现成证书，需要创建一个本地覆盖文件：
 
 ```bash
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml ps
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml logs -f backend
+cat > deploy/docker-compose.local.yml <<'YAML'
+services:
+  nginx:
+    volumes:
+      - /etc/nginx/ssl:/etc/nginx/ssl:ro
+YAML
 ```
 
-### 4. 执行迁移
+确认宿主机证书文件存在且 Docker 可读：
 
 ```bash
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml exec -T backend uv run alembic upgrade head
+sudo test -r /etc/nginx/ssl/blog.pem
+sudo test -r /etc/nginx/ssl/blog.key
 ```
 
-### 5. 创建管理员
+### 5. 准备数据目录
 
 ```bash
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml exec backend uv run python -m app.cli create-admin --username admin --email admin@example.com --display-name 管理员
+sudo mkdir -p /data/blog/uploads/public /data/blog/backups/mysql /data/blog/backups/uploads
 ```
 
-### 6. 检查公网入口
-
-确认以下地址返回正常：
+后端容器以非 root 用户运行。首次启动后如果上传文件时报权限错误，按容器内实际 UID/GID 修正上传目录：
 
 ```bash
-curl -I https://example.com/
-curl -I https://example.com/api/public/status
-curl -I https://example.com/rss.xml
-curl -I https://example.com/sitemap.xml
-curl https://example.com/robots.txt
+APP_UID=$(docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml exec -T backend id -u)
+APP_GID=$(docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml exec -T backend id -g)
+sudo chown -R "${APP_UID}:${APP_GID}" /data/blog/uploads
 ```
 
-公网安全组只放行 `80/tcp` 和 `443/tcp`。不要将 MySQL `3306`、Redis `6379` 或后端内部端口暴露到公网。
+### 6. 构建并启动服务
+
+先展开检查 Compose 配置：
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml config --quiet
+```
+
+启动服务：
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml up -d --build
+```
+
+查看状态和日志：
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml ps
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml logs -f nginx backend
+```
+
+### 7. 初始化数据库
+
+后端镜像包含 `uv`、Alembic 和应用代码，迁移应在后端容器内执行：
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml exec -T backend uv run alembic upgrade head
+```
+
+创建后台管理员。省略 `--password` 时会交互输入，生产环境不要把密码写进 shell 历史：
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml exec backend uv run python -m app.cli create-admin --username admin --email admin@example.com --display-name 管理员
+```
+
+### 8. 验证公网入口
+
+FastAPI 路由主要是 GET，不要对 API 全部使用 `curl -I`。按下面检查：
+
+```bash
+curl -I https://blog.chacewebsite.cn/
+curl -fsS https://blog.chacewebsite.cn/api/public/status
+curl -fsS https://blog.chacewebsite.cn/rss.xml | head
+curl -fsS https://blog.chacewebsite.cn/sitemap.xml | head
+curl -fsS https://blog.chacewebsite.cn/robots.txt
+```
+
+公网防火墙或安全组只放行 `80/tcp` 和 `443/tcp`。MySQL `3306`、Redis `6379` 和后端 `8000` 只在 Docker 内部网络访问，不要映射到公网。
+
+### 9. 后续更新
+
+每次部署新版本：
+
+```bash
+cd /home/project/blog
+git fetch origin
+git pull --ff-only
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml up -d --build
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml exec -T backend uv run alembic upgrade head
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml ps
+```
 
 ## 运维任务
 
