@@ -15,12 +15,15 @@ const developmentConfig = JSON.parse(
   readFileSync(resolve('config/development.json'), 'utf-8'),
 ) as DevelopmentConfig
 
-export default defineConfig({
-  define: {
-    'import.meta.env.VITE_API_BASE_URL': JSON.stringify(
-      developmentConfig.apiBaseUrl,
-    ),
-  },
+export default defineConfig(({ command }) => ({
+  define:
+    command === 'serve'
+      ? {
+          'import.meta.env.VITE_API_BASE_URL': JSON.stringify(
+            developmentConfig.apiBaseUrl,
+          ),
+        }
+      : {},
   plugins: [react()],
   preview: {
     host: developmentConfig.previewHost,
@@ -32,4 +35,4 @@ export default defineConfig({
     port: developmentConfig.devPort,
     strictPort: true,
   },
-})
+}))
