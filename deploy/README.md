@@ -26,7 +26,7 @@ cp deploy/env/nginx.env.example deploy/env/nginx.env
 
 - `backend.env`：后端应用配置，包括数据库连接、密钥、公开域名、CORS、Trusted Host、Cookie、安全限流、上传目录和 Redis。
 - `mysql.env`：MySQL root 密码、业务库、业务账号和密码。
-- `nginx.env`：Nginx 模板渲染所需的域名、证书路径和代理目标。
+- `nginx.env`：Nginx 模板渲染所需的域名和容器内证书路径。
 
 真实 `*.env`、证书、私钥、备份文件和上传文件不得提交到 Git。
 
@@ -56,6 +56,23 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml co
 - 设置上传体积限制、基础安全响应头和代理头。
 
 后端生产响应也会设置 HSTS 与 Content Security Policy，Nginx 的同类响应头保留为公网入口兜底；部署前仍应确认公网只暴露 Nginx `80/443`，后端、MySQL、Redis 不映射到宿主公网端口。
+
+证书路径由 `deploy/env/nginx.env` 中的 `BLOG_SSL_CERTIFICATE` 和 `BLOG_SSL_CERTIFICATE_KEY` 控制，填写的是 Nginx 容器内路径。基础 Compose 文件默认挂载 `deploy/certs/letsencrypt` 到 `/etc/letsencrypt`；如果使用宿主机已有证书，例如 `/etc/nginx/ssl/blog.pem` 和 `/etc/nginx/ssl/blog.key`，需要额外创建本地覆盖文件挂载证书目录：
+
+```bash
+cat > deploy/docker-compose.local.yml <<'YAML'
+services:
+  nginx:
+    volumes:
+      - /etc/nginx/ssl:/etc/nginx/ssl:ro
+YAML
+```
+
+启动时叠加该文件：
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml up -d --build
+```
 
 生产 `BLOG_PUBLIC_BASE_URL` 必须与 Nginx 对外 HTTPS 域名一致，否则 RSS、sitemap、robots.txt 和签名链接会生成错误的绝对地址。
 

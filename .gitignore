@@ -64,6 +64,7 @@ temp/
 
 # Docker and deployment local overrides
 docker-compose.override.yml
+deploy/docker-compose.local.yml
 deploy/certs/
 deploy/env/*.env
 !deploy/env/*.env.example
