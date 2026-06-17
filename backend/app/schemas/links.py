@@ -7,6 +7,87 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 FriendLinkStatus = Literal["pending", "healthy", "rejected"]
 SiteNavOpenTarget = Literal["blank", "self"]
 SiteNavVisibility = Literal["public", "hidden", "private"]
+GROUP_SLUG_PATTERN = r"^[a-z0-9][a-z0-9_-]*$"
+
+
+class AdminFriendLinkGroupItem(BaseModel):
+    id: int
+    name: str
+    slug: str
+    sort_order: int
+    created_at: datetime | None
+
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+
+class AdminFriendLinkGroupListResponse(BaseModel):
+    items: list[AdminFriendLinkGroupItem]
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class FriendLinkGroupCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    slug: str = Field(min_length=1, max_length=80, pattern=GROUP_SLUG_PATTERN)
+    sort_order: int = Field(default=0, ge=0, le=10000)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class FriendLinkGroupUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    slug: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=80,
+        pattern=GROUP_SLUG_PATTERN,
+    )
+    sort_order: int | None = Field(default=None, ge=0, le=10000)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AdminSiteNavGroupItem(BaseModel):
+    id: int
+    name: str
+    slug: str
+    description: str | None
+    visibility: str
+    sort_order: int
+    created_at: datetime | None
+
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+
+class AdminSiteNavGroupListResponse(BaseModel):
+    items: list[AdminSiteNavGroupItem]
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SiteNavGroupCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    slug: str = Field(min_length=1, max_length=80, pattern=GROUP_SLUG_PATTERN)
+    description: str | None = Field(default=None, max_length=255)
+    visibility: SiteNavVisibility = "public"
+    sort_order: int = Field(default=0, ge=0, le=10000)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SiteNavGroupUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    slug: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=80,
+        pattern=GROUP_SLUG_PATTERN,
+    )
+    description: str | None = Field(default=None, max_length=255)
+    visibility: SiteNavVisibility | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=10000)
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class AdminFriendLinkItem(BaseModel):

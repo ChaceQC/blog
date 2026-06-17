@@ -82,6 +82,10 @@ uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 - `POST /api/admin/posts/{id}/publish`：发布文章，需要 `post:publish` 权限和 `X-CSRF-Token`。
 - `POST /api/admin/posts/preview`：实时渲染文章预览，需要 `post:write` 权限和 `X-CSRF-Token`，只返回渲染后的 HTML，不写入数据库。
 - `GET /api/admin/pages`、`GET /api/admin/pages/{id}`、`POST /api/admin/pages`、`PATCH /api/admin/pages/{id}`：后台页面管理，需要 `page:write` 权限，写操作需要 `X-CSRF-Token`。
+- `GET /api/admin/friend-link-groups`、`POST /api/admin/friend-link-groups`、`PATCH /api/admin/friend-link-groups/{id}`：友链分组管理，需要 `friend_link:review` 权限，写操作需要 `X-CSRF-Token`。
+- `GET /api/admin/friend-links`、`POST /api/admin/friend-links`、`PATCH /api/admin/friend-links/{id}`、`PATCH /api/admin/friend-links/{id}/review`：友链管理和审核，需要 `friend_link:review` 权限，写操作需要 `X-CSRF-Token`。
+- `GET /api/admin/site-groups`、`POST /api/admin/site-groups`、`PATCH /api/admin/site-groups/{id}`：小网站导航分组管理，需要 `site_nav:write` 权限，写操作需要 `X-CSRF-Token`。
+- `GET /api/admin/site-items`、`POST /api/admin/site-items`、`PATCH /api/admin/site-items/{id}`：小网站导航条目管理，需要 `site_nav:write` 权限，写操作需要 `X-CSRF-Token`。
 
 创建、更新和预览请求体必须是 `content-v1` 加密信封，解密后再进行 Pydantic 字段校验。文章创建和更新可传入 `cover_file_id`、`category_names`、`tag_names`、`seo_title`、`seo_description`、`seo_keywords` 和 `published_at`；后端会自动创建缺失的分类/标签并维护 `post_categories`、`post_tags` 关联。`status=scheduled` 且 `published_at` 晚于当前时间时不会进入公开文章列表或详情；`status=published` 会按 `published_at` 或当前时间公开。创建、更新和发布文章时会把封面文件与正文图片引用同步写入 `file_usages`。`content_html` 由 `markdown-it-py` 渲染 Markdown，启用标题、列表、强调、分隔线、表格等常用语法，`mdit-py-plugins` 保留行内与块级 LaTeX 公式节点，再由 `bleach` 统一执行 HTML sanitize。文章 Markdown 内图片应保存为 `/api/public/posts/{slug}/files/{file_id}/render` 稳定引用；公开文章详情会为实际 HTML 图片地址补上 `expires` 与 `token`，后台实时预览会改写为 `/api/admin/files/{id}/preview` 签名地址，裸访问渲染接口会被拒绝。
 

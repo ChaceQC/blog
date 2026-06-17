@@ -3,14 +3,17 @@ import { Navigation, Save } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
+import { AdminSiteNavGroupsPanel } from './AdminSiteNavGroupsPanel.tsx'
 import {
   createAdminSiteNavItem,
+  listAdminSiteNavGroups,
   listAdminSiteNavItems,
   updateAdminSiteNavItem,
 } from './api.ts'
 import { useAuth } from '../auth/useAuth.ts'
 
 import type {
+  AdminSiteNavGroup,
   AdminSiteNavItem,
   AdminSiteNavVisibility,
   SiteNavItemWritePayload,
@@ -19,6 +22,7 @@ import type {
 const LIST_PAGE_SIZE = 6
 
 type SiteNavForm = {
+  groupId: number | null
   title: string
   url: string
   iconUrl: string
@@ -28,6 +32,7 @@ type SiteNavForm = {
 }
 
 const emptySiteForm: SiteNavForm = {
+  groupId: null,
   title: '',
   url: '',
   iconUrl: '',
@@ -47,7 +52,12 @@ export function AdminSiteNavPanel() {
     queryKey: ['admin-site-nav-items'],
     queryFn: listAdminSiteNavItems,
   })
+  const groupsQuery = useQuery({
+    queryKey: ['admin-site-nav-groups'],
+    queryFn: listAdminSiteNavGroups,
+  })
   const sites = useMemo(() => sitesQuery.data?.items ?? [], [sitesQuery.data])
+  const groups = useMemo(() => groupsQuery.data?.items ?? [], [groupsQuery.data])
   const safeListPage = Math.min(
     listPage,
     Math.max(0, Math.ceil(sites.length / LIST_PAGE_SIZE) - 1),
@@ -111,7 +121,10 @@ export function AdminSiteNavPanel() {
         </button>
       </div>
       <p className="empty-state">
-        {siteNotice ?? (sitesQuery.isLoading ? '导航加载中。' : `${sites.length} 个条目`)}
+        {siteNotice ??
+          (sitesQuery.isLoading
+            ? '导航加载中。'
+            : `${sites.length} 个条目 · ${groupLabel(siteForm.groupId, groups) ?? '未分组'}`)}
       </p>
       {sitesQuery.isError ? <p className="form-error">导航条目加载失败</p> : null}
       <div className="admin-stack-list">
@@ -172,6 +185,22 @@ export function AdminSiteNavPanel() {
             />
           </label>
           <label>
+            分组
+            <select
+              onChange={(event) =>
+                updateSiteForm('groupId', parseOptionalId(event.target.value))
+              }
+              value={siteForm.groupId ?? ''}
+            >
+              <option value="">未分组</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             可见性
             <select
               onChange={(event) =>
@@ -222,6 +251,10 @@ export function AdminSiteNavPanel() {
           </div>
         </form>
       ) : null}
+      <AdminSiteNavGroupsPanel
+        groups={groups}
+        isLoading={groupsQuery.isLoading}
+      />
     </section>
   )
 
@@ -235,6 +268,7 @@ export function AdminSiteNavPanel() {
 
 function siteToForm(site: AdminSiteNavItem): SiteNavForm {
   return {
+    groupId: site.group_id,
     title: site.title,
     url: site.url,
     iconUrl: site.icon_url ?? '',
@@ -249,7 +283,7 @@ function siteFormToPayload(
   site: AdminSiteNavItem | null,
 ): SiteNavItemWritePayload {
   return {
-    group_id: site?.group_id ?? null,
+    group_id: form.groupId,
     title: form.title,
     url: form.url,
     icon_url: emptyToNull(form.iconUrl),
@@ -259,6 +293,24 @@ function siteFormToPayload(
     visibility: form.visibility,
     sort_order: Number.isFinite(form.sortOrder) ? form.sortOrder : 0,
   }
+}
+
+function parseOptionalId(value: string): number | null {
+  if (value === '') {
+    return null
+  }
+  const parsed = Number.parseInt(value, 10)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+function groupLabel(
+  groupId: number | null,
+  groups: AdminSiteNavGroup[],
+): string | null {
+  if (groupId === null) {
+    return null
+  }
+  return groups.find((group) => group.id === groupId)?.name ?? null
 }
 
 function emptyToNull(value: string): string | null {

@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app.api.admin.dependencies import (
     get_current_admin_user,
     get_encryption_session_manager,
+    get_link_group_service,
     get_link_service,
     get_log_service,
 )
@@ -13,6 +14,10 @@ from app.core.encryption import EncryptionProfile
 from app.main import app
 from app.schemas.encryption import EncryptedApiRequest, EncryptedApiResponse
 from app.services.auth import AuthenticatedUser
+from app.services.link_groups import (
+    CreateFriendLinkGroupCommand,
+    CreateSiteNavGroupCommand,
+)
 from app.services.links import CreateFriendLinkCommand, CreateSiteNavItemCommand
 
 
@@ -175,6 +180,110 @@ class FakeLinkService:
         )
 
 
+class FakeLinkGroupService:
+    async def list_friend_link_groups(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[object]:
+        assert limit == 1
+        assert offset == 0
+        return [
+            SimpleNamespace(
+                id=1,
+                name="朋友",
+                slug="friends",
+                sort_order=0,
+                created_at=datetime(2026, 6, 16, tzinfo=UTC),
+            ),
+        ]
+
+    async def create_friend_link_group(
+        self,
+        command: CreateFriendLinkGroupCommand,
+    ) -> object:
+        assert command.name == "新友链分组"
+        assert command.slug == "new-friends"
+        return SimpleNamespace(
+            id=2,
+            name=command.name,
+            slug=command.slug,
+            sort_order=command.sort_order,
+            created_at=datetime(2026, 6, 16, tzinfo=UTC),
+        )
+
+    async def update_friend_link_group(
+        self,
+        *,
+        group_id: int,
+        changes: dict[str, object],
+    ) -> object:
+        assert group_id == 1
+        assert changes["name"] == "更新后的友链分组"
+        return SimpleNamespace(
+            id=1,
+            name=changes["name"],
+            slug=changes.get("slug", "friends"),
+            sort_order=changes.get("sort_order", 0),
+            created_at=datetime(2026, 6, 16, tzinfo=UTC),
+        )
+
+    async def list_site_nav_groups(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[object]:
+        assert limit == 1
+        assert offset == 0
+        return [
+            SimpleNamespace(
+                id=1,
+                name="项目",
+                slug="projects",
+                description="个人项目入口",
+                visibility="public",
+                sort_order=0,
+                created_at=datetime(2026, 6, 16, tzinfo=UTC),
+            ),
+        ]
+
+    async def create_site_nav_group(
+        self,
+        command: CreateSiteNavGroupCommand,
+    ) -> object:
+        assert command.name == "新导航分组"
+        assert command.slug == "new-sites"
+        return SimpleNamespace(
+            id=2,
+            name=command.name,
+            slug=command.slug,
+            description=command.description,
+            visibility=command.visibility,
+            sort_order=command.sort_order,
+            created_at=datetime(2026, 6, 16, tzinfo=UTC),
+        )
+
+    async def update_site_nav_group(
+        self,
+        *,
+        group_id: int,
+        changes: dict[str, object],
+    ) -> object:
+        assert group_id == 1
+        assert changes["name"] == "更新后的导航分组"
+        return SimpleNamespace(
+            id=1,
+            name=changes["name"],
+            slug=changes.get("slug", "projects"),
+            description=changes.get("description"),
+            visibility=changes.get("visibility", "public"),
+            sort_order=changes.get("sort_order", 0),
+            created_at=datetime(2026, 6, 16, tzinfo=UTC),
+        )
+
+
 class FakeEncryptionSessionManager:
     def __init__(self, decrypted_payload: dict[str, object] | None = None) -> None:
         self.decrypted_payload = decrypted_payload or {}
@@ -227,6 +336,214 @@ def override_admin_user() -> AuthenticatedUser:
         roles=["super_admin"],
         permissions=["*"],
     )
+
+
+def test_admin_friend_link_groups_use_content_encryption_profile() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_link_group_service] = lambda: FakeLinkGroupService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+
+    try:
+        response = client.get(
+            "/api/admin/friend-link-groups?limit=1",
+            headers={"X-Encryption-Session": "content-session"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload is not None
+    assert manager.payload["items"][0]["slug"] == "friends"
+
+
+def test_create_admin_friend_link_group_decrypts_content_request() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    logs = FakeLogService()
+    manager = FakeEncryptionSessionManager(
+        decrypted_payload={
+            "name": "新友链分组",
+            "slug": "new-friends",
+            "sort_order": 0,
+        },
+    )
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_link_group_service] = lambda: FakeLinkGroupService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.post(
+            "/api/admin/friend-link-groups",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "content-session",
+            },
+            json={
+                "session_id": "content-session",
+                "profile": "content-v1",
+                "nonce": "test-nonce",
+                "ciphertext": "test-ciphertext",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.request_payload is not None
+    assert manager.payload is not None
+    assert manager.payload["name"] == "新友链分组"
+    assert logs.audit_items[0]["action"] == "friend_link_group.create"
+
+
+def test_update_admin_friend_link_group_decrypts_content_request() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    logs = FakeLogService()
+    manager = FakeEncryptionSessionManager(
+        decrypted_payload={
+            "name": "更新后的友链分组",
+            "slug": "friends-updated",
+            "sort_order": 1,
+        },
+    )
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_link_group_service] = lambda: FakeLinkGroupService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.patch(
+            "/api/admin/friend-link-groups/1",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "content-session",
+            },
+            json={
+                "session_id": "content-session",
+                "profile": "content-v1",
+                "nonce": "test-nonce",
+                "ciphertext": "test-ciphertext",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.request_payload is not None
+    assert manager.payload is not None
+    assert manager.payload["name"] == "更新后的友链分组"
+    assert logs.audit_items[0]["action"] == "friend_link_group.update"
+
+
+def test_admin_site_nav_groups_use_content_encryption_profile() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_link_group_service] = lambda: FakeLinkGroupService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+
+    try:
+        response = client.get(
+            "/api/admin/site-groups?limit=1",
+            headers={"X-Encryption-Session": "content-session"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload is not None
+    assert manager.payload["items"][0]["slug"] == "projects"
+
+
+def test_create_admin_site_nav_group_decrypts_content_request() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    logs = FakeLogService()
+    manager = FakeEncryptionSessionManager(
+        decrypted_payload={
+            "name": "新导航分组",
+            "slug": "new-sites",
+            "description": "新的导航入口集合",
+            "visibility": "public",
+            "sort_order": 0,
+        },
+    )
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_link_group_service] = lambda: FakeLinkGroupService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.post(
+            "/api/admin/site-groups",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "content-session",
+            },
+            json={
+                "session_id": "content-session",
+                "profile": "content-v1",
+                "nonce": "test-nonce",
+                "ciphertext": "test-ciphertext",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.request_payload is not None
+    assert manager.payload is not None
+    assert manager.payload["name"] == "新导航分组"
+    assert logs.audit_items[0]["action"] == "site_nav_group.create"
+
+
+def test_update_admin_site_nav_group_decrypts_content_request() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    logs = FakeLogService()
+    manager = FakeEncryptionSessionManager(
+        decrypted_payload={
+            "name": "更新后的导航分组",
+            "description": "更新后的入口集合",
+            "visibility": "hidden",
+        },
+    )
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_link_group_service] = lambda: FakeLinkGroupService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.patch(
+            "/api/admin/site-groups/1",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "content-session",
+            },
+            json={
+                "session_id": "content-session",
+                "profile": "content-v1",
+                "nonce": "test-nonce",
+                "ciphertext": "test-ciphertext",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.request_payload is not None
+    assert manager.payload is not None
+    assert manager.payload["name"] == "更新后的导航分组"
+    assert logs.audit_items[0]["action"] == "site_nav_group.update"
 
 
 def test_admin_friend_links_use_content_encryption_profile() -> None:

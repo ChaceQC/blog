@@ -1970,6 +1970,13 @@ img {
   overflow-wrap: anywhere;
 }
 
+.admin-inline-section {
+  display: grid;
+  gap: 14px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
 .admin-note-list p {
   margin: 0;
   color: var(--color-neutral-7);
@@ -2008,6 +2015,11 @@ img {
   display: grid;
   gap: 4px;
   min-width: 0;
+}
+
+.admin-stack-list--compact {
+  max-height: 220px;
+  overflow: auto;
 }
 
 .settings-preview img {

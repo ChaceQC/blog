@@ -4,6 +4,9 @@
 
 ### 已完成
 
+- 新增后台友链分组和小网站导航分组 API：`GET/POST/PATCH /api/admin/friend-link-groups` 与 `GET/POST/PATCH /api/admin/site-groups`，均使用 `content-v1` 加密响应，写操作使用加密请求体、CSRF、对应后台权限和操作审计。
+- 新增独立的 `LinkGroupRepository` 与 `LinkGroupService`，复用初始迁移中已有的 `friend_link_groups` 与 `site_nav_groups` 表；本次不需要新增 Alembic 迁移。
+- 后台 `/admin/links` 已接入分组管理：友链和导航条目表单可选择分组，页面内可新建和编辑友链分组、导航分组；同时将友链列表/编辑逻辑拆到 `features/links/AdminFriendLinksPanel.tsx`，避免路由页面继续堆积业务逻辑。
 - 新增公开小网站导航跳转入口 `GET /api/public/site-items/{item_id}/visit`：仅公开条目可访问，后端原子递增 `site_nav_items.click_count` 后记录 `public_site_item_visit` 访问日志，并 302 跳转到真实 URL；隐藏、私有或不存在的条目返回 404。
 - 前台站点目录卡片改为使用公开跳转入口，点击会进入后端计数链路，同时按条目 `open_target` 决定当前页或新标签打开。
 - 补充公开站点跳转接口测试，覆盖点击计数跳转成功、访问日志写入和缺失条目 404；同步更新根目录 `README.md`、后端 `README.md` 和 `PROJECT_PLAN.md` 的小网站导航与公开 API 说明。
@@ -162,7 +165,7 @@
 
 ### 进行中
 
-- M1 认证与后台框架已完成；M2 文章与页面、M3 文件管理已完成真实 MySQL 临时库闭环验收。M4 已补齐公开友链申请、友链健康检查和小网站导航点击统计，下一步继续推进友链/导航分组管理和真实运行库验收。
+- M1 认证与后台框架已完成；M2 文章与页面、M3 文件管理已完成真实 MySQL 临时库闭环验收。M4 已补齐公开友链申请、友链健康检查、友链/导航分组管理和小网站导航点击统计，下一步继续推进导航图标/标签编辑和真实运行库验收。
 
 ### 阻塞与风险
 
@@ -188,12 +191,17 @@
 
 ### 下一步
 
-- M4 友链管理：补齐友链分组管理入口，并继续保持审核、排序、公开展示和垃圾申请防护策略。
-- M4 小网站跳转：补齐导航分组管理、图标/标签编辑和公开导航页点击统计的真实库验收。
+- M4 友链管理：使用真实运行库覆盖友链申请、后台分组选择、审核通过/拒绝和公开展示链路。
+- M4 小网站跳转：补齐导航条目的图标/标签编辑体验，并把导航分组、点击统计和移动端布局纳入真实运行库验证。
 - M4 验收：用真实运行库覆盖友链申请、后台审核、公开展示、站点导航展示、点击统计和移动端布局。
 
 ### 验证
 
+- 友链和导航分组管理接入后已运行 `uv run ruff check app tests/test_admin_links_api.py`，通过。
+- 友链和导航分组管理接入后已运行 `uv run pytest tests/test_admin_links_api.py tests/test_public_content_api.py`，35 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- 友链和导航分组管理接入后已运行 `npm.cmd run lint`，通过。
+- 友链和导航分组管理接入后已运行 `npm.cmd run build`，通过；仍存在 KaTeX 引入后的 Vite 主 chunk 超过 500KB 提示。
+- 友链和导航分组管理接入后已运行 `git diff --check`，未发现空白或行尾问题。
 - 小网站导航点击统计接入后已运行 `uv run pytest tests/test_public_content_api.py tests/test_admin_links_api.py`，29 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 小网站导航点击统计接入后已运行 `npm.cmd run lint`，通过。
 - 真实运行库脚本扩展后已运行 `uv run ruff check scripts\verify_runtime_publish_flow.py`，通过。

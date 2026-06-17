@@ -2,6 +2,46 @@ export type AdminFriendLinkStatus = 'pending' | 'healthy' | 'rejected'
 export type AdminSiteNavOpenTarget = 'blank' | 'self'
 export type AdminSiteNavVisibility = 'public' | 'hidden' | 'private'
 
+export type AdminFriendLinkGroup = {
+  id: number
+  name: string
+  slug: string
+  sort_order: number
+  created_at: string | null
+}
+
+export type AdminFriendLinkGroupListResponse = {
+  items: AdminFriendLinkGroup[]
+}
+
+export type FriendLinkGroupWritePayload = {
+  name: string
+  slug: string
+  sort_order: number
+}
+
+export type AdminSiteNavGroup = {
+  id: number
+  name: string
+  slug: string
+  description: string | null
+  visibility: AdminSiteNavVisibility
+  sort_order: number
+  created_at: string | null
+}
+
+export type AdminSiteNavGroupListResponse = {
+  items: AdminSiteNavGroup[]
+}
+
+export type SiteNavGroupWritePayload = {
+  name: string
+  slug: string
+  description: string | null
+  visibility: AdminSiteNavVisibility
+  sort_order: number
+}
+
 export type AdminFriendLink = {
   id: number
   group_id: number | null

@@ -361,10 +361,16 @@ deploy/
 | GET | `/api/admin/files/{id}/download` | 后台鉴权下载公开或私有文件 |
 | GET | `/api/admin/files/{id}/preview` | 生成后台预览签名图片 |
 | DELETE | `/api/admin/files/{id}` | 删除文件 |
+| GET | `/api/admin/friend-link-groups` | 友链分组管理 |
+| POST | `/api/admin/friend-link-groups` | 创建友链分组 |
+| PATCH | `/api/admin/friend-link-groups/{id}` | 更新友链分组 |
 | GET | `/api/admin/friend-links` | 友链管理 |
 | POST | `/api/admin/friend-links` | 创建友链 |
 | PATCH | `/api/admin/friend-links/{id}` | 更新友链 |
 | PATCH | `/api/admin/friend-links/{id}/review` | 审核友链 |
+| GET | `/api/admin/site-groups` | 小网站跳转分组管理 |
+| POST | `/api/admin/site-groups` | 创建小网站跳转分组 |
+| PATCH | `/api/admin/site-groups/{id}` | 更新小网站跳转分组 |
 | GET | `/api/admin/site-items` | 小网站跳转条目管理 |
 | POST | `/api/admin/site-items` | 创建小网站跳转条目 |
 | PATCH | `/api/admin/site-items/{id}` | 更新小网站跳转条目 |
@@ -984,8 +990,8 @@ v1 可以暂缓：
 
 M0 已完成仓库结构、后端数据模型、初始迁移、前端骨架和部署骨架。M1 已完成后端认证接口、当前用户接口、Cookie 会话、CSRF、权限菜单、初始管理员创建方式、前端登录页、后台日志查询、后台关键写操作审计记录、登录与加密协商入口限流、Redis 共享限流适配器、`sensitive-v1` / `content-v1` 应用层加密协商基础与 Repository、Service、Policy 边界。M2 文章与页面、M3 文件管理已通过真实 MySQL 临时库闭环验收：脚本覆盖后台创建页面、公开页面访问、文章发布、分类/标签、RSS、sitemap、robots.txt、公开 SEO 元信息、公开/私有文件访问、文件引用追踪、后台文章/文件列表分页和公开页移动端无横向溢出。当前进入 M4 友链与小网站跳转完善阶段：
 
-1. M4 友链管理：完善友链分组、审核、排序、公开展示和必要的垃圾申请防护策略。
-2. M4 小网站跳转：完善导航分组、条目、图标、公开导航页和点击统计。
+1. M4 友链管理：友链分组、审核、排序、公开展示和公开申请防护策略已形成后台入口，后续继续用真实运行库覆盖完整审核链路。
+2. M4 小网站跳转：导航分组、条目、公开导航页和点击统计已形成后台入口，后续补齐图标/标签编辑体验并纳入真实运行库验证。
 3. M4 验收：用真实运行库覆盖友链申请、后台审核、公开展示、站点导航展示、点击统计和移动端布局。
 4. 持续维护 M2/M3 回归脚本，后续文章、页面或文件链路有变更时同步扩展真实库验证覆盖。
 
