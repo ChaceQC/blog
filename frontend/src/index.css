@@ -3410,6 +3410,24 @@ img {
 
   .recent-item {
     grid-template-columns: 36px minmax(0, 1fr);
+    column-gap: 14px;
+    row-gap: 4px;
+  }
+
+  .recent-item__index {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .recent-item__body,
+  .recent-item time {
+    grid-column: 2;
+  }
+
+  .recent-item time {
+    justify-self: start;
+    text-align: left;
+    font-size: 0.82rem;
   }
 
   .recent-item > svg {
