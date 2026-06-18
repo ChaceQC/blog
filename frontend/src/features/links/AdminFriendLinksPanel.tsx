@@ -10,6 +10,7 @@ import { useMemo, useState } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
 import { StatusBadge } from '../../components/StatusBadge.tsx'
+import { usePagedItems } from '../../hooks/usePagedItems.ts'
 import { invalidateFriendLinkCaches } from '../../app/queryInvalidation.ts'
 import { safePreviewHref } from '../../utils/urls.ts'
 import { useAuth } from '../auth/useAuth.ts'
@@ -59,17 +60,10 @@ export function AdminFriendLinksPanel() {
   })
   const links = useMemo(() => linksQuery.data?.items ?? [], [linksQuery.data])
   const groups = useMemo(() => groupsQuery.data?.items ?? [], [groupsQuery.data])
-  const safeListPage = Math.min(
+  const { safePage: safeListPage, visibleItems: visibleLinks } = usePagedItems(
+    links,
     listPage,
-    Math.max(0, Math.ceil(links.length / LIST_PAGE_SIZE) - 1),
-  )
-  const visibleLinks = useMemo(
-    () =>
-      links.slice(
-        safeListPage * LIST_PAGE_SIZE,
-        safeListPage * LIST_PAGE_SIZE + LIST_PAGE_SIZE,
-      ),
-    [links, safeListPage],
+    LIST_PAGE_SIZE,
   )
   const selectedLink = useMemo(
     () =>

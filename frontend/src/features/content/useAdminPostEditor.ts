@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 
 import { invalidatePostCaches } from '../../app/queryInvalidation.ts'
+import { usePagedItems } from '../../hooks/usePagedItems.ts'
 import { hasAdminPermission } from '../auth/permissions.ts'
 import {
   createAdminPost,
@@ -47,13 +48,10 @@ export function useAdminPostEditor(session: AuthSession | null) {
     queryFn: listAdminPosts,
   })
   const posts = postsQuery.data?.items ?? emptyPosts
-  const safeListPage = Math.min(
+  const { safePage: safeListPage, visibleItems: visiblePosts } = usePagedItems(
+    posts,
     listPage,
-    Math.max(0, Math.ceil(posts.length / LIST_PAGE_SIZE) - 1),
-  )
-  const visiblePosts = posts.slice(
-    safeListPage * LIST_PAGE_SIZE,
-    safeListPage * LIST_PAGE_SIZE + LIST_PAGE_SIZE,
+    LIST_PAGE_SIZE,
   )
   const selectedPost = useMemo(
     () => posts.find((post) => post.id === selectedId) ?? null,

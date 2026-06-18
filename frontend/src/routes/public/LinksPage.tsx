@@ -1,6 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { type FormEvent, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 
 import { ListPager } from '../../components/ListPager.tsx'
 import { FriendLinkList } from '../../features/links/FriendLinkList.tsx'
@@ -10,6 +9,8 @@ import {
 } from '../../features/links/api.ts'
 import type { FriendLink } from '../../features/links/types.ts'
 import { usePageSeo } from '../../features/seo/usePageSeo.ts'
+import { useQueryPage } from '../../hooks/useQueryPage.ts'
+import { nullableText } from '../../utils/formText.ts'
 
 const PAGE_SIZE = 8
 const pageDescription = '保留一些值得常去看看的站点，也给彼此留一个入口。'
@@ -23,8 +24,7 @@ const emptyApplicationForm = {
 }
 
 export function LinksPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const page = parsePage(searchParams.get('page'))
+  const { page, setPage } = useQueryPage()
   const [applicationForm, setApplicationForm] = useState(emptyApplicationForm)
   const [applicationNotice, setApplicationNotice] = useState<string | null>(null)
   const {
@@ -165,28 +165,4 @@ export function LinksPage() {
     })
   }
 
-  function setPage(nextPage: number) {
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current)
-      if (nextPage <= 0) {
-        next.delete('page')
-      } else {
-        next.set('page', String(nextPage + 1))
-      }
-      return next
-    })
-  }
-}
-
-function nullableText(value: string): string | null {
-  const trimmed = value.trim()
-  return trimmed ? trimmed : null
-}
-
-function parsePage(value: string | null) {
-  const page = Number.parseInt(value ?? '1', 10)
-  if (Number.isNaN(page) || page < 1) {
-    return 0
-  }
-  return page - 1
 }

@@ -7,6 +7,8 @@ import {
   listAdminPages,
   updateAdminPage,
 } from './api.ts'
+import { usePagedItems } from '../../hooks/usePagedItems.ts'
+import { nullableText } from '../../utils/formText.ts'
 
 import type { AuthSession } from '../auth/session.ts'
 import type { AdminPageItem, PageFormPayload } from './types.ts'
@@ -38,13 +40,10 @@ export function useAdminPageEditor(session: AuthSession | null) {
     queryFn: listAdminPages,
   })
   const pages = pagesQuery.data?.items ?? emptyPages
-  const safeListPage = Math.min(
+  const { safePage: safeListPage, visibleItems: visiblePages } = usePagedItems(
+    pages,
     listPage,
-    Math.max(0, Math.ceil(pages.length / LIST_PAGE_SIZE) - 1),
-  )
-  const visiblePages = pages.slice(
-    safeListPage * LIST_PAGE_SIZE,
-    safeListPage * LIST_PAGE_SIZE + LIST_PAGE_SIZE,
+    LIST_PAGE_SIZE,
   )
   const selectedPage = useMemo(
     () => pages.find((page) => page.id === selectedId) ?? null,
@@ -134,9 +133,4 @@ function normalizePageForm(form: PageFormPayload): PageFormPayload {
     seo_title: nullableText(form.seo_title),
     seo_description: nullableText(form.seo_description),
   }
-}
-
-function nullableText(value: string | null): string | null {
-  const trimmed = value?.trim() ?? ''
-  return trimmed === '' ? null : trimmed
 }

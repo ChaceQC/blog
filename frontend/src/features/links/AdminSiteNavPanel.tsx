@@ -4,10 +4,12 @@ import { useMemo, useState } from 'react'
 
 import { invalidateSiteNavCaches } from '../../app/queryInvalidation.ts'
 import { ListPager } from '../../components/ListPager.tsx'
+import { usePagedItems } from '../../hooks/usePagedItems.ts'
 import {
   siteNavTagsPayload,
   siteNavTagsToText,
 } from '../sites/siteNavTags.ts'
+import { emptyToNull, parseOptionalId } from '../../utils/formText.ts'
 import { safePreviewHref } from '../../utils/urls.ts'
 import { AdminSiteNavGroupsPanel } from './AdminSiteNavGroupsPanel.tsx'
 import {
@@ -69,17 +71,10 @@ export function AdminSiteNavPanel() {
   })
   const sites = useMemo(() => sitesQuery.data?.items ?? [], [sitesQuery.data])
   const groups = useMemo(() => groupsQuery.data?.items ?? [], [groupsQuery.data])
-  const safeListPage = Math.min(
+  const { safePage: safeListPage, visibleItems: visibleSites } = usePagedItems(
+    sites,
     listPage,
-    Math.max(0, Math.ceil(sites.length / LIST_PAGE_SIZE) - 1),
-  )
-  const visibleSites = useMemo(
-    () =>
-      sites.slice(
-        safeListPage * LIST_PAGE_SIZE,
-        safeListPage * LIST_PAGE_SIZE + LIST_PAGE_SIZE,
-      ),
-    [safeListPage, sites],
+    LIST_PAGE_SIZE,
   )
   const selectedSite = useMemo(
     () =>
@@ -365,14 +360,6 @@ function siteFormToPayload(form: SiteNavForm): SiteNavItemWritePayload {
   }
 }
 
-function parseOptionalId(value: string): number | null {
-  if (value === '') {
-    return null
-  }
-  const parsed = Number.parseInt(value, 10)
-  return Number.isNaN(parsed) ? null : parsed
-}
-
 function groupLabel(
   groupId: number | null,
   groups: AdminSiteNavGroup[],
@@ -381,9 +368,4 @@ function groupLabel(
     return null
   }
   return groups.find((group) => group.id === groupId)?.name ?? null
-}
-
-function emptyToNull(value: string): string | null {
-  const trimmed = value.trim()
-  return trimmed === '' ? null : trimmed
 }

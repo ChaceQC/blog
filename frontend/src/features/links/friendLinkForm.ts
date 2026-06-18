@@ -5,6 +5,9 @@ import type {
   FriendLinkWritePayload,
 } from './types.ts'
 import { formatChinaDateTime } from '../../utils/datetime.ts'
+import { emptyToNull } from '../../utils/formText.ts'
+
+export { parseOptionalId } from '../../utils/formText.ts'
 
 export const linkStatusLabels = {
   healthy: '通过',
@@ -60,14 +63,6 @@ export function formToPayload(form: FriendLinkForm): FriendLinkWritePayload {
   }
 }
 
-export function parseOptionalId(value: string): number | null {
-  if (value === '') {
-    return null
-  }
-  const parsed = Number.parseInt(value, 10)
-  return Number.isNaN(parsed) ? null : parsed
-}
-
 export function groupLabel(
   groupId: number | null,
   groups: AdminFriendLinkGroup[],
@@ -93,11 +88,6 @@ export function formatFriendLinkCheck(link: AdminFriendLink): string {
     return `正常 ${link.last_status_code} · ${formatDateTime(link.last_checked_at)}`
   }
   return `异常 ${link.last_status_code ?? '未知'} · ${formatDateTime(link.last_checked_at)}`
-}
-
-function emptyToNull(value: string): string | null {
-  const trimmed = value.trim()
-  return trimmed === '' ? null : trimmed
 }
 
 export function formatDateTime(value: string | null): string {

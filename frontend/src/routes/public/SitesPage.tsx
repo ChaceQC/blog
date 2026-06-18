@@ -1,19 +1,18 @@
 import { useQuery } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
 
 import { ListPager } from '../../components/ListPager.tsx'
 import { usePageSeo } from '../../features/seo/usePageSeo.ts'
 import { SiteGrid } from '../../features/sites/SiteGrid.tsx'
 import { listPublicSiteItems } from '../../features/sites/api.ts'
 import type { SiteItem } from '../../features/sites/types.ts'
+import { useQueryPage } from '../../hooks/useQueryPage.ts'
 
 const PAGE_SIZE = 6
 const pageDescription = '把常用入口收在一页，需要的时候不用到处翻。'
 const emptySites: SiteItem[] = []
 
 export function SitesPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const page = parsePage(searchParams.get('page'))
+  const { page, setPage } = useQueryPage()
   const {
     data: sitesData,
     isError,
@@ -61,23 +60,4 @@ export function SitesPage() {
     </div>
   )
 
-  function setPage(nextPage: number) {
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current)
-      if (nextPage <= 0) {
-        next.delete('page')
-      } else {
-        next.set('page', String(nextPage + 1))
-      }
-      return next
-    })
-  }
-}
-
-function parsePage(value: string | null) {
-  const page = Number.parseInt(value ?? '1', 10)
-  if (Number.isNaN(page) || page < 1) {
-    return 0
-  }
-  return page - 1
 }

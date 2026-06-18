@@ -3,6 +3,7 @@ import { FolderPlus, Save } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { invalidateSiteNavCaches } from '../../app/queryInvalidation.ts'
+import { emptyToNull } from '../../utils/formText.ts'
 import { createAdminSiteNavGroup, updateAdminSiteNavGroup } from './api.ts'
 import { useAuth } from '../auth/useAuth.ts'
 
@@ -220,9 +221,4 @@ function formToPayload(form: SiteNavGroupForm): SiteNavGroupWritePayload {
     visibility: form.visibility,
     sort_order: Number.isFinite(form.sortOrder) ? form.sortOrder : 0,
   }
-}
-
-function emptyToNull(value: string): string | null {
-  const trimmed = value.trim()
-  return trimmed === '' ? null : trimmed
 }

@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { MoreHorizontal, X } from 'lucide-react'
 import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 import { ListPager } from '../../components/ListPager.tsx'
+import { usePagedItems } from '../../hooks/usePagedItems.ts'
+import { useQueryPage } from '../../hooks/useQueryPage.ts'
 import { usePageSeo } from '../seo/usePageSeo.ts'
 import {
   getPublicCategory,
@@ -30,8 +32,7 @@ type PublicPostArchivePageProps = {
 }
 
 export function PublicPostArchivePage({ taxonomy }: PublicPostArchivePageProps) {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const page = parsePage(searchParams.get('page'))
+  const { page, searchParams, setPage } = useQueryPage()
   const queryCategorySlug = searchParams.get('category') ?? undefined
   const queryTagSlug = searchParams.get('tag') ?? undefined
   const categorySlug =
@@ -93,18 +94,6 @@ export function PublicPostArchivePage({ taxonomy }: PublicPostArchivePageProps) 
     path: seoPath,
     keywords: '文章,写作,博客,分类,标签',
   })
-
-  function setPage(nextPage: number) {
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current)
-      if (nextPage <= 0) {
-        next.delete('page')
-      } else {
-        next.set('page', String(nextPage + 1))
-      }
-      return next
-    })
-  }
 
   return (
     <div className="page-flow page-flow--narrow">
@@ -189,14 +178,10 @@ function TaxonomyFilterGroup({
   const sortedItems = [...items].sort(compareTaxonomyItems)
   const visibleItems = sortedItems.slice(0, TAXONOMY_VISIBLE_LIMIT)
   const hiddenItems = sortedItems.slice(TAXONOMY_VISIBLE_LIMIT)
-  const modalTotalPages = Math.max(
-    1,
-    Math.ceil(hiddenItems.length / TAXONOMY_MODAL_PAGE_SIZE),
-  )
-  const currentModalPage = Math.min(modalPage, modalTotalPages - 1)
-  const modalItems = hiddenItems.slice(
-    currentModalPage * TAXONOMY_MODAL_PAGE_SIZE,
-    currentModalPage * TAXONOMY_MODAL_PAGE_SIZE + TAXONOMY_MODAL_PAGE_SIZE,
+  const { safePage: currentModalPage, visibleItems: modalItems } = usePagedItems(
+    hiddenItems,
+    modalPage,
+    TAXONOMY_MODAL_PAGE_SIZE,
   )
   const hiddenActive = hiddenItems.some((item) => item.slug === activeSlug)
 
@@ -338,14 +323,6 @@ function TaxonomyModal({
       </div>
     </div>
   )
-}
-
-function parsePage(value: string | null) {
-  const page = Number.parseInt(value ?? '1', 10)
-  if (Number.isNaN(page) || page < 1) {
-    return 0
-  }
-  return page - 1
 }
 
 function filterLabel(

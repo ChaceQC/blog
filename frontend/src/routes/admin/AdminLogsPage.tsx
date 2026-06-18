@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
+import { usePagedItems } from '../../hooks/usePagedItems.ts'
 import {
   listAccessLogs,
   listAuditLogs,
@@ -83,17 +84,10 @@ export function AdminLogsPage() {
     loginLogsQuery.data,
     securityEventsQuery.data,
   ])
-  const safeListPage = Math.min(
+  const { safePage: safeListPage, visibleItems: visibleRecords } = usePagedItems(
+    records,
     listPage,
-    Math.max(0, Math.ceil(records.length / LIST_PAGE_SIZE) - 1),
-  )
-  const visibleRecords = useMemo(
-    () =>
-      records.slice(
-        safeListPage * LIST_PAGE_SIZE,
-        safeListPage * LIST_PAGE_SIZE + LIST_PAGE_SIZE,
-      ),
-    [records, safeListPage],
+    LIST_PAGE_SIZE,
   )
   const selectedRecord =
     records.find((record) => logKey(record) === selectedKey) ??

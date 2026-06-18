@@ -1,7 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Download } from 'lucide-react'
 import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 
 import { ListPager } from '../../components/ListPager.tsx'
 import {
@@ -10,6 +9,7 @@ import {
 } from '../../features/files/api.ts'
 import type { PublicFileItem } from '../../features/files/types.ts'
 import { usePageSeo } from '../../features/seo/usePageSeo.ts'
+import { useQueryPage } from '../../hooks/useQueryPage.ts'
 import { formatChinaDateTime } from '../../utils/datetime.ts'
 
 const PAGE_SIZE = 8
@@ -17,8 +17,7 @@ const pageDescription = '公开发布的附件会显示在这里。'
 const emptyFiles: PublicFileItem[] = []
 
 export function FilesPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const page = parsePage(searchParams.get('page'))
+  const { page, setPage } = useQueryPage()
   const [notice, setNotice] = useState<string | null>(null)
   const filesQuery = useQuery({
     queryKey: ['public-files', page],
@@ -98,17 +97,6 @@ export function FilesPage() {
     </div>
   )
 
-  function setPage(nextPage: number) {
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current)
-      if (nextPage <= 0) {
-        next.delete('page')
-      } else {
-        next.set('page', String(nextPage + 1))
-      }
-      return next
-    })
-  }
 }
 
 function formatFileSize(sizeBytes: number): string {
@@ -119,12 +107,4 @@ function formatFileSize(sizeBytes: number): string {
     return `${(sizeBytes / 1024).toFixed(1)} KB`
   }
   return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`
-}
-
-function parsePage(value: string | null) {
-  const page = Number.parseInt(value ?? '1', 10)
-  if (Number.isNaN(page) || page < 1) {
-    return 0
-  }
-  return page - 1
 }

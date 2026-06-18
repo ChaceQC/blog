@@ -3,6 +3,7 @@ import {
   apiTimestampFromChinaDateTimeInput,
   localDateTimeInputFromApi,
 } from '../../utils/datetime.ts'
+import { nullableText } from '../../utils/formText.ts'
 
 export const emptyPostForm: PostFormPayload = {
   title: '',
@@ -86,11 +87,6 @@ export function formatPostSaveError(error: unknown): string {
     return '保存失败：文章表单内容不完整'
   }
   return error.message || '保存失败'
-}
-
-function nullableText(value: string | null): string | null {
-  const trimmed = value?.trim() ?? ''
-  return trimmed === '' ? null : trimmed
 }
 
 export function labelsToInput(labels: string[]): string {

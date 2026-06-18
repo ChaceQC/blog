@@ -5,6 +5,7 @@ import { useMemo, useState, type ChangeEvent } from 'react'
 import { ListPager } from '../../components/ListPager.tsx'
 import { AdminModal } from '../../components/AdminModal.tsx'
 import { invalidateFileCaches } from '../../app/queryInvalidation.ts'
+import { usePagedItems } from '../../hooks/usePagedItems.ts'
 import {
   deleteAdminFile,
   getAdminFileTemporaryUrl,
@@ -65,17 +66,10 @@ export function AdminFilesPage() {
     },
     [filesQuery.data, query],
   )
-  const safeListPage = Math.min(
+  const { safePage: safeListPage, visibleItems: visibleFiles } = usePagedItems(
+    files,
     listPage,
-    Math.max(0, Math.ceil(files.length / LIST_PAGE_SIZE) - 1),
-  )
-  const visibleFiles = useMemo(
-    () =>
-      files.slice(
-        safeListPage * LIST_PAGE_SIZE,
-        safeListPage * LIST_PAGE_SIZE + LIST_PAGE_SIZE,
-      ),
-    [files, safeListPage],
+    LIST_PAGE_SIZE,
   )
   const selectedFile =
     selectedId === null ? null : files.find((file) => file.id === selectedId) ?? null
