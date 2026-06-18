@@ -1,12 +1,12 @@
 from fastapi import APIRouter, HTTPException, Request, status
 
-from app.api.admin.dependencies import (
+from app.api.dependencies import (
     EncryptionSessionManagerDependency,
     LogServiceDependency,
     RateLimitServiceDependency,
     SettingsDependency,
 )
-from app.api.admin.limits import enforce_rate_limit
+from app.api.limits import enforce_rate_limit
 from app.core.request import client_ip
 from app.schemas.encryption import (
     CreateEncryptionSessionRequest,

@@ -3,13 +3,14 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from app.api.admin.dependencies import (
+from app.api.dependencies import (
+    get_content_service,
     get_encryption_session_manager,
+    get_link_service,
     get_log_service,
     get_rate_limit_service,
     get_setting_service,
 )
-from app.api.public.router import get_public_content_service, get_public_link_service
 from app.core.encryption import EncryptionProfile
 from app.main import app
 from app.schemas.encryption import (
@@ -475,7 +476,7 @@ def test_public_encryption_session_rejects_active_session_overflow() -> None:
 def test_rss_feed_returns_public_posts_xml() -> None:
     client = TestClient(app)
     logs = FakeLogService()
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicContentService()
     )
     app.dependency_overrides[get_setting_service] = lambda: FakeSettingService()
@@ -504,7 +505,7 @@ def test_rss_feed_returns_public_posts_xml() -> None:
 def test_rss_feed_returns_304_without_access_log_for_matching_etag() -> None:
     client = TestClient(app)
     logs = FakeLogService()
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicContentService()
     )
     app.dependency_overrides[get_setting_service] = lambda: FakeSettingService()
@@ -530,7 +531,7 @@ def test_rss_feed_returns_304_without_access_log_for_matching_etag() -> None:
 def test_sitemap_returns_public_post_urls_xml() -> None:
     client = TestClient(app)
     logs = FakeLogService()
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicContentService()
     )
     app.dependency_overrides[get_log_service] = lambda: logs
@@ -584,7 +585,7 @@ def test_public_posts_returns_published_post_list() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicContentService()
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
@@ -618,7 +619,7 @@ def test_public_posts_returns_published_post_list() -> None:
 
 def test_public_posts_validate_session_before_query() -> None:
     client = TestClient(app)
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: ExplodingPublicContentService()
     )
     app.dependency_overrides[get_encryption_session_manager] = (
@@ -650,7 +651,7 @@ def test_public_posts_accept_category_and_tag_filters() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicContentService()
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
@@ -677,7 +678,7 @@ def test_public_categories_return_encrypted_list() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicContentService()
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
@@ -708,7 +709,7 @@ def test_public_category_detail_returns_encrypted_item() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicContentService()
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
@@ -738,7 +739,7 @@ def test_public_category_detail_returns_404_for_missing_category() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicContentService()
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
@@ -761,7 +762,7 @@ def test_public_tags_return_encrypted_list() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicContentService()
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
@@ -792,7 +793,7 @@ def test_public_tag_detail_returns_encrypted_item() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicContentService()
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
@@ -822,7 +823,7 @@ def test_public_tag_detail_returns_404_for_missing_tag() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicContentService()
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
@@ -845,7 +846,7 @@ def test_public_post_detail_returns_html_content() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicContentService()
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
@@ -1000,7 +1001,7 @@ def test_public_post_detail_returns_404_for_missing_post() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicContentService()
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
@@ -1023,7 +1024,7 @@ def test_public_page_detail_returns_html_content() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicContentService()
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
@@ -1056,7 +1057,7 @@ def test_public_page_detail_returns_404_for_missing_page() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
-    app.dependency_overrides[get_public_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicContentService()
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
@@ -1080,7 +1081,7 @@ def test_public_friend_links_return_encrypted_list() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
-    app.dependency_overrides[get_public_link_service] = lambda: FakePublicLinkService()
+    app.dependency_overrides[get_link_service] = lambda: FakePublicLinkService()
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
     app.dependency_overrides[get_log_service] = lambda: logs
 
@@ -1112,7 +1113,7 @@ def test_public_friend_link_application_decrypts_content_request() -> None:
         },
     )
     logs = FakeLogService()
-    app.dependency_overrides[get_public_link_service] = lambda: FakePublicLinkService()
+    app.dependency_overrides[get_link_service] = lambda: FakePublicLinkService()
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
     app.dependency_overrides[get_log_service] = lambda: logs
     app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
@@ -1144,7 +1145,7 @@ def test_public_site_items_return_encrypted_list() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
-    app.dependency_overrides[get_public_link_service] = lambda: FakePublicLinkService()
+    app.dependency_overrides[get_link_service] = lambda: FakePublicLinkService()
     app.dependency_overrides[get_encryption_session_manager] = lambda: manager
     app.dependency_overrides[get_log_service] = lambda: logs
 
@@ -1168,7 +1169,7 @@ def test_public_site_items_return_encrypted_list() -> None:
 def test_public_site_item_visit_records_click_and_redirects() -> None:
     client = TestClient(app)
     logs = FakeLogService()
-    app.dependency_overrides[get_public_link_service] = lambda: FakePublicLinkService()
+    app.dependency_overrides[get_link_service] = lambda: FakePublicLinkService()
     app.dependency_overrides[get_log_service] = lambda: logs
 
     try:
@@ -1189,7 +1190,7 @@ def test_public_site_item_visit_records_click_and_redirects() -> None:
 def test_public_site_item_visit_returns_404_for_missing_item() -> None:
     client = TestClient(app)
     logs = FakeLogService()
-    app.dependency_overrides[get_public_link_service] = lambda: FakePublicLinkService()
+    app.dependency_overrides[get_link_service] = lambda: FakePublicLinkService()
     app.dependency_overrides[get_log_service] = lambda: logs
 
     try:

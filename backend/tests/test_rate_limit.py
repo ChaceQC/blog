@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from app.api.admin.limits import enforce_rate_limit
+from app.api.limits import enforce_rate_limit
 from app.services.rate_limit import (
     InMemoryRateLimiter,
     RateLimitExceeded,

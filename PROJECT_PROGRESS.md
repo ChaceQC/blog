@@ -28,10 +28,10 @@
 - 生产配置新增启动期校验：生产环境 `BLOG_PUBLIC_BASE_URL` 必须是带 host 的 `https://` 绝对地址，防止 RSS、sitemap、robots.txt 和 canonical/签名链接因误配置输出危险或畸形 URL。
 - 宿主机 Nginx 维护脚本补齐：`backup_mysql.sh`、`restore_mysql.sh` 和 `upgrade_backend_db.sh` 支持通过 `COMPOSE_EXTRA_FILES` 追加服务器本地覆盖文件，文档已同步 `deploy/docker-compose.local.yml` 示例。
 - 前端后台友链和站点导航编辑页的“打开链接”预览按钮新增协议白名单，只允许 `http/https/mailto/站内路径`，未保存的危险协议会降级为 `#`。
+- 修复公开 API 反向依赖后台模块的架构问题：新增 `backend/app/api/dependencies.py`、`backend/app/api/encrypted_response.py` 和 `backend/app/api/limits.py` 作为 admin/public 共享 API 层，公开路由不再从 `app.api.admin.*` 引入服务依赖、加密响应或限流工具；后台路由也改为直接引用共享层，`app.api.admin.dependencies` 仅保留后台认证、CSRF、权限和后台专属依赖。
 
 ### 待修复清单
 
-- P1：公开 API 反向依赖后台模块，边界不够干净。`backend/app/api/public/router.py` 与 `backend/app/api/public/files.py` 直接引用 `app.api.admin.dependencies`、`app.api.admin.encrypted_response` 和 `app.api.admin.limits`，导致公开层依赖后台层；后续应抽出 `app/api/dependencies.py`、`app/api/encrypted_response.py` 或 `app/api/shared/`，让 admin/public 都依赖共享层。
 - P1：`FileService` 过度集中，职责过多。`backend/app/services/files.py` 同时承载上传校验、存储、清理、下载鉴权、缩略图、临时 token、文章图片 URL 签名和 HTML URL 重写；后续应拆分为 `FileUploadService`、`FileAccessService`、`ThumbnailService`、`FileCleanupService`、`FileTokenSigner` 和 `ArticleAssetUrlSigner` 等更小职责。
 - P1：公开路由文件过大，路由层承担了太多业务装配。`backend/app/api/public/router.py` 同时处理分类、标签、文章、页面、站点资料、友链、站点导航、访问日志、加密响应、DTO 转换和 URL 签名；后续应拆为 `public/posts.py`、`public/taxonomy.py`、`public/settings.py`、`public/links.py`，并把响应装配移动到 assembler/presenter 层。
 - P2：Service 返回 ORM 模型，API 层直接做 DTO 装配。`ContentService`、`FileService`、`LinkService` 等服务仍返回 SQLAlchemy 模型或带 ORM 透传包装对象，API 再调用 `model_validate`；后续应逐步引入 read model / domain DTO，至少先覆盖公开读取接口，降低 API、Service、Repository 对 ORM 的共同耦合。

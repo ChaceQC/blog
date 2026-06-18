@@ -6,8 +6,8 @@ import pytest
 from fastapi.testclient import TestClient
 from redis import Redis
 
-from app.api.admin.dependencies import (
-    get_auth_service,
+from app.api.admin.dependencies import get_auth_service
+from app.api.dependencies import (
     get_encryption_session_manager,
     get_log_service,
     get_rate_limit_service,

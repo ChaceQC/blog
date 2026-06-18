@@ -3,9 +3,9 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from app.api.admin.dependencies import (
+from app.api.admin.dependencies import get_current_admin_user
+from app.api.dependencies import (
     get_content_service,
-    get_current_admin_user,
     get_encryption_session_manager,
     get_log_service,
 )

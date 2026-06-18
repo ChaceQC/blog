@@ -3,11 +3,8 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from app.api.admin.dependencies import (
-    get_current_admin_user,
-    get_encryption_session_manager,
-    get_log_service,
-)
+from app.api.admin.dependencies import get_current_admin_user
+from app.api.dependencies import get_encryption_session_manager, get_log_service
 from app.core.encryption import EncryptionProfile
 from app.main import app
 from app.schemas.encryption import EncryptedApiResponse

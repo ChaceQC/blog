@@ -1,24 +1,22 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.admin.dependencies import (
+from app.api.dependencies import (
+    ContentServiceDependency,
     EncryptionSessionManagerDependency,
     FileServiceDependency,
     LogServiceDependency,
     SettingsDependency,
 )
-from app.api.admin.encrypted_response import (
+from app.api.encrypted_response import (
     encrypted_response,
     validate_encryption_session,
 )
-from app.core.database import get_session
 from app.core.encryption import EncryptionProfile
 from app.core.request import client_ip
 from app.core.urls import public_file_download_url
-from app.repositories.content import ContentRepository
 from app.schemas.encryption import EncryptedApiResponse
 from app.schemas.files import (
     AdminFileTemporaryUrlResponse,
@@ -26,7 +24,7 @@ from app.schemas.files import (
     PublicFileListResponse,
 )
 from app.schemas.pagination import PAGE_OFFSET_MAX
-from app.services.content import ContentNotFoundError, ContentService
+from app.services.content import ContentNotFoundError
 from app.services.files import (
     FileAccessDeniedError,
     InvalidFileAccessTokenError,
@@ -38,17 +36,7 @@ router = APIRouter(tags=["public-files"])
 TemporaryFileToken = Annotated[str, Query(min_length=16)]
 ArticleImageToken = Annotated[str | None, Query(min_length=16)]
 ArticleImageExpires = Annotated[int | None, Query(ge=1)]
-SessionDependency = Annotated[AsyncSession, Depends(get_session)]
-
-
-def get_public_file_content_service(session: SessionDependency) -> ContentService:
-    return ContentService(repository=ContentRepository(session))
-
-
-PublicFileContentServiceDependency = Annotated[
-    ContentService,
-    Depends(get_public_file_content_service),
-]
+PublicFileContentServiceDependency = ContentServiceDependency
 
 
 @router.get("/files", response_model=EncryptedApiResponse)

@@ -4,17 +4,7 @@ from app.api.admin.dependencies import (
     AdminCsrfDependency,
     AuthServiceDependency,
     CurrentAdminUserDependency,
-    EncryptionSessionManagerDependency,
-    LogServiceDependency,
-    RateLimitServiceDependency,
-    SettingsDependency,
 )
-from app.api.admin.encrypted_response import (
-    encrypted_response,
-    require_encryption_session,
-    validate_encryption_session,
-)
-from app.api.admin.limits import enforce_rate_limit
 from app.api.admin.session import (
     clear_admin_session_cookies,
     create_csrf_token,
@@ -23,6 +13,18 @@ from app.api.admin.session import (
     session_response,
     set_admin_session_cookies,
 )
+from app.api.dependencies import (
+    EncryptionSessionManagerDependency,
+    LogServiceDependency,
+    RateLimitServiceDependency,
+    SettingsDependency,
+)
+from app.api.encrypted_response import (
+    encrypted_response,
+    require_encryption_session,
+    validate_encryption_session,
+)
+from app.api.limits import enforce_rate_limit
 from app.core.encryption import EncryptionProfile
 from app.core.request import client_ip
 from app.schemas.auth import (

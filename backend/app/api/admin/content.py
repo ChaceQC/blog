@@ -6,13 +6,15 @@ from pydantic import BaseModel, ValidationError
 from app.api.admin.audit import record_admin_audit
 from app.api.admin.dependencies import (
     AdminCsrfDependency,
+    require_admin_permission,
+)
+from app.api.dependencies import (
     ContentServiceDependency,
     EncryptionSessionManagerDependency,
     LogServiceDependency,
     SettingsDependency,
-    require_admin_permission,
 )
-from app.api.admin.encrypted_response import (
+from app.api.encrypted_response import (
     decrypt_encrypted_request,
     encrypted_response,
 )

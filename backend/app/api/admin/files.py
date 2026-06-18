@@ -16,13 +16,15 @@ from fastapi.responses import FileResponse
 from app.api.admin.audit import record_admin_audit
 from app.api.admin.dependencies import (
     AdminCsrfDependency,
+    require_admin_permission,
+)
+from app.api.dependencies import (
     EncryptionSessionManagerDependency,
     FileServiceDependency,
     LogServiceDependency,
     SettingsDependency,
-    require_admin_permission,
 )
-from app.api.admin.encrypted_response import encrypted_response
+from app.api.encrypted_response import encrypted_response
 from app.core.encryption import EncryptionProfile
 from app.core.request import client_ip
 from app.core.urls import public_file_download_url

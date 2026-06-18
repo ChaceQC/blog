@@ -2,8 +2,8 @@
 
 from fastapi.testclient import TestClient
 
-from app.api.admin.dependencies import (
-    get_current_admin_user,
+from app.api.admin.dependencies import get_current_admin_user
+from app.api.dependencies import (
     get_encryption_session_manager,
     get_log_service,
     get_setting_service,

@@ -5,8 +5,10 @@ from fastapi.testclient import TestClient
 
 from app.api.admin.dependencies import (
     get_current_admin_user,
-    get_encryption_session_manager,
     get_link_group_service,
+)
+from app.api.dependencies import (
+    get_encryption_session_manager,
     get_link_service,
     get_log_service,
 )

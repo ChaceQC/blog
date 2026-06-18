@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Request, status
 from fastapi.responses import Response
 
-from app.api.admin.dependencies import (
+from app.api.dependencies import (
     LogServiceDependency,
     SettingsDependency,
     SettingServiceDependency,

@@ -1,33 +1,31 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
+from fastapi import APIRouter, HTTPException, Path, Query, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ValidationError
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.admin.dependencies import (
+from app.api.dependencies import (
+    ContentServiceDependency,
     EncryptionSessionManagerDependency,
+    LinkServiceDependency,
     LogServiceDependency,
     RateLimitServiceDependency,
     SettingsDependency,
     SettingServiceDependency,
 )
-from app.api.admin.encrypted_response import (
+from app.api.encrypted_response import (
     decrypt_encrypted_request,
     encrypted_response,
     validate_encryption_session,
 )
-from app.api.admin.limits import enforce_rate_limit
+from app.api.limits import enforce_rate_limit
 from app.api.public.encryption import router as public_encryption_router
 from app.api.public.files import router as public_files_router
-from app.core.database import get_session
 from app.core.encryption import EncryptionProfile
 from app.core.request import client_ip
 from app.core.url_validation import validate_public_href, validate_public_image_src
 from app.models.content import Post
 from app.providers.markdown import count_words
-from app.repositories.content import ContentRepository
-from app.repositories.links import LinkRepository
 from app.schemas.content import (
     SLUG_PATTERN,
     PublicPageDetail,
@@ -48,11 +46,10 @@ from app.schemas.links import (
 )
 from app.schemas.pagination import PAGE_OFFSET_MAX
 from app.schemas.settings import PublicSiteProfileResponse
-from app.services.content import ContentNotFoundError, ContentService
+from app.services.content import ContentNotFoundError
 from app.services.files import create_article_render_token, sign_article_render_urls
 from app.services.links import (
     CreateFriendLinkCommand,
-    LinkService,
     SiteNavItemNotFoundError,
 )
 from app.services.rate_limit import RateLimitRule
@@ -60,7 +57,6 @@ from app.services.rate_limit import RateLimitRule
 router = APIRouter(tags=["public"])
 router.include_router(public_encryption_router)
 router.include_router(public_files_router)
-SessionDependency = Annotated[AsyncSession, Depends(get_session)]
 SITE_PROFILE_TEXT_LIMITS = {
     "title": 80,
     "owner": 80,
@@ -74,22 +70,8 @@ SITE_PROFILE_SOCIAL_LABEL_MAX_LENGTH = 80
 SITE_PROFILE_SOCIAL_URL_MAX_LENGTH = 1000
 
 
-def get_public_content_service(session: SessionDependency) -> ContentService:
-    return ContentService(repository=ContentRepository(session))
-
-
-def get_public_link_service(session: SessionDependency) -> LinkService:
-    return LinkService(repository=LinkRepository(session))
-
-
-PublicContentServiceDependency = Annotated[
-    ContentService,
-    Depends(get_public_content_service),
-]
-PublicLinkServiceDependency = Annotated[
-    LinkService,
-    Depends(get_public_link_service),
-]
+PublicContentServiceDependency = ContentServiceDependency
+PublicLinkServiceDependency = LinkServiceDependency
 
 
 @router.get("/status")

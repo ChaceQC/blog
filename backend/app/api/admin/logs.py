@@ -3,11 +3,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request
 
 from app.api.admin.dependencies import (
-    EncryptionSessionManagerDependency,
-    LogServiceDependency,
     require_admin_permission,
 )
-from app.api.admin.encrypted_response import encrypted_response
+from app.api.dependencies import (
+    EncryptionSessionManagerDependency,
+    LogServiceDependency,
+)
+from app.api.encrypted_response import encrypted_response
 from app.core.encryption import EncryptionProfile
 from app.schemas.encryption import EncryptedApiResponse
 from app.schemas.logs import (

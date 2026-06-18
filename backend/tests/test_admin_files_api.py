@@ -3,14 +3,14 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from app.api.admin.dependencies import (
-    get_current_admin_user,
+from app.api.admin.dependencies import get_current_admin_user
+from app.api.dependencies import (
+    get_content_service,
     get_encryption_session_manager,
     get_file_service,
     get_log_service,
-    get_settings,
 )
-from app.api.public.files import get_public_file_content_service
+from app.core.config import get_settings
 from app.core.encryption import EncryptionProfile
 from app.main import app
 from app.schemas.encryption import EncryptedApiResponse
@@ -595,7 +595,7 @@ def test_post_file_render_uses_article_image_endpoint(tmp_path) -> None:
     app.dependency_overrides[get_file_service] = (
         lambda: FakeDownloadFileService(file_path)
     )
-    app.dependency_overrides[get_public_file_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicFileContentService()
     )
     app.dependency_overrides[get_log_service] = lambda: logs
@@ -630,7 +630,7 @@ def test_post_file_thumbnail_uses_article_image_endpoint(tmp_path) -> None:
     app.dependency_overrides[get_file_service] = (
         lambda: FakeDownloadFileService(file_path)
     )
-    app.dependency_overrides[get_public_file_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicFileContentService()
     )
     app.dependency_overrides[get_log_service] = lambda: logs
@@ -665,7 +665,7 @@ def test_post_file_render_rejects_missing_image_token(tmp_path) -> None:
     app.dependency_overrides[get_file_service] = (
         lambda: FakeDownloadFileService(file_path)
     )
-    app.dependency_overrides[get_public_file_content_service] = (
+    app.dependency_overrides[get_content_service] = (
         lambda: FakePublicFileContentService()
     )
     app.dependency_overrides[get_log_service] = lambda: logs
