@@ -33,6 +33,7 @@ from app.schemas.files import (
     AdminFileTemporaryUrlResponse,
     FileVisibility,
 )
+from app.schemas.pagination import PAGE_OFFSET_MAX
 from app.services.auth import AuthenticatedUser
 from app.services.encryption import EncryptionSessionManager
 from app.services.files import (
@@ -69,7 +70,7 @@ async def list_files(
     service: FileServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
     limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
     files = await service.list_files(limit=limit, offset=offset)
     return await _files_response(

@@ -8,6 +8,7 @@
 deploy/
   docker-compose.yml          基础服务编排
   docker-compose.prod.yml     生产端口、重启策略和资源限制覆盖
+  docker-compose.host-nginx.yml 宿主机 Nginx 覆盖，只把后端绑定到 127.0.0.1:18080
   env/                        环境变量模板
   nginx/                      Nginx 镜像、主配置和站点模板
   scripts/                    MySQL 备份、恢复和证书续期脚本
@@ -45,6 +46,18 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml co
 ```
 
 公网只应暴露 Nginx 的 `80/443`。MySQL、Redis 和后端应用端口应只在 Docker 网络内访问。
+
+如果使用宿主机 Nginx，而不是 Compose 内置 Nginx 服务，启动后端/MySQL/Redis 时叠加 `deploy/docker-compose.host-nginx.yml`：
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml up -d --build backend mysql redis
+```
+
+该覆盖文件只把后端绑定到 `127.0.0.1:18080`，供宿主机 Nginx 反向代理；MySQL 和 Redis 仍留在 Docker 内网。Compose 内置 Nginx 服务被放入 `bundled-nginx` profile，默认不会启动。若仍要从 Nginx 镜像复制 React 静态文件到宿主机站点目录，需要单独构建镜像：
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml build nginx
+```
 
 ## Nginx
 

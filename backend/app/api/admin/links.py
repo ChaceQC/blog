@@ -37,6 +37,7 @@ from app.schemas.links import (
     SiteNavItemCreateRequest,
     SiteNavItemUpdateRequest,
 )
+from app.schemas.pagination import PAGE_OFFSET_MAX
 from app.services.auth import AuthenticatedUser
 from app.services.encryption import EncryptionSessionManager
 from app.services.link_groups import (
@@ -73,7 +74,7 @@ async def list_friend_link_groups(
     service: LinkGroupServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
     limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
     groups = await service.list_friend_link_groups(limit=limit, offset=offset)
     return await _links_response(
@@ -189,7 +190,7 @@ async def list_site_nav_groups(
     service: LinkGroupServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
     limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
     groups = await service.list_site_nav_groups(limit=limit, offset=offset)
     return await _links_response(
@@ -311,7 +312,7 @@ async def list_friend_links(
     service: LinkServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
     limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
     links = await service.list_friend_links(limit=limit, offset=offset)
     return await _links_response(
@@ -482,7 +483,7 @@ async def list_site_nav_items(
     service: LinkServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
     limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
     items = await service.list_site_nav_items(limit=limit, offset=offset)
     return await _links_response(

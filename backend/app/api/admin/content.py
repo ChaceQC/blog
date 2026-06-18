@@ -30,6 +30,7 @@ from app.schemas.content import (
     PostUpdateRequest,
 )
 from app.schemas.encryption import EncryptedApiRequest, EncryptedApiResponse
+from app.schemas.pagination import PAGE_OFFSET_MAX
 from app.services.auth import AuthenticatedUser
 from app.services.content import (
     ContentFileNotFoundError,
@@ -67,7 +68,7 @@ async def list_posts(
     service: ContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
     limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
     posts = await service.list_posts(limit=limit, offset=offset)
     return await _content_response(
@@ -276,7 +277,7 @@ async def list_pages(
     service: ContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
     limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
     pages = await service.list_pages(limit=limit, offset=offset)
     return await _content_response(

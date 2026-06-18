@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from typing import Any, Protocol
 
+from app.core.config import get_settings
 from app.models.log import AccessLog, AuditLog, LoginLog, SecurityEvent
 
 
@@ -162,6 +163,11 @@ class LogService:
         entity_id: int | None = None,
         detail_json: dict[str, Any] | None = None,
     ) -> None:
+        if should_skip_access_log(
+            access_type=access_type,
+            status_code=status_code,
+        ):
+            return
         await self.repository.record_access_log(
             access_type=access_type,
             method=method,
@@ -174,3 +180,10 @@ class LogService:
             detail_json=detail_json,
         )
         await self.repository.commit()
+
+
+def should_skip_access_log(*, access_type: str, status_code: int) -> bool:
+    return (
+        200 <= status_code < 400
+        and access_type in set(get_settings().access_log_skip_types)
+    )

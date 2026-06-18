@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     rate_limit_backend: Literal["memory", "redis"] = "memory"
     redis_url: str | None = None
     redis_key_prefix: str = "blog:rate-limit"
+    trusted_proxy_hosts: list[str] = Field(default_factory=list)
     admin_cookie_secure: bool = False
     admin_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
 
@@ -51,6 +52,24 @@ class Settings(BaseSettings):
     cors_origins: list[str]
     docs_enabled: bool
     readiness_check_database: bool
+    access_log_skip_types: list[str] = Field(
+        default_factory=lambda: [
+            "public_categories_list",
+            "public_category_detail",
+            "public_tags_list",
+            "public_tag_detail",
+            "public_posts_list",
+            "public_post_detail",
+            "public_page_detail",
+            "public_site_profile",
+            "public_friend_links_list",
+            "public_site_items_list",
+            "public_files_list",
+            "public_file_download",
+            "post_image_render",
+            "post_image_thumbnail",
+        ],
+    )
     upload_root: Path
     upload_max_size_bytes: int = Field(default=20 * 1024 * 1024, ge=1024)
     file_temporary_url_expire_seconds: int = Field(default=300, ge=30, le=3600)
@@ -64,6 +83,13 @@ class Settings(BaseSettings):
         env_prefix="BLOG_",
         case_sensitive=False,
     )
+
+    @field_validator("database_url")
+    @classmethod
+    def normalize_database_url(cls, value: str) -> str:
+        if value.startswith("mysql+asyncmy://"):
+            return value.replace("mysql+asyncmy://", "mysql+aiomysql://", 1)
+        return value
 
     @model_validator(mode="after")
     def validate_production_safety(self) -> "Settings":

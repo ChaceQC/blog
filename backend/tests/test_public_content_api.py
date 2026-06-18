@@ -98,6 +98,17 @@ class FakeEncryptionSessionManager:
         self.request_payload = payload
         return self.decrypted_payload
 
+    async def validate_session(
+        self,
+        *,
+        session_id: str,
+        scope: str,
+        profile: EncryptionProfile,
+    ) -> None:
+        assert session_id == "public-session"
+        assert scope == "public"
+        assert profile == EncryptionProfile.CONTENT
+
 
 class FakeLogService:
     def __init__(self) -> None:
@@ -264,6 +275,14 @@ class FakePublicContentService:
             seo_description="关于这个长期写作空间",
             updated_at=datetime(2026, 6, 17, tzinfo=UTC),
         )
+
+
+class ExplodingPublicContentService:
+    async def list_public_posts(self, **_: object) -> list[object]:
+        raise AssertionError("public content service should not be called")
+
+    async def count_public_posts(self, **_: object) -> int:
+        raise AssertionError("public content service should not be called")
 
 
 class FakePublicLinkService:
@@ -593,7 +612,37 @@ def test_public_posts_returns_published_post_list() -> None:
         "/api/public/posts/public-post/files/1/thumbnail?expires="
         in str(manager.payload["items"][0]["cover_image_url"])
     )
-    assert logs.items[0]["access_type"] == "public_posts_list"
+    assert logs.items == []
+
+
+def test_public_posts_validate_session_before_query() -> None:
+    client = TestClient(app)
+    app.dependency_overrides[get_public_content_service] = (
+        lambda: ExplodingPublicContentService()
+    )
+    app.dependency_overrides[get_encryption_session_manager] = (
+        lambda: FakeEncryptionSessionManager()
+    )
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+
+    try:
+        response = client.get("/api/public/posts?limit=1")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "missing encryption session"
+
+
+def test_public_posts_rejects_oversized_offset() -> None:
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/public/posts?limit=1&offset=10001",
+        headers={"X-Encryption-Session": "public-session"},
+    )
+
+    assert response.status_code == 422
 
 
 def test_public_posts_accept_category_and_tag_filters() -> None:
@@ -619,14 +668,7 @@ def test_public_posts_accept_category_and_tag_filters() -> None:
     assert manager.payload is not None
     assert manager.payload["total"] == 1
     assert manager.payload["items"][0]["slug"] == "public-post"
-    assert logs.items[0]["detail_json"] == {
-        "limit": 2,
-        "offset": 0,
-        "count": 1,
-        "total": 1,
-        "category": "category-a",
-        "tag": "fastapi",
-    }
+    assert logs.items == []
 
 
 def test_public_categories_return_encrypted_list() -> None:
@@ -656,8 +698,7 @@ def test_public_categories_return_encrypted_list() -> None:
         "slug": "category-a",
         "post_count": 3,
     }
-    assert logs.items[0]["access_type"] == "public_categories_list"
-    assert logs.items[0]["detail_json"] == {"limit": 2, "offset": 0, "count": 2}
+    assert logs.items == []
 
 
 def test_public_category_detail_returns_encrypted_item() -> None:
@@ -686,20 +727,24 @@ def test_public_category_detail_returns_encrypted_item() -> None:
         "slug": "category-a",
         "post_count": 3,
     }
-    assert logs.items[0]["access_type"] == "public_category_detail"
-    assert logs.items[0]["entity_id"] == 1
+    assert logs.items == []
 
 
 def test_public_category_detail_returns_404_for_missing_category() -> None:
     client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
     app.dependency_overrides[get_public_content_service] = (
         lambda: FakePublicContentService()
     )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
     app.dependency_overrides[get_log_service] = lambda: logs
 
     try:
-        response = client.get("/api/public/categories/missing-category")
+        response = client.get(
+            "/api/public/categories/missing-category",
+            headers={"X-Encryption-Session": "public-session"},
+        )
     finally:
         app.dependency_overrides.clear()
 
@@ -735,8 +780,7 @@ def test_public_tags_return_encrypted_list() -> None:
         "slug": "fastapi",
         "post_count": 2,
     }
-    assert logs.items[0]["access_type"] == "public_tags_list"
-    assert logs.items[0]["detail_json"] == {"limit": 2, "offset": 0, "count": 2}
+    assert logs.items == []
 
 
 def test_public_tag_detail_returns_encrypted_item() -> None:
@@ -765,20 +809,24 @@ def test_public_tag_detail_returns_encrypted_item() -> None:
         "slug": "fastapi",
         "post_count": 2,
     }
-    assert logs.items[0]["access_type"] == "public_tag_detail"
-    assert logs.items[0]["entity_id"] == 1
+    assert logs.items == []
 
 
 def test_public_tag_detail_returns_404_for_missing_tag() -> None:
     client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
     app.dependency_overrides[get_public_content_service] = (
         lambda: FakePublicContentService()
     )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
     app.dependency_overrides[get_log_service] = lambda: logs
 
     try:
-        response = client.get("/api/public/tags/missing-tag")
+        response = client.get(
+            "/api/public/tags/missing-tag",
+            headers={"X-Encryption-Session": "public-session"},
+        )
     finally:
         app.dependency_overrides.clear()
 
@@ -821,8 +869,7 @@ def test_public_post_detail_returns_html_content() -> None:
     assert manager.payload["category_names"] == ["技术"]
     assert manager.payload["tag_names"] == ["FastAPI", "React"]
     assert "token=" in str(manager.payload["content_html"])
-    assert logs.items[0]["access_type"] == "public_post_detail"
-    assert logs.items[0]["entity_id"] == 1
+    assert logs.items == []
 
 
 def test_public_site_profile_returns_encrypted_setting() -> None:
@@ -848,7 +895,7 @@ def test_public_site_profile_returns_encrypted_setting() -> None:
     assert manager.payload["owner"] == "恬妡"
     assert manager.payload["musings"][0]["content"] == "后台碎念"
     assert manager.payload["social_links"][0]["label"] == "GitHub"
-    assert logs.items[0]["access_type"] == "public_site_profile"
+    assert logs.items == []
 
 
 def test_public_site_profile_filters_unsafe_social_href() -> None:
@@ -891,14 +938,19 @@ def test_public_site_profile_filters_unsafe_social_href() -> None:
 
 def test_public_post_detail_returns_404_for_missing_post() -> None:
     client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
     app.dependency_overrides[get_public_content_service] = (
         lambda: FakePublicContentService()
     )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
     app.dependency_overrides[get_log_service] = lambda: logs
 
     try:
-        response = client.get("/api/public/posts/missing-post")
+        response = client.get(
+            "/api/public/posts/missing-post",
+            headers={"X-Encryption-Session": "public-session"},
+        )
     finally:
         app.dependency_overrides.clear()
 
@@ -936,20 +988,24 @@ def test_public_page_detail_returns_html_content() -> None:
         "seo_description": "关于这个长期写作空间",
         "updated_at": "2026-06-17T00:00:00Z",
     }
-    assert logs.items[0]["access_type"] == "public_page_detail"
-    assert logs.items[0]["entity_id"] == 3
+    assert logs.items == []
 
 
 def test_public_page_detail_returns_404_for_missing_page() -> None:
     client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
     app.dependency_overrides[get_public_content_service] = (
         lambda: FakePublicContentService()
     )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
     app.dependency_overrides[get_log_service] = lambda: logs
 
     try:
-        response = client.get("/api/public/pages/missing-page")
+        response = client.get(
+            "/api/public/pages/missing-page",
+            headers={"X-Encryption-Session": "public-session"},
+        )
     finally:
         app.dependency_overrides.clear()
 
@@ -980,7 +1036,7 @@ def test_public_friend_links_return_encrypted_list() -> None:
     assert manager.payload is not None
     assert manager.payload["total"] == 1
     assert manager.payload["items"][0]["name"] == "ChaceQC"
-    assert logs.items[0]["access_type"] == "public_friend_links_list"
+    assert logs.items == []
 
 
 def test_public_friend_link_application_decrypts_content_request() -> None:
@@ -1043,7 +1099,7 @@ def test_public_site_items_return_encrypted_list() -> None:
     assert manager.payload is not None
     assert manager.payload["total"] == 1
     assert manager.payload["items"][0]["title"] == "GitHub 仓库"
-    assert logs.items[0]["access_type"] == "public_site_items_list"
+    assert logs.items == []
 
 
 def test_public_site_item_visit_records_click_and_redirects() -> None:

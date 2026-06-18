@@ -20,6 +20,7 @@ from app.schemas.logs import (
     SecurityEventItem,
     SecurityEventListResponse,
 )
+from app.schemas.pagination import PAGE_OFFSET_MAX
 from app.services.auth import AuthenticatedUser
 from app.services.encryption import EncryptionSessionManager
 
@@ -37,7 +38,7 @@ async def list_audit_logs(
     service: LogServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
     limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
     logs = await service.list_audit_logs(limit=limit, offset=offset)
     return await _logs_response(
@@ -56,7 +57,7 @@ async def list_access_logs(
     service: LogServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
     limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
     logs = await service.list_access_logs(limit=limit, offset=offset)
     return await _logs_response(
@@ -75,7 +76,7 @@ async def list_login_logs(
     service: LogServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
     limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
     logs = await service.list_login_logs(limit=limit, offset=offset)
     return await _logs_response(
@@ -94,7 +95,7 @@ async def list_security_events(
     service: LogServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
     limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
     events = await service.list_security_events(limit=limit, offset=offset)
     return await _logs_response(

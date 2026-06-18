@@ -240,6 +240,17 @@ class FakeEncryptionSessionManager:
             ciphertext="test-ciphertext",
         )
 
+    async def validate_session(
+        self,
+        *,
+        session_id: str,
+        scope: str,
+        profile: EncryptionProfile,
+    ) -> None:
+        assert session_id == self.session_id
+        assert scope == self.expected_scope
+        assert profile == EncryptionProfile.CONTENT
+
 
 def override_admin_user() -> AuthenticatedUser:
     return AuthenticatedUser(
@@ -398,7 +409,7 @@ def test_public_file_list_uses_public_encryption_session() -> None:
     assert manager.payload["total"] == 1
     assert manager.payload["items"][0]["original_name"] == "cover.png"
     assert "object_key" not in manager.payload["items"][0]
-    assert logs.items[0]["access_type"] == "public_files_list"
+    assert logs.items == []
 
 
 def test_public_file_temporary_url_requires_public_session() -> None:
@@ -447,8 +458,7 @@ def test_public_file_download_uses_temporary_token(tmp_path) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
     assert response.content == _png_bytes()
-    assert logs.items[0]["access_type"] == "public_file_download"
-    assert logs.items[0]["entity_id"] == 1
+    assert logs.items == []
 
 
 def test_admin_file_download_allows_private_file_with_admin_auth(tmp_path) -> None:
@@ -566,12 +576,7 @@ def test_post_file_render_uses_article_image_endpoint(tmp_path) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
     assert response.content == _png_bytes()
-    assert logs.items[0]["access_type"] == "post_image_render"
-    assert logs.items[0]["detail_json"] == {
-        "slug": "public-post",
-        "filename": "cover.png",
-        "media_type": "image/png",
-    }
+    assert logs.items == []
 
 
 def test_post_file_thumbnail_uses_article_image_endpoint(tmp_path) -> None:
@@ -605,7 +610,7 @@ def test_post_file_thumbnail_uses_article_image_endpoint(tmp_path) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/jpeg"
     assert response.content == _png_bytes()
-    assert logs.items[0]["access_type"] == "post_image_thumbnail"
+    assert logs.items == []
 
 
 def test_post_file_render_rejects_missing_image_token(tmp_path) -> None:

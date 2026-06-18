@@ -179,6 +179,8 @@ npm.cmd run build
 - `BLOG_RATE_LIMIT_BACKEND`：限流后端，支持 `memory` 和 `redis`。
 - `BLOG_REDIS_URL`：Redis 连接串，生产示例为 `redis://redis:6379/0`。
 - `BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`：公开加密会话单 IP 活跃数量上限，默认 `10`。
+- `BLOG_TRUSTED_PROXY_HOSTS`：可信反向代理直连后端的 IP 或 CIDR 列表；只有这些来源的 `X-Forwarded-For` / `X-Real-IP` 会被用于应用层限流和日志。
+- `BLOG_ACCESS_LOG_SKIP_TYPES`：成功访问时跳过写入 `access_logs` 的高频公开访问类型；错误、后台下载、友链申请和站点跳转仍保留日志。
 
 后端所有响应都会设置 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 和 `Permissions-Policy`；生产环境额外设置 HSTS 与 Content Security Policy，Nginx 仍保留同等安全响应头作为公网入口兜底。
 
@@ -342,16 +344,19 @@ BLOG_SECRET_KEY=替换为32位以上强随机值
 BLOG_PUBLIC_BASE_URL=https://blog.chacewebsite.cn
 BLOG_ALLOWED_HOSTS=["blog.chacewebsite.cn"]
 BLOG_CORS_ORIGINS=["https://blog.chacewebsite.cn"]
-BLOG_DATABASE_URL=mysql+asyncmy://blog_app:替换为数据库业务用户密码@mysql:3306/blog?charset=utf8mb4
+BLOG_DATABASE_URL=mysql+aiomysql://blog_app:替换为数据库业务用户密码@mysql:3306/blog?charset=utf8mb4
 BLOG_ADMIN_COOKIE_SECURE=true
 BLOG_DEBUG=false
 BLOG_DOCS_ENABLED=false
 BLOG_RATE_LIMIT_BACKEND=redis
 BLOG_REDIS_URL=redis://redis:6379/0
+BLOG_TRUSTED_PROXY_HOSTS=["127.0.0.1"]
 BLOG_UPLOAD_ROOT=/data/blog/uploads
 BLOG_UPLOAD_MAX_SIZE_BYTES=20971520
 BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP=10
 ```
+
+`BLOG_DATABASE_URL` 应使用 `mysql+aiomysql://`。后端会临时兼容旧的 `mysql+asyncmy://` 前缀并在运行时映射到 `aiomysql`，但生产服务器的真实 `deploy/env/backend.env` 仍建议显式改为 `mysql+aiomysql://...`，避免继续依赖已命中 advisory 的旧驱动前缀。若使用宿主机 Nginx 反代到 Docker 后端，请把 `BLOG_TRUSTED_PROXY_HOSTS` 改成后端看到的宿主机/网关直连 IP 或 CIDR；后端绑定 `127.0.0.1:18080` 时可填 `["127.0.0.1"]`，经 Docker 网关访问时可填实际网关 IP 或如 `["172.16.0.0/12"]` 这类内网 CIDR。填错时功能仍可用，但应用层限流会按代理 IP 而不是真实访客 IP 计数。
 
 编辑 `deploy/env/nginx.env`：
 
@@ -361,7 +366,23 @@ BLOG_SSL_CERTIFICATE=/etc/nginx/ssl/blog.pem
 BLOG_SSL_CERTIFICATE_KEY=/etc/nginx/ssl/blog.key
 ```
 
-### 4. 挂载已有 SSL 证书
+### 4. 选择 Nginx 部署方式
+
+如果使用 Compose 内置 Nginx，请继续按下文的 `deploy/docker-compose.local.yml` 挂载证书目录，并用包含 nginx 服务的 compose 命令启动。
+
+如果使用宿主机已有 Nginx，请叠加 `deploy/docker-compose.host-nginx.yml` 启动后端、MySQL 和 Redis。该覆盖文件会把后端只绑定到 `127.0.0.1:18080`，供宿主机 Nginx 反向代理；Compose 内置 Nginx 默认不会启动。宿主机 Nginx 仍需要把 `/api/` 反代到 `http://127.0.0.1:18080`，并把前端静态目录指向 `/var/www/blog`。
+
+宿主机 Nginx 场景下，仍需单独构建 nginx 镜像来产出最新 React 静态文件，再复制到宿主机站点目录：
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml build nginx
+CID=$(docker create blog-nginx)
+sudo rm -rf /var/www/blog/*
+sudo docker cp "$CID":/usr/share/nginx/html/. /var/www/blog/
+docker rm "$CID"
+```
+
+### 5. 挂载已有 SSL 证书
 
 基础 Compose 文件默认只挂载项目内的 `deploy/certs/letsencrypt`，如果使用宿主机 `/etc/nginx/ssl` 中的现成证书，需要创建一个本地覆盖文件：
 
@@ -381,7 +402,7 @@ sudo test -r /etc/nginx/ssl/blog.pem
 sudo test -r /etc/nginx/ssl/blog.key
 ```
 
-### 5. 准备数据目录
+### 6. 准备数据目录
 
 ```bash
 sudo mkdir -p /data/blog/uploads/public /data/blog/backups/mysql /data/blog/backups/uploads
@@ -395,7 +416,7 @@ APP_GID=$(docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.p
 sudo chown -R "${APP_UID}:${APP_GID}" /data/blog/uploads
 ```
 
-### 6. 构建并启动服务
+### 7. 构建并启动服务
 
 先展开检查 Compose 配置：
 
@@ -409,6 +430,12 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f
 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml up -d --build
 ```
 
+宿主机 Nginx 场景只启动后端、MySQL 和 Redis：
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml up -d --build backend mysql redis
+```
+
 查看状态和日志：
 
 ```bash
@@ -416,7 +443,7 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f
 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml logs -f nginx backend
 ```
 
-### 7. 初始化数据库
+### 8. 初始化数据库
 
 后端镜像包含 `uv`、Alembic 和应用代码，迁移应在后端容器内执行：
 
@@ -430,7 +457,7 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f
 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml exec backend uv run python -m app.cli create-admin --username admin --email admin@example.com --display-name 管理员
 ```
 
-### 8. 验证公网入口
+### 9. 验证公网入口
 
 FastAPI 路由主要是 GET，不要对 API 全部使用 `curl -I`。按下面检查：
 

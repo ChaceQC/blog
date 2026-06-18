@@ -115,6 +115,24 @@ def test_login_logs_require_admin_permission() -> None:
     assert response.status_code == 403
 
 
+def test_admin_logs_reject_oversized_offset() -> None:
+    client = TestClient(app)
+    app.dependency_overrides[get_current_admin_user] = lambda: AuthenticatedUser(
+        id=1,
+        username="admin",
+        display_name="管理员",
+        roles=["super_admin"],
+        permissions=["*"],
+    )
+
+    try:
+        response = client.get("/api/admin/login-logs?offset=10001")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+
+
 def test_login_logs_return_items_for_audit_reader() -> None:
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()

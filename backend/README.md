@@ -41,7 +41,7 @@ uv run python scripts/verify_runtime_publish_flow.py
 
 密码使用 Argon2id 校验。浏览器会话使用 HttpOnly Cookie 保存 Access Token 和 Refresh Token，前端只持有用户信息和 CSRF Token；刷新和退出等写操作必须携带 `X-CSRF-Token`。登录、刷新和当前用户接口必须先通过 `/api/admin/encryption/sessions` 协商 P-256 ECDH 短期加密会话，并在请求中携带 `X-Encryption-Session`，旧的明文 JSON 响应形态已移除。协商会话保存到 `encryption_sessions` 数据表。Refresh Token 只存储 SHA-256 哈希。Token 有效期通过 `BLOG_ACCESS_TOKEN_EXPIRE_MINUTES` 和 `BLOG_REFRESH_TOKEN_EXPIRE_DAYS` 配置，Cookie 安全属性通过 `BLOG_ADMIN_COOKIE_SECURE` 和 `BLOG_ADMIN_COOKIE_SAMESITE` 配置。
 
-MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，依赖文件中已显式保留该运行依赖。
+MySQL 8 默认认证插件需要异步 MySQL 驱动配合 `cryptography` 完成认证，当前运行依赖使用 `aiomysql`。
 
 ## 安全日志与限流
 
@@ -56,7 +56,9 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 
 后台文章、页面、文件、友链、导航和设置的关键写操作会写入 `audit_logs`，记录操作者、动作、实体、IP、UA 和最小变更摘要；正文、密钥、Token 和完整设置值不写入审计日志。
 
-登录入口、后台/公开加密协商入口和公开友链申请入口已接入可配置限流，命中后返回 `429` 并写入 `security_events`。阈值通过 `BLOG_ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`、`BLOG_FRIEND_LINK_APPLICATION_RATE_LIMIT_MAX_ATTEMPTS` 和 `BLOG_FRIEND_LINK_APPLICATION_RATE_LIMIT_WINDOW_SECONDS` 配置。公开加密会话会在 `encryption_sessions.client_ip` 保存短期客户端 IP，用于限制单 IP 活跃 public scope 会话数量。限流后端通过 `BLOG_RATE_LIMIT_BACKEND` 配置，默认本地开发使用 `memory`，生产示例使用 `redis` 和 `BLOG_REDIS_URL=redis://redis:6379/0`。Redis 适配器使用 sorted set 与 Lua 脚本保证单次命中检查原子性，并显式使用 RESP2 以兼容 Redis 5 与 Redis 7；如果 Redis 连接异常，会按相同 key 回落到进程内限流器，避免入口完全失去保护。真实 Redis 集成测试默认跳过，设置 `BLOG_TEST_REDIS_URL` 后会验证后台登录和加密协商入口的 `429`、`Retry-After` 与安全事件记录。
+登录入口、后台/公开加密协商入口和公开友链申请入口已接入可配置限流，命中后返回 `429` 并写入 `security_events`。阈值通过 `BLOG_ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`、`BLOG_FRIEND_LINK_APPLICATION_RATE_LIMIT_MAX_ATTEMPTS` 和 `BLOG_FRIEND_LINK_APPLICATION_RATE_LIMIT_WINDOW_SECONDS` 配置。公开加密会话会在 `encryption_sessions.client_ip` 保存短期客户端 IP，用于限制单 IP 活跃 public scope 会话数量。`client_ip()` 只在直接连接来源属于 `BLOG_TRUSTED_PROXY_HOSTS` 配置的 IP 或 CIDR 时信任 `X-Forwarded-For` / `X-Real-IP`；后端被直连时会使用连接 IP，避免伪造代理头绕过限流或污染日志。限流后端通过 `BLOG_RATE_LIMIT_BACKEND` 配置，默认本地开发使用 `memory`，生产示例使用 `redis` 和 `BLOG_REDIS_URL=redis://redis:6379/0`。Redis 适配器使用 sorted set 与 Lua 脚本保证单次命中检查原子性，并显式使用 RESP2 以兼容 Redis 5 与 Redis 7；如果 Redis 连接异常，会按相同 key 回落到进程内限流器，避免入口完全失去保护。真实 Redis 集成测试默认跳过，设置 `BLOG_TEST_REDIS_URL` 后会验证后台登录和加密协商入口的 `429`、`Retry-After` 与安全事件记录。
+
+公开内容、公开文件、文章图片和缩略图等高频成功访问默认通过 `BLOG_ACCESS_LOG_SKIP_TYPES` 跳过应用层 `access_logs` 写入，降低公开流量对数据库的写放大；RSS、sitemap、robots、公开友链申请、公开站点跳转、后台下载和所有 4xx/5xx 错误仍会记录。公开 `content-v1` 加密 GET 会在进入业务查询前校验 public scope 加密会话，缺少或无效 `X-Encryption-Session` 会直接返回 400，不再先触发列表查询、详情查询或总数统计。
 
 ## 后台维护任务
 
@@ -123,7 +125,7 @@ uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 - `GET /api/admin/files/{id}/preview`：为后台文章预览提供短时签名图片访问，不用于公开下载。
 - `DELETE /api/admin/files/{id}`：软删除文件，需要 `file:delete` 权限和 `X-CSRF-Token`。
 
-当前本地存储驱动会将文件写入 `BLOG_UPLOAD_ROOT`，但不会挂载静态目录，也不会为新文件写入 `/uploads/...` 公开 URL。公开文件栏下载通过后台加密接口按需生成短时签名链接，再由 `/api/public/files/{id}/download?token=...` 校验后返回文件；私有文件不生成公开访问链接，只能通过后台鉴权下载接口读取。文章正文图片渲染使用专门的 `/api/public/posts/{slug}/files/{file_id}/render?expires=...&token=...`，公开封面缩略图使用 `/api/public/posts/{slug}/files/{file_id}/thumbnail?expires=...&token=...`，签名由公开文章详情或后台预览接口按场景颁发。后台文件列表的使用次数来自 `file_usages`，目前文章封面记录为 `cover`，正文图片记录为 `post_body`。上传大小通过 `BLOG_UPLOAD_MAX_SIZE_BYTES` 配置，当前默认 `20971520` 字节，与 Nginx `client_max_body_size 20m` 对齐；当前白名单支持 JPEG、PNG、GIF、WebP 和 PDF，并校验扩展名、MIME、文件头和图片像素边界，图片单边默认不超过 12000 像素且总像素不超过 4000 万，Pillow 解压炸弹警告会视为失败；删除只标记为 `deleted`，由 `cleanup-deleted-files` 在超过保留期且无引用时处理物理文件和数据库记录；本地存储中没有对应 active/deleted 数据库记录的残留文件可先用 `cleanup-orphan-files` dry-run 盘点，再加 `--delete` 清理。短时链接有效期通过 `BLOG_FILE_TEMPORARY_URL_EXPIRE_SECONDS` 配置。公开内容读取、公开文件下载、文章图片渲染、文章缩略图、后台短时链接生成和后台文件下载都会写入 `access_logs`。
+当前本地存储驱动会将文件写入 `BLOG_UPLOAD_ROOT`，但不会挂载静态目录，也不会为新文件写入 `/uploads/...` 公开 URL。公开文件栏下载通过后台加密接口按需生成短时签名链接，再由 `/api/public/files/{id}/download?token=...` 校验后返回文件；私有文件不生成公开访问链接，只能通过后台鉴权下载接口读取。文章正文图片渲染使用专门的 `/api/public/posts/{slug}/files/{file_id}/render?expires=...&token=...`，公开封面缩略图使用 `/api/public/posts/{slug}/files/{file_id}/thumbnail?expires=...&token=...`，签名由公开文章详情或后台预览接口按场景颁发。后台文件列表的使用次数来自 `file_usages`，目前文章封面记录为 `cover`，正文图片记录为 `post_body`。上传大小通过 `BLOG_UPLOAD_MAX_SIZE_BYTES` 配置，当前默认 `20971520` 字节，与 Nginx `client_max_body_size 20m` 对齐；当前白名单支持 JPEG、PNG、GIF、WebP 和 PDF，并校验扩展名、MIME、文件头和图片像素边界，图片单边默认不超过 12000 像素且总像素不超过 4000 万，Pillow 解压炸弹警告会视为失败；删除只标记为 `deleted`，由 `cleanup-deleted-files` 在超过保留期且无引用时处理物理文件和数据库记录；本地存储中没有对应 active/deleted 数据库记录的残留文件可先用 `cleanup-orphan-files` dry-run 盘点，再加 `--delete` 清理。短时链接有效期通过 `BLOG_FILE_TEMPORARY_URL_EXPIRE_SECONDS` 配置。公开文件列表、公开文件下载、文章图片渲染和文章缩略图成功访问默认不写入 `access_logs`，错误访问仍会记录；后台短时链接生成和后台文件下载继续写入访问日志。
 
 ## 初始管理员
 

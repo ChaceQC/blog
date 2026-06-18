@@ -1,0 +1,8 @@
+services:
+  nginx:
+    profiles:
+      - bundled-nginx
+
+  backend:
+    ports:
+      - "127.0.0.1:18080:8000"

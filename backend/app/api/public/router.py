@@ -15,6 +15,7 @@ from app.api.admin.dependencies import (
 from app.api.admin.encrypted_response import (
     decrypt_encrypted_request,
     encrypted_response,
+    validate_encryption_session,
 )
 from app.api.admin.limits import enforce_rate_limit
 from app.api.public.encryption import router as public_encryption_router
@@ -45,6 +46,7 @@ from app.schemas.links import (
     PublicSiteNavItem,
     PublicSiteNavItemListResponse,
 )
+from app.schemas.pagination import PAGE_OFFSET_MAX
 from app.schemas.settings import PublicSiteProfileResponse
 from app.services.content import ContentNotFoundError, ContentService
 from app.services.files import create_article_render_token, sign_article_render_urls
@@ -53,6 +55,7 @@ from app.services.links import (
     LinkService,
     SiteNavItemNotFoundError,
 )
+from app.services.logs import should_skip_access_log
 from app.services.rate_limit import RateLimitRule
 
 router = APIRouter(tags=["public"])
@@ -91,8 +94,9 @@ async def list_public_categories(
     encryption_manager: EncryptionSessionManagerDependency,
     logs: LogServiceDependency,
     limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ):
+    await _validate_public_content_session(request, encryption_manager)
     categories = await service.list_public_categories(limit=limit, offset=offset)
     response = await encrypted_response(
         PublicTaxonomyListResponse(
@@ -125,6 +129,7 @@ async def get_public_category(
     encryption_manager: EncryptionSessionManagerDependency,
     logs: LogServiceDependency,
 ):
+    await _validate_public_content_session(request, encryption_manager)
     try:
         category = await service.get_public_category_by_slug(slug)
     except ContentNotFoundError as exc:
@@ -167,8 +172,9 @@ async def list_public_tags(
     encryption_manager: EncryptionSessionManagerDependency,
     logs: LogServiceDependency,
     limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ):
+    await _validate_public_content_session(request, encryption_manager)
     tags = await service.list_public_tags(limit=limit, offset=offset)
     response = await encrypted_response(
         PublicTaxonomyListResponse(
@@ -201,6 +207,7 @@ async def get_public_tag(
     encryption_manager: EncryptionSessionManagerDependency,
     logs: LogServiceDependency,
 ):
+    await _validate_public_content_session(request, encryption_manager)
     try:
         tag = await service.get_public_tag_by_slug(slug)
     except ContentNotFoundError as exc:
@@ -244,7 +251,7 @@ async def list_public_posts(
     settings: SettingsDependency,
     logs: LogServiceDependency,
     limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
     category_slug: str | None = Query(
         default=None,
         alias="category",
@@ -260,6 +267,7 @@ async def list_public_posts(
         pattern=SLUG_PATTERN,
     ),
 ):
+    await _validate_public_content_session(request, encryption_manager)
     posts = await service.list_public_posts(
         limit=limit,
         offset=offset,
@@ -314,6 +322,7 @@ async def get_public_post(
     settings: SettingsDependency,
     logs: LogServiceDependency,
 ):
+    await _validate_public_content_session(request, encryption_manager)
     try:
         post = await service.get_public_post_by_slug(slug)
     except ContentNotFoundError as exc:
@@ -375,6 +384,7 @@ async def get_public_page(
     encryption_manager: EncryptionSessionManagerDependency,
     logs: LogServiceDependency,
 ):
+    await _validate_public_content_session(request, encryption_manager)
     try:
         page = await service.get_public_page_by_slug(slug)
     except ContentNotFoundError as exc:
@@ -417,6 +427,7 @@ async def get_public_site_profile(
     encryption_manager: EncryptionSessionManagerDependency,
     logs: LogServiceDependency,
 ):
+    await _validate_public_content_session(request, encryption_manager)
     setting = await service.get_site_profile()
     profile = _site_profile_response(setting.value_json)
     response = await encrypted_response(
@@ -444,8 +455,9 @@ async def list_public_friend_links(
     encryption_manager: EncryptionSessionManagerDependency,
     logs: LogServiceDependency,
     limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ):
+    await _validate_public_content_session(request, encryption_manager)
     links = await service.list_public_friend_links(limit=limit, offset=offset)
     total = await service.count_public_friend_links()
     response = await encrypted_response(
@@ -545,8 +557,9 @@ async def list_public_site_items(
     encryption_manager: EncryptionSessionManagerDependency,
     logs: LogServiceDependency,
     limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ):
+    await _validate_public_content_session(request, encryption_manager)
     items = await service.list_public_site_nav_items(limit=limit, offset=offset)
     total = await service.count_public_site_nav_items()
     response = await encrypted_response(
@@ -624,6 +637,18 @@ def _validate_decrypted_payload[T: BaseModel](
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="invalid encrypted request payload",
         ) from exc
+
+
+async def _validate_public_content_session(
+    request: Request,
+    encryption_manager: EncryptionSessionManagerDependency,
+) -> None:
+    await validate_encryption_session(
+        request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+        scope="public",
+    )
 
 
 def _site_profile_response(value: dict[str, object]) -> PublicSiteProfileResponse:
@@ -770,6 +795,8 @@ async def _record_public_access(
     entity_id: int | None = None,
     detail_json: dict[str, object] | None = None,
 ) -> None:
+    if should_skip_access_log(access_type=access_type, status_code=status_code):
+        return
     await logs.record_access_log(
         access_type=access_type,
         method=request.method,

@@ -5,9 +5,9 @@ description = "FastAPI backend for the personal blog CMS"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "aiomysql>=0.3.2",
     "alembic>=1.18.4",
     "argon2-cffi>=25.1.0",
-    "asyncmy>=0.2.11",
     "bleach>=6.4.0",
     "cryptography>=49.0.0",
     "fastapi>=0.137.0",
