@@ -1,8 +1,12 @@
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.state import (
+    get_app_access_log_dedupe_backend,
+    get_app_rate_limit_service,
+)
 from app.core.config import Settings, get_settings
 from app.core.database import get_session
 from app.core.storage import LocalStorageProvider
@@ -19,9 +23,8 @@ from app.services.links import LinkService
 from app.services.logs import (
     AccessLogDedupeBackend,
     LogService,
-    create_access_log_dedupe_backend,
 )
-from app.services.rate_limit import RateLimitService, create_rate_limit_service
+from app.services.rate_limit import RateLimitService
 from app.services.settings import SettingService
 
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
@@ -71,26 +74,11 @@ EncryptionSessionManagerDependency = Annotated[
 ]
 
 
-_access_log_dedupe_backend: AccessLogDedupeBackend | None = None
-_access_log_dedupe_signature: tuple[str, str | None, str] | None = None
-
-
 def get_access_log_dedupe_backend(
+    request: Request,
     settings: SettingsDependency,
 ) -> AccessLogDedupeBackend:
-    global _access_log_dedupe_backend, _access_log_dedupe_signature
-    signature = (
-        settings.rate_limit_backend,
-        settings.redis_url,
-        settings.redis_key_prefix,
-    )
-    if (
-        _access_log_dedupe_backend is None
-        or _access_log_dedupe_signature != signature
-    ):
-        _access_log_dedupe_backend = create_access_log_dedupe_backend(settings)
-        _access_log_dedupe_signature = signature
-    return _access_log_dedupe_backend
+    return get_app_access_log_dedupe_backend(request.app, settings)
 
 
 AccessLogDedupeDependency = Annotated[
@@ -119,21 +107,11 @@ def get_setting_service(session: SessionDependency) -> SettingService:
 SettingServiceDependency = Annotated[SettingService, Depends(get_setting_service)]
 
 
-_rate_limit_service: RateLimitService | None = None
-_rate_limit_signature: tuple[str, str | None, str] | None = None
-
-
-def get_rate_limit_service(settings: SettingsDependency) -> RateLimitService:
-    global _rate_limit_service, _rate_limit_signature
-    signature = (
-        settings.rate_limit_backend,
-        settings.redis_url,
-        settings.redis_key_prefix,
-    )
-    if _rate_limit_service is None or _rate_limit_signature != signature:
-        _rate_limit_service = create_rate_limit_service(settings)
-        _rate_limit_signature = signature
-    return _rate_limit_service
+def get_rate_limit_service(
+    request: Request,
+    settings: SettingsDependency,
+) -> RateLimitService:
+    return get_app_rate_limit_service(request.app, settings)
 
 
 RateLimitServiceDependency = Annotated[

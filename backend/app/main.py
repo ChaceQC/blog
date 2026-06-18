@@ -4,6 +4,7 @@ from app.api.admin.router import router as admin_router
 from app.api.public.feeds import router as feeds_router
 from app.api.public.health import router as health_router
 from app.api.public.router import router as public_router
+from app.api.state import configure_api_state
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.core.security import configure_security_middleware
@@ -22,6 +23,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/openapi.json" if settings.docs_enabled else None,
     )
 
+    configure_api_state(app, settings)
     configure_security_middleware(app, settings)
 
     app.include_router(health_router)

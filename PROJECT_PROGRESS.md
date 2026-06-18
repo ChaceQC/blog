@@ -35,6 +35,7 @@
 - Service 更新入口已改为显式命令对象：新增 `backend/app/services/update_commands.py`，`ContentService`、`LinkService` 和 `LinkGroupService` 的更新方法改为接收 `UpdatePostCommand`、`UpdatePageCommand`、`UpdateFriendLinkCommand`、`UpdateSiteNavItemCommand`、`UpdateFriendLinkGroupCommand` 和 `UpdateSiteNavGroupCommand`，保留 PATCH 未传字段不更新、显式 `null` 清空字段的语义，并移除业务更新中的 `dict + setattr` 模式。
 - 后台链接路由已按资源职责拆分：`backend/app/api/admin/links.py` 缩减为聚合器，新增 `links_common.py`、`link_groups.py`、`friend_links.py` 和 `site_nav.py`，分别承载共享加密/校验/异常/audit helper、分组 CRUD、友链 CRUD/审核和站点导航 CRUD；原 `/api/admin/friend-link-groups`、`/site-groups`、`/friend-links`、`/site-items` URL 和响应保持不变。
 - 后台文章和页面编辑状态已从路由组件抽出：新增 `useAdminPostEditor` 和 `useAdminPageEditor`，将列表查询、分页、选中态、表单态、保存/发布 mutation、预览状态和缓存失效收敛到 feature hook，`AdminPostsPage` 与 `AdminPagesPage` 只保留页面编排和 JSX。
+- API 共享依赖缓存已从模块全局状态迁移到 `FastAPI app.state`：新增 `backend/app/api/state.py`，在 `create_app()` 初始化访问日志去重 backend 和限流服务，dependency 按配置签名从当前 app state 懒加载，避免多 app 实例、测试覆盖或热切换配置时复用错误全局实例。
 
 ### 待修复清单
 
@@ -43,8 +44,6 @@
 - P2：前后端类型手写镜像，后续容易漂移。后端 Pydantic schema 与前端 `features/*/types.ts` 手写维护同一批字段、可空性和响应结构；后续应评估基于 OpenAPI 生成 TypeScript 类型，或至少补充 contract test。
 - P3：前端分页、空值归一化、表单转换重复。多个页面重复 `safeListPage + slice + ListPager`、`parsePage`、`emptyToNull/nullableText`、`groupLabel` 和日期格式化；后续应抽取 `usePagedItems`、`useQueryPage`、`formText.ts` 和 `dateFormat.ts`。
 - P3：全局 CSS 已经过大。`frontend/src/index.css` 集中了基础样式、公开站点、后台布局、表单、弹窗、文章排版和响应式规则；后续应按 `base.css`、`public.css`、`admin.css`、`components.css`、`prose.css` 拆分，或逐步转为 CSS modules。
-- P3：依赖注入存在全局缓存状态。`backend/app/api/admin/dependencies.py` 对访问日志去重 backend 和限流服务使用模块级缓存；生产可用，但测试、多 app 实例或热切换配置时容易有状态残留，后续应放入 FastAPI lifespan / `app.state` 后由 dependency 读取。
-
 ### 进行中
 
 - 无。
@@ -97,6 +96,8 @@
 - 后台链接路由拆分后已运行 `uv run pytest tests/test_admin_links_api.py tests/test_public_content_api.py tests/test_admin_content_api.py`，47 个测试通过；仍存在 FastAPI/Starlette TestClient 和 HTTP 状态常量的上游弃用警告。
 - 后台文章/页面编辑状态抽取后已运行 `npm.cmd run lint`，通过。
 - 后台文章/页面编辑状态抽取后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
+- API 共享依赖状态迁移后已运行 `uv run ruff check app/api/state.py app/api/dependencies.py app/main.py tests/test_rate_limit.py tests/test_log_service.py tests/test_public_content_api.py tests/test_admin_encryption_api.py`，通过。
+- API 共享依赖状态迁移后已运行 `uv run pytest tests/test_rate_limit.py tests/test_log_service.py tests/test_public_content_api.py tests/test_admin_encryption_api.py`，49 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 
 ## 2026-06-18
 
