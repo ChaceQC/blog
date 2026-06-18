@@ -3,6 +3,7 @@ import { Brackets, Eye, FilePlus2, Link2, Rocket, Save } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
+import { AdminModal } from '../../components/AdminModal.tsx'
 import { MathHtml } from '../../components/MathHtml.tsx'
 import { invalidatePostCaches } from '../../app/queryInvalidation.ts'
 import {
@@ -52,6 +53,7 @@ export function AdminPostsPage() {
   } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [listPage, setListPage] = useState(0)
+  const [isPreviewOpen, setPreviewOpen] = useState(false)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin-posts'],
@@ -71,10 +73,20 @@ export function AdminPostsPage() {
     [posts, selectedId],
   )
   const currentForm = form ?? createEmptyPostForm(posts)
+  const savedForm = useMemo(
+    () => (selectedPost ? postToForm(selectedPost) : null),
+    [selectedPost],
+  )
   const canWrite =
     session !== null && hasAdminPermission(session.user, 'post:write')
   const canPublish =
     session !== null && hasAdminPermission(session.user, 'post:publish')
+  const hasUnsavedChanges =
+    savedForm === null || postFormSignature(currentForm) !== postFormSignature(savedForm)
+  const isPublishStatusLocked =
+    currentForm.status === 'published' || currentForm.status === 'scheduled'
+  const canSubmitPublish =
+    selectedPost !== null && canPublish && !hasUnsavedChanges && !isPublishStatusLocked
   const canPreview =
     session !== null &&
     canWrite &&
@@ -92,7 +104,12 @@ export function AdminPostsPage() {
       }
       return previewAdminPost(previewInput, session.csrfToken)
     },
-    enabled: session !== null && canWrite && canPreview && previewInput !== null,
+    enabled:
+      isPreviewOpen &&
+      session !== null &&
+      canWrite &&
+      canPreview &&
+      previewInput !== null,
     staleTime: 10_000,
   })
   const previewHtml =
@@ -101,7 +118,7 @@ export function AdminPostsPage() {
     ''
 
   useEffect(() => {
-    if (!canPreview) {
+    if (!isPreviewOpen || !canPreview) {
       return
     }
 
@@ -112,15 +129,15 @@ export function AdminPostsPage() {
       })
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [canPreview, currentForm.content_md, currentForm.slug])
+  }, [canPreview, currentForm.content_md, currentForm.slug, isPreviewOpen])
 
   const saveMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (draftForm: PostFormPayload) => {
       if (!session || !canWrite) {
         throw new Error('当前账号没有文章写入权限')
       }
 
-      const payload = normalizePostForm(currentForm)
+      const payload = normalizePostForm(draftForm)
       if (selectedPost) {
         return updateAdminPost(selectedPost.id, payload, session.csrfToken)
       }
@@ -131,7 +148,7 @@ export function AdminPostsPage() {
       setSelectedId(post.id)
       setForm(postToForm(post))
       setPreviewInput(postToPreviewInput(post))
-      setNotice('文章已保存')
+      setNotice('草稿已保存')
     },
     onError: (error) => {
       setNotice(formatPostSaveError(error))
@@ -139,7 +156,7 @@ export function AdminPostsPage() {
   })
   const publishMutation = useMutation({
     mutationFn: async () => {
-      if (!session || !selectedPost || !canPublish) {
+      if (!session || !selectedPost || !canSubmitPublish) {
         throw new Error('当前文章无法发布')
       }
       return publishAdminPost(selectedPost.id, session.csrfToken)
@@ -167,6 +184,7 @@ export function AdminPostsPage() {
             setSelectedId('new')
             setForm(null)
             setPreviewInput(null)
+            setPreviewOpen(false)
             setNotice(null)
           }}
           type="button"
@@ -194,6 +212,7 @@ export function AdminPostsPage() {
                     setSelectedId(post.id)
                     setForm(postToForm(post))
                     setPreviewInput(postToPreviewInput(post))
+                    setPreviewOpen(false)
                     setNotice(null)
                   }}
                   type="button"
@@ -227,7 +246,7 @@ export function AdminPostsPage() {
           </div>
           <form className="content-form" onSubmit={(event) => {
             event.preventDefault()
-            saveMutation.mutate()
+            saveAsDraft()
           }}>
             <div className="form-grid form-grid--two">
               <label>
@@ -253,9 +272,7 @@ export function AdminPostsPage() {
                 状态
                 <select
                   value={currentForm.status}
-                  onChange={(event) =>
-                    updateForm('status', event.target.value as ContentStatus)
-                  }
+                  onChange={(event) => updateStatus(event.target.value as ContentStatus)}
                 >
                   {Object.entries(contentStatusLabels).map(([value, label]) => (
                     <option value={value} key={value}>
@@ -288,16 +305,18 @@ export function AdminPostsPage() {
               </label>
             </div>
             <div className="form-grid form-grid--three">
-              <label>
-                定时发布时间
-                <input
-                  type="datetime-local"
-                  value={currentForm.published_at ?? ''}
-                  onChange={(event) =>
-                    updateForm('published_at', event.target.value || null)
-                  }
-                />
-              </label>
+              {currentForm.status === 'scheduled' ? (
+                <label>
+                  定时发布时间
+                  <input
+                    type="datetime-local"
+                    value={currentForm.published_at ?? ''}
+                    onChange={(event) =>
+                      updateForm('published_at', event.target.value || null)
+                    }
+                  />
+                </label>
+              ) : null}
               <label>
                 分类
                 <input
@@ -334,22 +353,34 @@ export function AdminPostsPage() {
             </label>
             <div className="field-group">
               <span className="field-label">Markdown 正文</span>
-              <div className="markdown-tools">
+              <div className="markdown-toolbar">
+                <div className="markdown-tools">
+                  <button
+                    className="text-button text-button--muted"
+                    onClick={() => wrapMarkdownSelection('[', '](https://)', '链接文字')}
+                    type="button"
+                  >
+                    <Link2 size={16} strokeWidth={1.8} aria-hidden="true" />
+                    链接
+                  </button>
+                  <button
+                    className="text-button text-button--muted"
+                    onClick={() => wrapMarkdownSelection('![', ']()', '图片说明')}
+                    type="button"
+                  >
+                    <Brackets size={16} strokeWidth={1.8} aria-hidden="true" />
+                    图片语法
+                  </button>
+                </div>
                 <button
-                  className="text-button text-button--muted"
-                  onClick={() => wrapMarkdownSelection('[', '](https://)', '链接文字')}
+                  aria-label="预览文章"
+                  className="icon-button admin-preview-trigger"
+                  disabled={!canPreview && !selectedPost?.content_html}
+                  onClick={openPostPreview}
+                  title="预览"
                   type="button"
                 >
-                  <Link2 size={16} strokeWidth={1.8} aria-hidden="true" />
-                  链接
-                </button>
-                <button
-                  className="text-button text-button--muted"
-                  onClick={() => wrapMarkdownSelection('![', ']()', '图片说明')}
-                  type="button"
-                >
-                  <Brackets size={16} strokeWidth={1.8} aria-hidden="true" />
-                  图片语法
+                  <Eye size={17} strokeWidth={1.8} aria-hidden="true" />
                 </button>
               </div>
               <textarea
@@ -388,7 +419,7 @@ export function AdminPostsPage() {
               </button>
               <button
                 className="text-button text-button--muted"
-                disabled={!selectedPost || !canPublish || publishMutation.isPending}
+                disabled={!canSubmitPublish || publishMutation.isPending}
                 onClick={() => publishMutation.mutate()}
                 type="button"
               >
@@ -398,28 +429,26 @@ export function AdminPostsPage() {
             </div>
           </form>
         </section>
-
-        <section className="admin-panel admin-panel--preview">
-          <div className="section-heading">
-            <span>文章预览</span>
-            <small>
-              <Eye size={14} strokeWidth={1.8} aria-hidden="true" />
-              {previewQuery.isFetching ? '正在更新' : '实时预览'}
-            </small>
-          </div>
-          {previewHtml ? (
-            <MathHtml
-              className="content-preview"
-              html={previewHtml}
-            />
-          ) : (
-            <p className="empty-state">填写 Slug 和正文后显示预览。</p>
-          )}
-          {previewQuery.isError ? (
-            <p className="form-error">预览暂时无法更新</p>
-          ) : null}
-        </section>
       </div>
+      <AdminModal
+        className="admin-modal--wide"
+        description={previewQuery.isFetching ? '正在更新' : '当前渲染结果'}
+        isOpen={isPreviewOpen}
+        onClose={() => setPreviewOpen(false)}
+        title="文章预览"
+      >
+        {previewHtml ? (
+          <MathHtml
+            className="content-preview content-preview--modal"
+            html={previewHtml}
+          />
+        ) : (
+          <p className="empty-state">填写 Slug 和正文后显示预览。</p>
+        )}
+        {previewQuery.isError ? (
+          <p className="form-error">预览暂时无法更新</p>
+        ) : null}
+      </AdminModal>
     </div>
   )
 
@@ -428,6 +457,26 @@ export function AdminPostsPage() {
     value: PostFormPayload[Key],
   ) {
     setForm((current) => ({ ...(current ?? currentForm), [key]: value }))
+  }
+
+  function updateStatus(status: ContentStatus) {
+    setForm((current) => {
+      const nextForm = { ...(current ?? currentForm), status }
+      if (status !== 'scheduled') {
+        nextForm.published_at = null
+      }
+      return nextForm
+    })
+  }
+
+  function saveAsDraft() {
+    const draftForm: PostFormPayload = {
+      ...currentForm,
+      status: 'draft',
+      published_at: null,
+    }
+    setForm(draftForm)
+    saveMutation.mutate(draftForm)
   }
 
   function wrapMarkdownSelection(prefix: string, suffix: string, fallback: string) {
@@ -447,4 +496,22 @@ export function AdminPostsPage() {
       )
     })
   }
+
+  function openPostPreview() {
+    if (canPreview) {
+      setPreviewInput({
+        slug: currentForm.slug.trim(),
+        content_md: currentForm.content_md,
+      })
+    }
+    setPreviewOpen(true)
+  }
+}
+
+function postFormSignature(form: PostFormPayload): string {
+  return JSON.stringify({
+    ...form,
+    category_names: [...form.category_names],
+    tag_names: [...form.tag_names],
+  })
 }

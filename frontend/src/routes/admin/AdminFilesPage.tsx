@@ -3,6 +3,7 @@ import { LockKeyhole, Search, UploadCloud } from 'lucide-react'
 import { useMemo, useState, type ChangeEvent } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
+import { AdminModal } from '../../components/AdminModal.tsx'
 import { invalidateFileCaches } from '../../app/queryInvalidation.ts'
 import {
   deleteAdminFile,
@@ -77,7 +78,7 @@ export function AdminFilesPage() {
     [files, safeListPage],
   )
   const selectedFile =
-    files.find((file) => file.id === selectedId) ?? files[0] ?? null
+    selectedId === null ? null : files.find((file) => file.id === selectedId) ?? null
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
@@ -170,7 +171,7 @@ export function AdminFilesPage() {
         </button>
       </section>
 
-      <div className="admin-workspace">
+      <div className="admin-workspace admin-workspace--files">
         <section className="admin-panel admin-panel--list">
           <div className="section-heading">
             <span>素材列表</span>
@@ -227,31 +228,6 @@ export function AdminFilesPage() {
         </section>
 
         <section className="admin-panel admin-panel--editor">
-          <div className="section-heading">
-            <span>素材详情</span>
-            <small>{notice ?? '保存在本机'}</small>
-          </div>
-          {selectedFile ? (
-            <FileDetail
-              file={selectedFile}
-              isDeleting={deleteMutation.isPending}
-              isLinkLoading={
-                temporaryUrlMutation.isPending &&
-                temporaryUrlMutation.variables === selectedFile.id
-              }
-              articleSlug={articleSlug}
-              getTemporaryUrl={getTemporaryUrl}
-              onDelete={() => deleteMutation.mutate()}
-              onArticleSlugChange={setArticleSlug}
-              setNotice={setNotice}
-              temporaryUrl={temporaryUrls[selectedFile.id] ?? null}
-            />
-          ) : (
-            <p className="empty-state">请选择或上传一份素材。</p>
-          )}
-        </section>
-
-        <section className="admin-panel admin-panel--preview">
           <div className="section-heading">
             <span>上传说明</span>
             <small>
@@ -311,6 +287,30 @@ export function AdminFilesPage() {
           </div>
         </section>
       </div>
+      <AdminModal
+        className="admin-modal--detail"
+        description={notice ?? '保存在本机'}
+        isOpen={selectedFile !== null}
+        onClose={() => setSelectedId(null)}
+        title="素材详情"
+      >
+        {selectedFile ? (
+          <FileDetail
+            file={selectedFile}
+            isDeleting={deleteMutation.isPending}
+            isLinkLoading={
+              temporaryUrlMutation.isPending &&
+              temporaryUrlMutation.variables === selectedFile.id
+            }
+            articleSlug={articleSlug}
+            getTemporaryUrl={getTemporaryUrl}
+            onDelete={() => deleteMutation.mutate()}
+            onArticleSlugChange={setArticleSlug}
+            setNotice={setNotice}
+            temporaryUrl={temporaryUrls[selectedFile.id] ?? null}
+          />
+        ) : null}
+      </AdminModal>
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { Eye, FilePlus2, Save } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
+import { AdminModal } from '../../components/AdminModal.tsx'
 import { MathHtml } from '../../components/MathHtml.tsx'
 import { invalidatePageCaches } from '../../app/queryInvalidation.ts'
 import {
@@ -38,6 +39,7 @@ export function AdminPagesPage() {
   const [selectedId, setSelectedId] = useState<number | 'new'>('new')
   const [form, setForm] = useState<PageFormPayload>(emptyPageForm)
   const [notice, setNotice] = useState<string | null>(null)
+  const [isPreviewOpen, setPreviewOpen] = useState(false)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin-pages'],
@@ -91,6 +93,7 @@ export function AdminPagesPage() {
           onClick={() => {
             setSelectedId('new')
             setForm(emptyPageForm)
+            setPreviewOpen(false)
             setNotice(null)
           }}
           type="button"
@@ -117,6 +120,7 @@ export function AdminPagesPage() {
                   onClick={() => {
                     setSelectedId(page.id)
                     setForm(pageToForm(page))
+                    setPreviewOpen(false)
                     setNotice(null)
                   }}
                   type="button"
@@ -208,15 +212,28 @@ export function AdminPagesPage() {
                 显示在导航
               </label>
             </div>
-            <label>
-              Markdown 正文
+            <div className="field-group">
+              <span className="field-label">Markdown 正文</span>
+              <div className="markdown-toolbar markdown-toolbar--end">
+                <button
+                  aria-label="预览页面"
+                  className="icon-button admin-preview-trigger"
+                  disabled={!selectedPage?.content_html}
+                  onClick={() => setPreviewOpen(true)}
+                  title="预览"
+                  type="button"
+                >
+                  <Eye size={17} strokeWidth={1.8} aria-hidden="true" />
+                </button>
+              </div>
               <textarea
+                aria-label="Markdown 正文"
                 value={form.content_md}
                 onChange={(event) => updateForm('content_md', event.target.value)}
                 rows={14}
                 required
               />
-            </label>
+            </div>
             <div className="form-grid form-grid--two">
               <label>
                 SEO 标题
@@ -246,25 +263,23 @@ export function AdminPagesPage() {
             </div>
           </form>
         </section>
-
-        <section className="admin-panel admin-panel--preview">
-          <div className="section-heading">
-            <span>页面预览</span>
-            <small>
-              <Eye size={14} strokeWidth={1.8} aria-hidden="true" />
-              保存后的样子
-            </small>
-          </div>
-          {selectedPage ? (
-            <MathHtml
-              className="content-preview"
-              html={selectedPage.content_html}
-            />
-          ) : (
-            <p className="empty-state">保存后可查看后端渲染结果。</p>
-          )}
-        </section>
       </div>
+      <AdminModal
+        className="admin-modal--wide"
+        description="保存后的渲染结果"
+        isOpen={isPreviewOpen}
+        onClose={() => setPreviewOpen(false)}
+        title="页面预览"
+      >
+        {selectedPage ? (
+          <MathHtml
+            className="content-preview content-preview--modal"
+            html={selectedPage.content_html}
+          />
+        ) : (
+          <p className="empty-state">保存后可查看后端渲染结果。</p>
+        )}
+      </AdminModal>
     </div>
   )
 
