@@ -35,6 +35,7 @@ class FakePost:
     category_names: list[str] = field(default_factory=list)
     tag_names: list[str] = field(default_factory=list)
     published_at: object | None = None
+    updated_at: object | None = None
 
 
 @dataclass

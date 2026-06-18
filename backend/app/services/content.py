@@ -7,6 +7,17 @@ from typing import Any, Protocol
 from app.core.auth import utc_now
 from app.models.content import Page, Post
 from app.providers.markdown import MarkdownRenderer, count_words
+from app.services.content_read_models import (
+    PublicPageDetailRead,
+    PublicPostDetailRead,
+    PublicPostRead,
+    PublicTaxonomyRead,
+    public_page_detail_read,
+    public_post_detail_read,
+    public_post_read,
+    public_taxonomy_read,
+    public_taxonomy_reads,
+)
 
 
 class ContentNotFoundError(Exception):
@@ -192,13 +203,14 @@ class ContentService:
         offset: int,
         category_slug: str | None = None,
         tag_slug: str | None = None,
-    ) -> Sequence[Post]:
-        return await self.repository.list_public_posts(
+    ) -> Sequence[PublicPostRead]:
+        posts = await self.repository.list_public_posts(
             limit=limit,
             offset=offset,
             category_slug=category_slug,
             tag_slug=tag_slug,
         )
+        return [public_post_read(post) for post in posts]
 
     async def count_public_posts(
         self,
@@ -219,31 +231,33 @@ class ContentService:
         *,
         limit: int,
         offset: int,
-    ) -> Sequence[Mapping[str, object]]:
-        return await self.repository.list_public_categories(
+    ) -> Sequence[PublicTaxonomyRead]:
+        categories = await self.repository.list_public_categories(
             limit=limit,
             offset=offset,
         )
+        return public_taxonomy_reads(categories)
 
-    async def get_public_category_by_slug(self, slug: str) -> Mapping[str, object]:
+    async def get_public_category_by_slug(self, slug: str) -> PublicTaxonomyRead:
         category = await self.repository.get_public_category_by_slug(slug)
         if category is None:
             raise ContentNotFoundError("category not found")
-        return category
+        return public_taxonomy_read(category)
 
     async def list_public_tags(
         self,
         *,
         limit: int,
         offset: int,
-    ) -> Sequence[Mapping[str, object]]:
-        return await self.repository.list_public_tags(limit=limit, offset=offset)
+    ) -> Sequence[PublicTaxonomyRead]:
+        tags = await self.repository.list_public_tags(limit=limit, offset=offset)
+        return public_taxonomy_reads(tags)
 
-    async def get_public_tag_by_slug(self, slug: str) -> Mapping[str, object]:
+    async def get_public_tag_by_slug(self, slug: str) -> PublicTaxonomyRead:
         tag = await self.repository.get_public_tag_by_slug(slug)
         if tag is None:
             raise ContentNotFoundError("tag not found")
-        return tag
+        return public_taxonomy_read(tag)
 
     async def get_post(self, post_id: int) -> Post:
         post = await self.repository.get_post(post_id)
@@ -251,11 +265,11 @@ class ContentService:
             raise ContentNotFoundError("post not found")
         return post
 
-    async def get_public_post_by_slug(self, slug: str) -> Post:
+    async def get_public_post_by_slug(self, slug: str) -> PublicPostDetailRead:
         post = await self.repository.get_public_post_by_slug(slug)
         if post is None:
             raise ContentNotFoundError("post not found")
-        return post
+        return public_post_detail_read(post)
 
     async def create_post(self, command: CreatePostCommand) -> Post:
         await self._ensure_post_slug_available(command.slug)
@@ -360,11 +374,11 @@ class ContentService:
             raise ContentNotFoundError("page not found")
         return page
 
-    async def get_public_page_by_slug(self, slug: str) -> Page:
+    async def get_public_page_by_slug(self, slug: str) -> PublicPageDetailRead:
         page = await self.repository.get_public_page_by_slug(slug)
         if page is None:
             raise ContentNotFoundError("page not found")
-        return page
+        return public_page_detail_read(page)
 
     async def create_page(self, command: CreatePageCommand) -> Page:
         await self._ensure_page_slug_available(command.slug)

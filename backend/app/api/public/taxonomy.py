@@ -96,7 +96,7 @@ async def get_public_category(
         access_type="public_category_detail",
         status_code=status.HTTP_200_OK,
         entity_type="category",
-        entity_id=int(category["id"]),
+        entity_id=category.id,
         detail_json={"slug": slug},
     )
     return response
@@ -174,7 +174,7 @@ async def get_public_tag(
         access_type="public_tag_detail",
         status_code=status.HTTP_200_OK,
         entity_type="tag",
-        entity_id=int(tag["id"]),
+        entity_id=tag.id,
         detail_json={"slug": slug},
     )
     return response

@@ -145,7 +145,7 @@ class PublicTaxonomyItem(BaseModel):
     slug: str
     post_count: int
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
 
 
 class PublicTaxonomyListResponse(BaseModel):

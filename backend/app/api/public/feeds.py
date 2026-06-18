@@ -1,4 +1,3 @@
-from collections.abc import Mapping
 from datetime import UTC, datetime
 from email.utils import format_datetime
 from hashlib import sha256
@@ -16,6 +15,7 @@ from app.api.dependencies import (
 from app.api.public.common import PublicContentServiceDependency
 from app.core.request import client_ip
 from app.models.content import Post
+from app.services.content_read_models import PublicTaxonomyRead
 
 FEED_POST_LIMIT = 1000
 FEED_CACHE_CONTROL = "public, max-age=300, stale-while-revalidate=60"
@@ -192,8 +192,8 @@ def _render_rss_item(*, post: Post, base_url: str) -> str:
 def _render_sitemap(
     *,
     posts: list[Post],
-    categories: list[Mapping[str, object]],
-    tags: list[Mapping[str, object]],
+    categories: list[PublicTaxonomyRead],
+    tags: list[PublicTaxonomyRead],
     base_url: str,
 ) -> str:
     normalized_base_url = _normalize_base_url(base_url)
@@ -287,8 +287,8 @@ def _post_url(*, base_url: str, post: Post) -> str:
     return f"{base_url}/posts/{post.slug}"
 
 
-def _taxonomy_url(*, base_url: str, kind: str, item: Mapping[str, object]) -> str:
-    return f"{base_url}/{kind}/{item['slug']}"
+def _taxonomy_url(*, base_url: str, kind: str, item: PublicTaxonomyRead) -> str:
+    return f"{base_url}/{kind}/{item.slug}"
 
 
 def _normalize_base_url(base_url: str) -> str:

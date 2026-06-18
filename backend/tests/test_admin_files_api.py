@@ -15,6 +15,8 @@ from app.core.encryption import EncryptionProfile
 from app.main import app
 from app.schemas.encryption import EncryptedApiResponse
 from app.services.auth import AuthenticatedUser
+from app.services.content_read_models import PublicPostDetailRead
+from app.services.file_read_models import PublicFileRead
 from app.services.files import (
     FileAccessDeniedError,
     FileDownload,
@@ -43,7 +45,20 @@ class FakeFileService:
     async def list_public_files(self, *, limit: int, offset: int) -> list[object]:
         assert limit == 1
         assert offset == 0
-        return [_file_item(public_listed=True)]
+        return [
+            PublicFileRead(
+                id=1,
+                original_name="cover.png",
+                mime_type="image/png",
+                extension="png",
+                size_bytes=1024,
+                width=640,
+                height=360,
+                alt_text="封面图",
+                created_at=datetime(2026, 6, 16, tzinfo=UTC),
+                updated_at=datetime(2026, 6, 16, tzinfo=UTC),
+            ),
+        ]
 
     async def count_public_files(self) -> int:
         return 1
@@ -194,12 +209,22 @@ class FakeDeniedAdminDownloadFileService:
 
 
 class FakePublicFileContentService:
-    async def get_public_post_by_slug(self, slug: str) -> object:
+    async def get_public_post_by_slug(self, slug: str) -> PublicPostDetailRead:
         assert slug == "public-post"
-        return SimpleNamespace(
+        return PublicPostDetailRead(
             id=1,
+            title="公开文章",
             slug=slug,
+            summary="摘要",
             cover_file_id=1,
+            word_count=8,
+            seo_title=None,
+            seo_description="SEO 摘要",
+            seo_keywords=None,
+            category_names=["技术"],
+            tag_names=["FastAPI"],
+            published_at=datetime(2026, 6, 16, tzinfo=UTC),
+            updated_at=datetime(2026, 6, 16, tzinfo=UTC),
             content_md="![封面](/api/public/posts/public-post/files/1/render)",
             content_html=(
                 '<p><img src="/api/public/posts/public-post/files/1/render" '

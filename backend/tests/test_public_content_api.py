@@ -20,6 +20,12 @@ from app.schemas.encryption import (
     EncryptedApiResponse,
 )
 from app.services.content import ContentNotFoundError
+from app.services.content_read_models import (
+    PublicPageDetailRead,
+    PublicPostDetailRead,
+    PublicPostRead,
+    PublicTaxonomyRead,
+)
 from app.services.encryption import ActiveEncryptionSessionLimitExceeded
 from app.services.links import CreateFriendLinkCommand, SiteNavItemNotFoundError
 from app.services.rate_limit import RateLimitRule, RateLimitService
@@ -154,14 +160,13 @@ class FakePublicContentService:
             assert category_slug == "category-a"
             assert tag_slug == "fastapi"
         return [
-            SimpleNamespace(
+            PublicPostRead(
                 id=1,
                 title="公开文章",
                 slug="public-post",
                 summary="摘要",
                 cover_file_id=1,
-                content_md="中文阅读时长 test-article 2026",
-                word_count=1,
+                word_count=8,
                 seo_title=None,
                 seo_description="SEO 摘要",
                 seo_keywords="博客,验证",
@@ -209,41 +214,41 @@ class FakePublicContentService:
         *,
         limit: int,
         offset: int,
-    ) -> list[dict[str, object]]:
+    ) -> list[PublicTaxonomyRead]:
         assert limit in {2, 1000}
         assert offset == 0
         return [
-            {"id": 1, "name": "技术", "slug": "category-a", "post_count": 3},
-            {"id": 2, "name": "随笔", "slug": "category-b", "post_count": 1},
+            PublicTaxonomyRead(id=1, name="技术", slug="category-a", post_count=3),
+            PublicTaxonomyRead(id=2, name="随笔", slug="category-b", post_count=1),
         ]
 
-    async def get_public_category_by_slug(self, slug: str) -> dict[str, object]:
+    async def get_public_category_by_slug(self, slug: str) -> PublicTaxonomyRead:
         if slug != "category-a":
             raise ContentNotFoundError("category not found")
-        return {"id": 1, "name": "技术", "slug": "category-a", "post_count": 3}
+        return PublicTaxonomyRead(id=1, name="技术", slug="category-a", post_count=3)
 
     async def list_public_tags(
         self,
         *,
         limit: int,
         offset: int,
-    ) -> list[dict[str, object]]:
+    ) -> list[PublicTaxonomyRead]:
         assert limit in {2, 1000}
         assert offset == 0
         return [
-            {"id": 1, "name": "FastAPI", "slug": "fastapi", "post_count": 2},
-            {"id": 2, "name": "React", "slug": "react", "post_count": 1},
+            PublicTaxonomyRead(id=1, name="FastAPI", slug="fastapi", post_count=2),
+            PublicTaxonomyRead(id=2, name="React", slug="react", post_count=1),
         ]
 
-    async def get_public_tag_by_slug(self, slug: str) -> dict[str, object]:
+    async def get_public_tag_by_slug(self, slug: str) -> PublicTaxonomyRead:
         if slug != "fastapi":
             raise ContentNotFoundError("tag not found")
-        return {"id": 1, "name": "FastAPI", "slug": "fastapi", "post_count": 2}
+        return PublicTaxonomyRead(id=1, name="FastAPI", slug="fastapi", post_count=2)
 
-    async def get_public_post_by_slug(self, slug: str) -> object:
+    async def get_public_post_by_slug(self, slug: str) -> PublicPostDetailRead:
         if slug != "public-post":
             raise ContentNotFoundError("post not found")
-        return SimpleNamespace(
+        return PublicPostDetailRead(
             id=1,
             title="公开文章",
             slug="public-post",
@@ -254,7 +259,7 @@ class FakePublicContentService:
                 'alt="封面"></p>'
             ),
             content_md="中文阅读时长 test-article 2026",
-            word_count=1,
+            word_count=8,
             seo_title=None,
             seo_description="SEO 摘要",
             seo_keywords="博客,验证",
@@ -264,10 +269,10 @@ class FakePublicContentService:
             updated_at=datetime(2026, 6, 16, tzinfo=UTC),
         )
 
-    async def get_public_page_by_slug(self, slug: str) -> object:
+    async def get_public_page_by_slug(self, slug: str) -> PublicPageDetailRead:
         if slug != "about":
             raise ContentNotFoundError("page not found")
-        return SimpleNamespace(
+        return PublicPageDetailRead(
             id=3,
             title="关于",
             slug="about",

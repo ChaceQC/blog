@@ -17,6 +17,7 @@ from app.services.file_errors import (
     InvalidFileVisibilityError,
     ManagedFileNotFoundError,
 )
+from app.services.file_read_models import PublicFileRead, public_file_read
 from app.services.file_storage import (
     article_render_reference_exists,
     create_thumbnail,
@@ -189,13 +190,17 @@ class FileService:
         files = await self.repository.list_files(limit=limit, offset=offset)
         return [FileWithUsage(file=file, usage_count=count) for file, count in files]
 
-    async def list_public_files(self, *, limit: int, offset: int) -> list[BlogFile]:
-        return list(
-            await self.repository.list_public_listed_files(
-                limit=limit,
-                offset=offset,
-            ),
+    async def list_public_files(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[PublicFileRead]:
+        files = await self.repository.list_public_listed_files(
+            limit=limit,
+            offset=offset,
         )
+        return [public_file_read(file) for file in files]
 
     async def count_public_files(self) -> int:
         return await self.repository.count_public_listed_files()

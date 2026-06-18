@@ -14,8 +14,6 @@ from app.api.public.common import (
     validate_public_content_session,
 )
 from app.core.encryption import EncryptionProfile
-from app.models.content import Post
-from app.providers.markdown import count_words
 from app.schemas.content import (
     SLUG_PATTERN,
     PublicPageDetail,
@@ -25,6 +23,7 @@ from app.schemas.content import (
 )
 from app.schemas.pagination import PAGE_OFFSET_MAX
 from app.services.content import ContentNotFoundError
+from app.services.content_read_models import PublicPostDetailRead, PublicPostRead
 from app.services.files import create_article_render_token, sign_article_render_urls
 
 router = APIRouter(tags=["public-posts"])
@@ -68,7 +67,7 @@ async def list_public_posts(
     response = await encrypted_response(
         PublicPostListResponse(
             items=[
-                _public_post_item(
+                _signed_public_post_item(
                     post,
                     expires_seconds=settings.file_temporary_url_expire_seconds,
                     secret_key=settings.secret_key,
@@ -210,8 +209,8 @@ async def get_public_page(
     return response
 
 
-def _public_post_item(
-    post: Post,
+def _signed_public_post_item(
+    post: PublicPostRead,
     *,
     expires_seconds: int,
     secret_key: str,
@@ -224,16 +223,12 @@ def _public_post_item(
                 expires_seconds=expires_seconds,
                 secret_key=secret_key,
             ),
-            "word_count": max(
-                item.word_count,
-                count_words(getattr(post, "content_md", "")),
-            ),
         },
     )
 
 
 def _public_post_detail(
-    post: Post,
+    post: PublicPostDetailRead,
     *,
     expires_seconds: int,
     secret_key: str,
@@ -246,16 +241,12 @@ def _public_post_detail(
                 expires_seconds=expires_seconds,
                 secret_key=secret_key,
             ),
-            "word_count": max(
-                detail.word_count,
-                count_words(getattr(post, "content_md", "")),
-            ),
         },
     )
 
 
 def _signed_cover_url(
-    post: Post,
+    post: PublicPostRead,
     *,
     expires_seconds: int,
     secret_key: str,
