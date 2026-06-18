@@ -48,6 +48,8 @@ from app.services.link_groups import (
     InvalidLinkGroupValueError,
     LinkGroupNotFoundError,
     LinkGroupSlugExistsError,
+    UpdateFriendLinkGroupCommand,
+    UpdateSiteNavGroupCommand,
 )
 from app.services.links import (
     CreateFriendLinkCommand,
@@ -56,7 +58,10 @@ from app.services.links import (
     InvalidSiteNavItemValueError,
     LinkNotFoundError,
     SiteNavItemNotFoundError,
+    UpdateFriendLinkCommand,
+    UpdateSiteNavItemCommand,
 )
+from app.services.update_commands import UNSET
 
 router = APIRouter(tags=["admin-links"])
 FriendLinkReviewerDependency = Annotated[
@@ -159,7 +164,7 @@ async def update_friend_link_group(
     try:
         group = await service.update_friend_link_group(
             group_id=group_id,
-            changes=group_payload.model_dump(exclude_unset=True),
+            command=_update_friend_link_group_command(group_payload),
         )
     except LinkGroupNotFoundError as exc:
         raise _friend_link_group_not_found() from exc
@@ -279,7 +284,7 @@ async def update_site_nav_group(
     try:
         group = await service.update_site_nav_group(
             group_id=group_id,
-            changes=group_payload.model_dump(exclude_unset=True),
+            command=_update_site_nav_group_command(group_payload),
         )
     except LinkGroupNotFoundError as exc:
         raise _site_group_not_found() from exc
@@ -402,7 +407,7 @@ async def update_friend_link(
     try:
         link = await service.update_friend_link(
             link_id=link_id,
-            changes=link_payload.model_dump(exclude_unset=True),
+            command=_update_friend_link_command(link_payload),
         )
     except LinkNotFoundError as exc:
         raise _link_not_found() from exc
@@ -574,7 +579,7 @@ async def update_site_nav_item(
     try:
         item = await service.update_site_nav_item(
             item_id=item_id,
-            changes=item_payload.model_dump(exclude_unset=True),
+            command=_update_site_nav_item_command(item_payload),
         )
     except SiteNavItemNotFoundError as exc:
         raise _site_item_not_found() from exc
@@ -635,6 +640,63 @@ def _validate_decrypted_payload[T: BaseModel](
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="invalid encrypted request payload",
         ) from exc
+
+
+def _update_friend_link_group_command(
+    payload: FriendLinkGroupUpdateRequest,
+) -> UpdateFriendLinkGroupCommand:
+    fields = payload.model_fields_set
+    return UpdateFriendLinkGroupCommand(
+        name=payload.name if "name" in fields else UNSET,
+        slug=payload.slug if "slug" in fields else UNSET,
+        sort_order=payload.sort_order if "sort_order" in fields else UNSET,
+    )
+
+
+def _update_site_nav_group_command(
+    payload: SiteNavGroupUpdateRequest,
+) -> UpdateSiteNavGroupCommand:
+    fields = payload.model_fields_set
+    return UpdateSiteNavGroupCommand(
+        name=payload.name if "name" in fields else UNSET,
+        slug=payload.slug if "slug" in fields else UNSET,
+        description=payload.description if "description" in fields else UNSET,
+        visibility=payload.visibility if "visibility" in fields else UNSET,
+        sort_order=payload.sort_order if "sort_order" in fields else UNSET,
+    )
+
+
+def _update_friend_link_command(
+    payload: FriendLinkUpdateRequest,
+) -> UpdateFriendLinkCommand:
+    fields = payload.model_fields_set
+    return UpdateFriendLinkCommand(
+        group_id=payload.group_id if "group_id" in fields else UNSET,
+        name=payload.name if "name" in fields else UNSET,
+        url=payload.url if "url" in fields else UNSET,
+        avatar_url=payload.avatar_url if "avatar_url" in fields else UNSET,
+        description=payload.description if "description" in fields else UNSET,
+        rss_url=payload.rss_url if "rss_url" in fields else UNSET,
+        status=payload.status if "status" in fields else UNSET,
+        sort_order=payload.sort_order if "sort_order" in fields else UNSET,
+    )
+
+
+def _update_site_nav_item_command(
+    payload: SiteNavItemUpdateRequest,
+) -> UpdateSiteNavItemCommand:
+    fields = payload.model_fields_set
+    return UpdateSiteNavItemCommand(
+        group_id=payload.group_id if "group_id" in fields else UNSET,
+        title=payload.title if "title" in fields else UNSET,
+        url=payload.url if "url" in fields else UNSET,
+        icon_url=payload.icon_url if "icon_url" in fields else UNSET,
+        description=payload.description if "description" in fields else UNSET,
+        tags_json=payload.tags_json if "tags_json" in fields else UNSET,
+        open_target=payload.open_target if "open_target" in fields else UNSET,
+        visibility=payload.visibility if "visibility" in fields else UNSET,
+        sort_order=payload.sort_order if "sort_order" in fields else UNSET,
+    )
 
 
 def _friend_link_audit_payload(link: object) -> dict[str, object]:

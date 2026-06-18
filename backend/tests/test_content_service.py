@@ -8,6 +8,8 @@ from app.services.content import (
     ContentSlugExistsError,
     CreatePageCommand,
     CreatePostCommand,
+    UpdatePageCommand,
+    UpdatePostCommand,
 )
 
 
@@ -225,7 +227,7 @@ async def test_update_page_rerenders_content() -> None:
 
     updated = await service.update_page(
         page_id=page.id,
-        changes={"content_md": "新内容 <b>"},
+        command=UpdatePageCommand(content_md="新内容 <b>"),
     )
 
     assert updated.content_html == "<p>新内容 &lt;b&gt;</p>"
@@ -354,10 +356,10 @@ async def test_update_post_replaces_file_usages() -> None:
 
     await service.update_post(
         post_id=post.id,
-        changes={
-            "cover_file_id": None,
-            "content_md": "![新图](/api/public/posts/old-post/files/8/render)",
-        },
+        command=UpdatePostCommand(
+            cover_file_id=None,
+            content_md="![新图](/api/public/posts/old-post/files/8/render)",
+        ),
     )
 
     assert repository.file_usages[("post", post.id)] == [(8, "post_body")]

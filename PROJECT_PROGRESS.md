@@ -32,11 +32,11 @@
 - 拆分公开路由职责：`backend/app/api/public/router.py` 缩减为子路由聚合器，新增 `common.py`、`taxonomy.py`、`posts.py`、`settings.py` 和 `links.py`，分别承载公开共享校验/日志、分类标签、文章页面、站点资料、友链与站点导航逻辑；公开 URL、响应模型和错误码保持不变。
 - 拆分 `FileService` 的横向职责：新增 `backend/app/services/file_errors.py`、`file_tokens.py`、`file_uploads.py` 和 `file_storage.py`，分别承载文件异常、临时 token/文章图片 URL 签名、上传校验/文件头/图片尺寸、存储路径/缩略图/引用校验；`backend/app/services/files.py` 缩减为文件用例编排，并保留原公开导入出口兼容现有 API 和测试。
 - 公开读取接口已引入 Service read model 边界：新增 `backend/app/services/content_read_models.py` 和 `file_read_models.py`，公开文章列表/详情、公开页面、公开分类标签和公开文件列表由 Service 返回只读 DTO，API 层不再直接依赖这些公开链路的 ORM 模型字段；文章图片渲染仍通过公开文章 detail read model 提供引用校验所需正文摘要字段。
+- Service 更新入口已改为显式命令对象：新增 `backend/app/services/update_commands.py`，`ContentService`、`LinkService` 和 `LinkGroupService` 的更新方法改为接收 `UpdatePostCommand`、`UpdatePageCommand`、`UpdateFriendLinkCommand`、`UpdateSiteNavItemCommand`、`UpdateFriendLinkGroupCommand` 和 `UpdateSiteNavGroupCommand`，保留 PATCH 未传字段不更新、显式 `null` 清空字段的语义，并移除业务更新中的 `dict + setattr` 模式。
 
 ### 待修复清单
 
 - P2：后台管理读取链路仍有 ORM/record 到 API schema 的直接装配。公开读取接口已先覆盖 read model；后台 `ContentService`、`FileService` 的管理端列表/详情，以及日志/设置等接口仍直接在 API 层调用 `model_validate`，后续可结合后台路由拆分继续逐步引入管理端 read model。
-- P2：更新逻辑大量使用 `dict + setattr`，类型边界偏弱。`backend/app/services/content.py`、`backend/app/services/links.py` 和 `backend/app/services/link_groups.py` 的更新入口依赖 `changes: dict[...]` 与白名单 `setattr`；后续应改为明确的 `UpdatePostCommand`、`UpdateFriendLinkCommand`、`UpdateSiteNavItemCommand` 或 Service 层专用 DTO。
 - P2：后台链接路由 CRUD 模式重复明显。`backend/app/api/admin/links.py` 多次重复“解密、校验、调用 service、捕获异常、记录审计、加密响应”流程；后续应拆分路由文件，并抽取 admin encrypted command handler 或 use-case helper 统一横切流程。
 - P2：前端管理页仍偏“页面即应用”。`frontend/src/routes/admin/AdminPostsPage.tsx`、`frontend/src/routes/admin/AdminSettingsPage.tsx`、`frontend/src/features/links/AdminFriendLinksPanel.tsx` 和 `frontend/src/features/links/AdminSiteNavPanel.tsx` 同时处理列表、分页、选中态、表单态、权限、mutation、预览和 JSX；后续应拆出 `useAdminPostEditor`、列表面板、编辑表单、Markdown 工具栏和预览弹窗等 hook/component。
 - P2：前后端类型手写镜像，后续容易漂移。后端 Pydantic schema 与前端 `features/*/types.ts` 手写维护同一批字段、可空性和响应结构；后续应评估基于 OpenAPI 生成 TypeScript 类型，或至少补充 contract test。
@@ -60,7 +60,7 @@
 
 ### 下一步
 
-- 替换内容、友链和分组更新入口中的 `dict + setattr`，引入明确的 Service 更新命令对象，收紧写入边界。
+- 拆分后台链接路由的分组、友链、站点导航职责，并抽取加密请求校验与加密响应 helper，减少 CRUD 横切流程重复。
 
 ### 验证
 
@@ -90,6 +90,8 @@
 - `FileService` 拆分后已运行 `uv run pytest tests/test_admin_files_api.py tests/test_file_cleanup.py tests/test_public_content_api.py tests/test_content_service.py`，60 个测试通过；仍存在 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 状态常量的上游弃用警告。
 - 公开读取 read model 边界调整后已运行 `uv run ruff check app/schemas/content.py app/services/content_read_models.py app/services/file_read_models.py app/services/content.py app/services/files.py app/api/public tests/test_public_content_api.py tests/test_content_service.py tests/test_admin_files_api.py`，通过。
 - 公开读取 read model 边界调整后已运行 `uv run pytest tests/test_public_content_api.py tests/test_content_service.py tests/test_admin_files_api.py`，51 个测试通过；仍存在 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 状态常量的上游弃用警告。
+- Service 更新命令改造后已运行 `uv run ruff check app/services/update_commands.py app/services/content.py app/services/links.py app/services/link_groups.py app/api/admin/content.py app/api/admin/links.py tests/test_content_service.py tests/test_admin_links_api.py`，通过。
+- Service 更新命令改造后已运行 `uv run pytest tests/test_content_service.py tests/test_admin_content_api.py tests/test_admin_links_api.py tests/test_public_content_api.py`，54 个测试通过；仍存在 FastAPI/Starlette TestClient 和 HTTP 状态常量的上游弃用警告。
 
 ## 2026-06-18
 

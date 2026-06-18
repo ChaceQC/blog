@@ -19,8 +19,15 @@ from app.services.auth import AuthenticatedUser
 from app.services.link_groups import (
     CreateFriendLinkGroupCommand,
     CreateSiteNavGroupCommand,
+    UpdateFriendLinkGroupCommand,
+    UpdateSiteNavGroupCommand,
 )
-from app.services.links import CreateFriendLinkCommand, CreateSiteNavItemCommand
+from app.services.links import (
+    CreateFriendLinkCommand,
+    CreateSiteNavItemCommand,
+    UpdateFriendLinkCommand,
+    UpdateSiteNavItemCommand,
+)
 
 
 class FakeLinkService:
@@ -90,20 +97,26 @@ class FakeLinkService:
         self,
         *,
         link_id: int,
-        changes: dict[str, object],
+        command: UpdateFriendLinkCommand,
     ) -> object:
         assert link_id == 1
-        assert changes["name"] == "更新后的友链"
+        assert command.name == "更新后的友链"
         return SimpleNamespace(
             id=1,
             group_id=1,
             group_name=None,
-            name=changes["name"],
-            url=changes.get("url", "https://blog.example.test"),
+            name=command.name,
+            url=(
+                command.url
+                if isinstance(command.url, str)
+                else "https://blog.example.test"
+            ),
             avatar_url=None,
-            description=changes.get("description"),
+            description=(
+                command.description if isinstance(command.description, str) else None
+            ),
             rss_url=None,
-            status=changes.get("status", "pending"),
+            status=command.status if isinstance(command.status, str) else "pending",
             sort_order=0,
             last_checked_at=None,
             last_status_code=None,
@@ -161,22 +174,34 @@ class FakeLinkService:
         self,
         *,
         item_id: int,
-        changes: dict[str, object],
+        command: UpdateSiteNavItemCommand,
     ) -> object:
         assert item_id == 1
-        assert changes["title"] == "更新后的导航"
+        assert command.title == "更新后的导航"
         return SimpleNamespace(
             id=1,
             group_id=1,
             group_name=None,
             group_slug=None,
-            title=changes["title"],
-            url=changes.get("url", "https://github.com/ChaceQC/blog"),
-            icon_url=changes.get("icon_url"),
-            description=changes.get("description"),
-            tags_json=changes.get("tags_json"),
-            open_target=changes.get("open_target", "blank"),
-            visibility=changes.get("visibility", "public"),
+            title=command.title,
+            url=(
+                command.url
+                if isinstance(command.url, str)
+                else "https://github.com/ChaceQC/blog"
+            ),
+            icon_url=command.icon_url if isinstance(command.icon_url, str) else None,
+            description=(
+                command.description if isinstance(command.description, str) else None
+            ),
+            tags_json=(
+                command.tags_json if isinstance(command.tags_json, dict) else None
+            ),
+            open_target=(
+                command.open_target if isinstance(command.open_target, str) else "blank"
+            ),
+            visibility=(
+                command.visibility if isinstance(command.visibility, str) else "public"
+            ),
             click_count=0,
             sort_order=0,
             created_at=datetime(2026, 6, 16, tzinfo=UTC),
@@ -221,15 +246,15 @@ class FakeLinkGroupService:
         self,
         *,
         group_id: int,
-        changes: dict[str, object],
+        command: UpdateFriendLinkGroupCommand,
     ) -> object:
         assert group_id == 1
-        assert changes["name"] == "更新后的友链分组"
+        assert command.name == "更新后的友链分组"
         return SimpleNamespace(
             id=1,
-            name=changes["name"],
-            slug=changes.get("slug", "friends"),
-            sort_order=changes.get("sort_order", 0),
+            name=command.name,
+            slug=command.slug if isinstance(command.slug, str) else "friends",
+            sort_order=command.sort_order if isinstance(command.sort_order, int) else 0,
             created_at=datetime(2026, 6, 16, tzinfo=UTC),
         )
 
@@ -273,17 +298,21 @@ class FakeLinkGroupService:
         self,
         *,
         group_id: int,
-        changes: dict[str, object],
+        command: UpdateSiteNavGroupCommand,
     ) -> object:
         assert group_id == 1
-        assert changes["name"] == "更新后的导航分组"
+        assert command.name == "更新后的导航分组"
         return SimpleNamespace(
             id=1,
-            name=changes["name"],
-            slug=changes.get("slug", "projects"),
-            description=changes.get("description"),
-            visibility=changes.get("visibility", "public"),
-            sort_order=changes.get("sort_order", 0),
+            name=command.name,
+            slug=command.slug if isinstance(command.slug, str) else "projects",
+            description=(
+                command.description if isinstance(command.description, str) else None
+            ),
+            visibility=(
+                command.visibility if isinstance(command.visibility, str) else "public"
+            ),
+            sort_order=command.sort_order if isinstance(command.sort_order, int) else 0,
             created_at=datetime(2026, 6, 16, tzinfo=UTC),
         )
 

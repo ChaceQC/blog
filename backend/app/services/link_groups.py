@@ -6,6 +6,7 @@ from typing import Protocol
 from app.models.link import FriendLinkGroup
 from app.models.site import SiteNavGroup
 from app.services.links import ALLOWED_SITE_NAV_VISIBILITIES
+from app.services.update_commands import UNSET, UnsetType, is_set
 
 
 class LinkGroupNotFoundError(Exception):
@@ -108,6 +109,22 @@ class CreateSiteNavGroupCommand:
     sort_order: int
 
 
+@dataclass(frozen=True)
+class UpdateFriendLinkGroupCommand:
+    name: str | UnsetType = UNSET
+    slug: str | UnsetType = UNSET
+    sort_order: int | UnsetType = UNSET
+
+
+@dataclass(frozen=True)
+class UpdateSiteNavGroupCommand:
+    name: str | UnsetType = UNSET
+    slug: str | UnsetType = UNSET
+    description: str | None | UnsetType = UNSET
+    visibility: str | UnsetType = UNSET
+    sort_order: int | UnsetType = UNSET
+
+
 class LinkGroupService:
     def __init__(self, *, repository: LinkGroupRepositoryProtocol) -> None:
         self.repository = repository
@@ -142,19 +159,23 @@ class LinkGroupService:
         self,
         *,
         group_id: int,
-        changes: dict[str, object],
+        command: UpdateFriendLinkGroupCommand,
     ) -> AdminFriendLinkGroupRecord:
         group = await self.repository.get_friend_link_group(group_id)
         if group is None:
             raise LinkGroupNotFoundError("friend link group not found")
 
-        slug = changes.get("slug")
-        if isinstance(slug, str):
-            await self._ensure_friend_group_slug_available(slug, current_id=group.id)
+        if is_set(command.slug):
+            await self._ensure_friend_group_slug_available(
+                command.slug,
+                current_id=group.id,
+            )
+            group.slug = command.slug
 
-        for field in ("name", "slug", "sort_order"):
-            if field in changes:
-                setattr(group, field, changes[field])
+        if is_set(command.name):
+            group.name = command.name
+        if is_set(command.sort_order):
+            group.sort_order = command.sort_order
 
         await self.repository.commit()
         await self.repository.refresh(group)
@@ -193,22 +214,28 @@ class LinkGroupService:
         self,
         *,
         group_id: int,
-        changes: dict[str, object],
+        command: UpdateSiteNavGroupCommand,
     ) -> AdminSiteNavGroupRecord:
         group = await self.repository.get_site_nav_group(group_id)
         if group is None:
             raise LinkGroupNotFoundError("site nav group not found")
 
-        slug = changes.get("slug")
-        if isinstance(slug, str):
-            await self._ensure_site_group_slug_available(slug, current_id=group.id)
-        visibility = changes.get("visibility")
-        if isinstance(visibility, str):
-            self._ensure_site_nav_group_visibility(visibility)
+        if is_set(command.slug):
+            await self._ensure_site_group_slug_available(
+                command.slug,
+                current_id=group.id,
+            )
+            group.slug = command.slug
+        if is_set(command.visibility):
+            self._ensure_site_nav_group_visibility(command.visibility)
+            group.visibility = command.visibility
 
-        for field in ("name", "slug", "description", "visibility", "sort_order"):
-            if field in changes:
-                setattr(group, field, changes[field])
+        if is_set(command.name):
+            group.name = command.name
+        if is_set(command.description):
+            group.description = command.description
+        if is_set(command.sort_order):
+            group.sort_order = command.sort_order
 
         await self.repository.commit()
         await self.repository.refresh(group)

@@ -6,6 +6,7 @@ from typing import Any, Protocol
 from app.core.site_nav_tags import normalize_site_nav_tags_json
 from app.models.link import FriendLink
 from app.models.site import SiteNavItem
+from app.services.update_commands import UNSET, UnsetType, is_set
 
 FriendLinkStatus = str
 ALLOWED_FRIEND_LINK_STATUSES = {"pending", "healthy", "rejected"}
@@ -165,6 +166,31 @@ class CreateSiteNavItemCommand:
     sort_order: int
 
 
+@dataclass(frozen=True)
+class UpdateFriendLinkCommand:
+    group_id: int | None | UnsetType = UNSET
+    name: str | UnsetType = UNSET
+    url: str | UnsetType = UNSET
+    avatar_url: str | None | UnsetType = UNSET
+    description: str | None | UnsetType = UNSET
+    rss_url: str | None | UnsetType = UNSET
+    status: str | UnsetType = UNSET
+    sort_order: int | UnsetType = UNSET
+
+
+@dataclass(frozen=True)
+class UpdateSiteNavItemCommand:
+    group_id: int | None | UnsetType = UNSET
+    title: str | UnsetType = UNSET
+    url: str | UnsetType = UNSET
+    icon_url: str | None | UnsetType = UNSET
+    description: str | None | UnsetType = UNSET
+    tags_json: dict[str, Any] | None | UnsetType = UNSET
+    open_target: str | UnsetType = UNSET
+    visibility: str | UnsetType = UNSET
+    sort_order: int | UnsetType = UNSET
+
+
 class LinkService:
     def __init__(self, *, repository: LinkRepositoryProtocol) -> None:
         self.repository = repository
@@ -240,28 +266,31 @@ class LinkService:
         self,
         *,
         link_id: int,
-        changes: dict[str, Any],
+        command: UpdateFriendLinkCommand,
     ) -> AdminFriendLinkRecord:
-        status = changes.get("status")
-        if isinstance(status, str):
-            self._ensure_valid_status(status)
+        if is_set(command.status):
+            self._ensure_valid_status(command.status)
 
         link = await self.repository.get_friend_link(link_id)
         if link is None:
             raise LinkNotFoundError("friend link not found")
 
-        for field in (
-            "group_id",
-            "name",
-            "url",
-            "avatar_url",
-            "description",
-            "rss_url",
-            "status",
-            "sort_order",
-        ):
-            if field in changes:
-                setattr(link, field, changes[field])
+        if is_set(command.group_id):
+            link.group_id = command.group_id
+        if is_set(command.name):
+            link.name = command.name
+        if is_set(command.url):
+            link.url = command.url
+        if is_set(command.avatar_url):
+            link.avatar_url = command.avatar_url
+        if is_set(command.description):
+            link.description = command.description
+        if is_set(command.rss_url):
+            link.rss_url = command.rss_url
+        if is_set(command.status):
+            link.status = command.status
+        if is_set(command.sort_order):
+            link.sort_order = command.sort_order
 
         await self.repository.commit()
         await self.repository.refresh(link)
@@ -346,38 +375,35 @@ class LinkService:
         self,
         *,
         item_id: int,
-        changes: dict[str, Any],
+        command: UpdateSiteNavItemCommand,
     ) -> AdminSiteNavItemRecord:
-        open_target = changes.get("open_target")
-        visibility = changes.get("visibility")
         self._ensure_valid_site_nav_values(
-            open_target=open_target if isinstance(open_target, str) else None,
-            visibility=visibility if isinstance(visibility, str) else None,
+            open_target=command.open_target if is_set(command.open_target) else None,
+            visibility=command.visibility if is_set(command.visibility) else None,
         )
 
         item = await self.repository.get_site_nav_item(item_id)
         if item is None:
             raise SiteNavItemNotFoundError("site nav item not found")
 
-        if "tags_json" in changes:
-            changes = {
-                **changes,
-                "tags_json": self._normalize_site_nav_tags(changes["tags_json"]),
-            }
-
-        for field in (
-            "group_id",
-            "title",
-            "url",
-            "icon_url",
-            "description",
-            "tags_json",
-            "open_target",
-            "visibility",
-            "sort_order",
-        ):
-            if field in changes:
-                setattr(item, field, changes[field])
+        if is_set(command.group_id):
+            item.group_id = command.group_id
+        if is_set(command.title):
+            item.title = command.title
+        if is_set(command.url):
+            item.url = command.url
+        if is_set(command.icon_url):
+            item.icon_url = command.icon_url
+        if is_set(command.description):
+            item.description = command.description
+        if is_set(command.tags_json):
+            item.tags_json = self._normalize_site_nav_tags(command.tags_json)
+        if is_set(command.open_target):
+            item.open_target = command.open_target
+        if is_set(command.visibility):
+            item.visibility = command.visibility
+        if is_set(command.sort_order):
+            item.sort_order = command.sort_order
 
         await self.repository.commit()
         await self.repository.refresh(item)

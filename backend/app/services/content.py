@@ -2,7 +2,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Protocol
 
 from app.core.auth import utc_now
 from app.models.content import Page, Post
@@ -18,6 +18,7 @@ from app.services.content_read_models import (
     public_taxonomy_read,
     public_taxonomy_reads,
 )
+from app.services.update_commands import UNSET, UnsetType, is_set
 
 
 class ContentNotFoundError(Exception):
@@ -183,6 +184,35 @@ class CreatePageCommand:
     seo_description: str | None
 
 
+@dataclass(frozen=True)
+class UpdatePostCommand:
+    title: str | UnsetType = UNSET
+    slug: str | UnsetType = UNSET
+    summary: str | None | UnsetType = UNSET
+    content_md: str | UnsetType = UNSET
+    status: str | UnsetType = UNSET
+    visibility: str | UnsetType = UNSET
+    cover_file_id: int | None | UnsetType = UNSET
+    seo_title: str | None | UnsetType = UNSET
+    seo_description: str | None | UnsetType = UNSET
+    seo_keywords: str | None | UnsetType = UNSET
+    category_names: Sequence[str] | None | UnsetType = UNSET
+    tag_names: Sequence[str] | None | UnsetType = UNSET
+    published_at: datetime | None | UnsetType = UNSET
+
+
+@dataclass(frozen=True)
+class UpdatePageCommand:
+    title: str | UnsetType = UNSET
+    slug: str | UnsetType = UNSET
+    content_md: str | UnsetType = UNSET
+    status: str | UnsetType = UNSET
+    show_in_nav: bool | UnsetType = UNSET
+    sort_order: int | UnsetType = UNSET
+    seo_title: str | None | UnsetType = UNSET
+    seo_description: str | None | UnsetType = UNSET
+
+
 class ContentService:
     def __init__(
         self,
@@ -305,48 +335,52 @@ class ContentService:
     def render_preview(self, content_md: str) -> str:
         return self.renderer.render(content_md)
 
-    async def update_post(self, *, post_id: int, changes: dict[str, Any]) -> Post:
+    async def update_post(self, *, post_id: int, command: UpdatePostCommand) -> Post:
         post = await self.get_post(post_id)
-        slug = changes.get("slug")
-        if isinstance(slug, str):
-            await self._ensure_post_slug_available(slug, current_id=post.id)
 
-        for field in (
-            "title",
-            "slug",
-            "summary",
-            "status",
-            "visibility",
-            "cover_file_id",
-            "seo_title",
-            "seo_description",
-            "seo_keywords",
-        ):
-            if field in changes:
-                setattr(post, field, changes[field])
-        if "category_names" in changes:
-            category_names = changes["category_names"] or []
+        if is_set(command.slug):
+            await self._ensure_post_slug_available(command.slug, current_id=post.id)
+            post.slug = command.slug
+        if is_set(command.title):
+            post.title = command.title
+        if is_set(command.summary):
+            post.summary = command.summary
+        if is_set(command.status):
+            post.status = command.status
+        if is_set(command.visibility):
+            post.visibility = command.visibility
+        if is_set(command.cover_file_id):
+            post.cover_file_id = command.cover_file_id
+        if is_set(command.seo_title):
+            post.seo_title = command.seo_title
+        if is_set(command.seo_description):
+            post.seo_description = command.seo_description
+        if is_set(command.seo_keywords):
+            post.seo_keywords = command.seo_keywords
+
+        if is_set(command.category_names):
+            category_names = command.category_names or []
             await self.repository.replace_post_categories(
                 post_id=post.id,
                 category_names=category_names,
             )
             post.category_names = _normalize_labels(category_names)
-        if "tag_names" in changes:
-            tag_names = changes["tag_names"] or []
+        if is_set(command.tag_names):
+            tag_names = command.tag_names or []
             await self.repository.replace_post_tags(
                 post_id=post.id,
                 tag_names=tag_names,
             )
             post.tag_names = _normalize_labels(tag_names)
-        if "published_at" in changes:
-            post.published_at = changes["published_at"]
+        if is_set(command.published_at):
+            post.published_at = command.published_at
 
-        if "content_md" in changes:
-            post.content_md = changes["content_md"]
+        if is_set(command.content_md):
+            post.content_md = command.content_md
             post.content_html = self.renderer.render(post.content_md)
             post.word_count = count_words(post.content_md)
 
-        if "status" in changes and "published_at" not in changes:
+        if is_set(command.status) and not is_set(command.published_at):
             post.published_at = _published_at_for_status(
                 status=post.status,
                 requested_at=post.published_at,
@@ -397,26 +431,27 @@ class ContentService:
         await self.repository.refresh(page)
         return page
 
-    async def update_page(self, *, page_id: int, changes: dict[str, Any]) -> Page:
+    async def update_page(self, *, page_id: int, command: UpdatePageCommand) -> Page:
         page = await self.get_page(page_id)
-        slug = changes.get("slug")
-        if isinstance(slug, str):
-            await self._ensure_page_slug_available(slug, current_id=page.id)
 
-        for field in (
-            "title",
-            "slug",
-            "status",
-            "show_in_nav",
-            "sort_order",
-            "seo_title",
-            "seo_description",
-        ):
-            if field in changes:
-                setattr(page, field, changes[field])
+        if is_set(command.slug):
+            await self._ensure_page_slug_available(command.slug, current_id=page.id)
+            page.slug = command.slug
+        if is_set(command.title):
+            page.title = command.title
+        if is_set(command.status):
+            page.status = command.status
+        if is_set(command.show_in_nav):
+            page.show_in_nav = command.show_in_nav
+        if is_set(command.sort_order):
+            page.sort_order = command.sort_order
+        if is_set(command.seo_title):
+            page.seo_title = command.seo_title
+        if is_set(command.seo_description):
+            page.seo_description = command.seo_description
 
-        if "content_md" in changes:
-            page.content_md = changes["content_md"]
+        if is_set(command.content_md):
+            page.content_md = command.content_md
             page.content_html = self.renderer.render(page.content_md)
         await self.repository.commit()
         await self.repository.refresh(page)

@@ -40,9 +40,12 @@ from app.services.content import (
     ContentSlugExistsError,
     CreatePageCommand,
     CreatePostCommand,
+    UpdatePageCommand,
+    UpdatePostCommand,
 )
 from app.services.encryption import EncryptionSessionManager
 from app.services.files import sign_admin_preview_image_urls
+from app.services.update_commands import UNSET
 
 router = APIRouter(tags=["admin-content"])
 PostReaderDependency = Annotated[
@@ -211,7 +214,7 @@ async def update_post(
     try:
         post = await service.update_post(
             post_id=post_id,
-            changes=post_payload.model_dump(exclude_unset=True),
+            command=_update_post_command(post_payload),
         )
     except ContentNotFoundError as exc:
         raise _not_found("post not found") from exc
@@ -379,7 +382,7 @@ async def update_page(
     try:
         page = await service.update_page(
             page_id=page_id,
-            changes=page_payload.model_dump(exclude_unset=True),
+            command=_update_page_command(page_payload),
         )
     except ContentNotFoundError as exc:
         raise _not_found("page not found") from exc
@@ -449,6 +452,45 @@ def _validate_decrypted_payload[T: BaseModel](
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="invalid encrypted request payload",
         ) from exc
+
+
+def _update_post_command(payload: PostUpdateRequest) -> UpdatePostCommand:
+    fields = payload.model_fields_set
+    return UpdatePostCommand(
+        title=payload.title if "title" in fields else UNSET,
+        slug=payload.slug if "slug" in fields else UNSET,
+        summary=payload.summary if "summary" in fields else UNSET,
+        content_md=payload.content_md if "content_md" in fields else UNSET,
+        status=payload.status if "status" in fields else UNSET,
+        visibility=payload.visibility if "visibility" in fields else UNSET,
+        cover_file_id=payload.cover_file_id if "cover_file_id" in fields else UNSET,
+        seo_title=payload.seo_title if "seo_title" in fields else UNSET,
+        seo_description=(
+            payload.seo_description if "seo_description" in fields else UNSET
+        ),
+        seo_keywords=payload.seo_keywords if "seo_keywords" in fields else UNSET,
+        category_names=(
+            payload.category_names if "category_names" in fields else UNSET
+        ),
+        tag_names=payload.tag_names if "tag_names" in fields else UNSET,
+        published_at=payload.published_at if "published_at" in fields else UNSET,
+    )
+
+
+def _update_page_command(payload: PageUpdateRequest) -> UpdatePageCommand:
+    fields = payload.model_fields_set
+    return UpdatePageCommand(
+        title=payload.title if "title" in fields else UNSET,
+        slug=payload.slug if "slug" in fields else UNSET,
+        content_md=payload.content_md if "content_md" in fields else UNSET,
+        status=payload.status if "status" in fields else UNSET,
+        show_in_nav=payload.show_in_nav if "show_in_nav" in fields else UNSET,
+        sort_order=payload.sort_order if "sort_order" in fields else UNSET,
+        seo_title=payload.seo_title if "seo_title" in fields else UNSET,
+        seo_description=(
+            payload.seo_description if "seo_description" in fields else UNSET
+        ),
+    )
 
 
 def _post_audit_payload(post: object) -> dict[str, object]:
