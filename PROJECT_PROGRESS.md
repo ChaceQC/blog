@@ -818,26 +818,39 @@
 
 ### 已完成
 
-- 参考 `https://innei.in/` 的公开页表现，为前台公开界面补充轻量动效：顶部浮动导航入场、导航 active/hover 下划线、首页头像轻浮动、社交入口上浮反馈、时间线绘制、内容块滚动显现和列表 hover 位移。
-- 为文章列表、公开文件、站点目录、首页近期文章、碎念、常用入口和写作轨迹补充一致的交互动效。
-- 增加 `prefers-reduced-motion` 兜底，系统关闭动效时会尽量压缩动画和过渡。
+- 按 `https://innei.in/` 的公开页动效方向补充前台动画：顶部浮动导航入场、导航 active/hover 下划线、首页头像轻浮动、社交圆形按钮上浮、页面切入、滚动显现和时间线绘制。
+- 强化公开列表交互：近期文章、文章归档、文件列表、站点入口、常用入口和碎念条目补充 hover 位移、标题强调、图标位移和封面缩放反馈。
+- 补充 `prefers-reduced-motion` 兜底，用户系统关闭动效时不会强行动画。
+- 保留公开导航半透明玻璃背景，让滚动时正文可轻微透出。
+- 参考 `https://innei.in/` 的字体体系，将其实际下发的 `Instrument Sans` woff2 下载到本地资源，并接入 MiSans 中文分片 webfont，确保中文正文不再只依赖本机是否安装 MiSans。
+- 修正公开页字体栈顺序，将 MiSans 提到系统 fallback 前面，避免 Windows 先走系统中文回退导致字体体感不变化。
+- 为全站文本选区增加独立的自绘笔刷覆盖层：桌面端隐藏原生选区背景，按真实文字行绘制带斜切端点、纤维纹理和刷入动画的 accent 选区。
+- 稳定选区笔刷拖动状态：选区行 key 不再绑定坐标和宽度，坐标取整并改用 `translate3d` 定位，避免拖选时反复重建 stroke 导致抖动。
+- 调整选区笔刷适用边界：公开页和正文预览的可见文本默认可显示笔刷，隐藏文本、图标按钮和表单控件不生成笔刷覆盖。
+- 按视觉复查反馈恢复公开页旧字体体系：移除新增的 Instrument Sans 与 MiSans webfont，公开页标题回到原有衬线字体气质。
+- 收敛公开页大标题字号：首页主标题和文章归档页标题均下调 clamp 上限，避免标题在桌面首屏显得过重。
+- 为文章正文和后台内容预览链接增加自定义标记样式，去掉默认下划线链接外观。
 
 ### 进行中
 
-- 公开页视觉体验继续细化，当前重点是动效节奏和参考站风格对齐。
+- 公开页视觉体验继续细化，下一步在真实内容环境下复查字体、正文链接和动效节奏。
 
 ### 阻塞与风险
 
-- Playwright/Edge 截图命令在本机超时，未能产出本次截图；已通过构建产物检查确认动效 CSS 被打入产物。
-- 公开页运行时数据仍依赖本地或线上后端接口；无后端时只能验证静态布局和构建产物。
+- 本次本地视觉验证未启动后端，公开接口请求会报错并展示空态；动效、布局和导航遮挡已通过前端页面截图检查。
+- 前端打包仍存在 Vite 大 chunk 提醒，暂不影响本次动效调整。
 
 ### 下一步
 
-- 在可用后端数据环境下复查首页、文章列表、友链、文件和站点目录的滚动动效与 hover 反馈。
+- 在真实后端数据环境下复查文章正文链接、选区样式、后台内容预览和 MiSans 字体加载体感。
 
 ### 验证
 
 - 已运行 `npm.cmd run build`，通过；Vite 仍提示主 chunk 大于 500 kB。
 - 已运行 `npm.cmd run lint`，通过。
-- 已检查 `frontend/dist/assets/*.css`，确认 `public-nav-in`、`public-reveal-up`、`public-avatar-float`、`public-line-draw` 和 `animation-timeline` 等动效规则已进入构建产物。
-- 已关闭本次启动的前端开发服务，并确认 `15173`、`18080`、`14173` 无本项目开发服务监听。
+- 已使用 Playwright CLI + Microsoft Edge 检查 `http://127.0.0.1:15173/` 桌面首屏、滚动状态和 390px 移动端截图，截图保存到已忽略的 `output/playwright`；控制台接口错误来自未启动后端。
+- 已使用 Playwright CLI + Microsoft Edge 检查 `document.fonts`：`Instrument Sans` 可用，MiSans 中文分片已实际加载；文章正文链接为自定义标记样式且无默认下划线。
+- 已使用 Playwright CLI + Microsoft Edge 选中首页标题并截图检查笔刷选区覆盖层，截图保存到已忽略的 `output/playwright/selection-brush.png`。
+- 已使用 Playwright CLI + Microsoft Edge 模拟逐步扩大标题选区，确认同一行笔刷 stroke 在拖选过程中保持同一个 DOM 节点，截图保存到已忽略的 `output/playwright/selection-brush-stable.png`。
+- 已使用 Playwright CLI + Microsoft Edge 检查标题、统计、列表标题可显示笔刷，社交图标按钮不生成笔刷矩形，截图保存到已忽略的 `output/playwright/selection-icon-buttons-skipped.png`。
+- 已使用 Playwright CLI + Microsoft Edge 复查首页和文章归档页标题字号与字体，截图保存到已忽略的 `output/playwright/title-home-smaller.png` 与 `output/playwright/title-posts-smaller.png`。
