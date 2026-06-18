@@ -34,11 +34,12 @@
 - 公开读取接口已引入 Service read model 边界：新增 `backend/app/services/content_read_models.py` 和 `file_read_models.py`，公开文章列表/详情、公开页面、公开分类标签和公开文件列表由 Service 返回只读 DTO，API 层不再直接依赖这些公开链路的 ORM 模型字段；文章图片渲染仍通过公开文章 detail read model 提供引用校验所需正文摘要字段。
 - Service 更新入口已改为显式命令对象：新增 `backend/app/services/update_commands.py`，`ContentService`、`LinkService` 和 `LinkGroupService` 的更新方法改为接收 `UpdatePostCommand`、`UpdatePageCommand`、`UpdateFriendLinkCommand`、`UpdateSiteNavItemCommand`、`UpdateFriendLinkGroupCommand` 和 `UpdateSiteNavGroupCommand`，保留 PATCH 未传字段不更新、显式 `null` 清空字段的语义，并移除业务更新中的 `dict + setattr` 模式。
 - 后台链接路由已按资源职责拆分：`backend/app/api/admin/links.py` 缩减为聚合器，新增 `links_common.py`、`link_groups.py`、`friend_links.py` 和 `site_nav.py`，分别承载共享加密/校验/异常/audit helper、分组 CRUD、友链 CRUD/审核和站点导航 CRUD；原 `/api/admin/friend-link-groups`、`/site-groups`、`/friend-links`、`/site-items` URL 和响应保持不变。
+- 后台文章和页面编辑状态已从路由组件抽出：新增 `useAdminPostEditor` 和 `useAdminPageEditor`，将列表查询、分页、选中态、表单态、保存/发布 mutation、预览状态和缓存失效收敛到 feature hook，`AdminPostsPage` 与 `AdminPagesPage` 只保留页面编排和 JSX。
 
 ### 待修复清单
 
 - P2：后台管理读取链路仍有 ORM/record 到 API schema 的直接装配。公开读取接口已先覆盖 read model；后台 `ContentService`、`FileService` 的管理端列表/详情，以及日志/设置等接口仍直接在 API 层调用 `model_validate`，后续可结合后台路由拆分继续逐步引入管理端 read model。
-- P2：前端管理页仍偏“页面即应用”。`frontend/src/routes/admin/AdminPostsPage.tsx`、`frontend/src/routes/admin/AdminSettingsPage.tsx`、`frontend/src/features/links/AdminFriendLinksPanel.tsx` 和 `frontend/src/features/links/AdminSiteNavPanel.tsx` 同时处理列表、分页、选中态、表单态、权限、mutation、预览和 JSX；后续应拆出 `useAdminPostEditor`、列表面板、编辑表单、Markdown 工具栏和预览弹窗等 hook/component。
+- P2：前端部分管理页仍偏“页面即应用”。后台文章/页面编辑状态已先抽出 hook；`frontend/src/routes/admin/AdminSettingsPage.tsx`、`frontend/src/features/links/AdminFriendLinksPanel.tsx` 和 `frontend/src/features/links/AdminSiteNavPanel.tsx` 仍同时处理列表、分页、选中态、表单态、权限、mutation、预览和 JSX；后续应继续抽出设置、友链和站点导航的 hook/component。
 - P2：前后端类型手写镜像，后续容易漂移。后端 Pydantic schema 与前端 `features/*/types.ts` 手写维护同一批字段、可空性和响应结构；后续应评估基于 OpenAPI 生成 TypeScript 类型，或至少补充 contract test。
 - P3：前端分页、空值归一化、表单转换重复。多个页面重复 `safeListPage + slice + ListPager`、`parsePage`、`emptyToNull/nullableText`、`groupLabel` 和日期格式化；后续应抽取 `usePagedItems`、`useQueryPage`、`formText.ts` 和 `dateFormat.ts`。
 - P3：全局 CSS 已经过大。`frontend/src/index.css` 集中了基础样式、公开站点、后台布局、表单、弹窗、文章排版和响应式规则；后续应按 `base.css`、`public.css`、`admin.css`、`components.css`、`prose.css` 拆分，或逐步转为 CSS modules。
@@ -60,7 +61,7 @@
 
 ### 下一步
 
-- 拆分前端后台管理大页面，优先从后台文章/页面编辑和设置页抽出 hook/component，降低页面文件承担的状态与表单职责。
+- 继续拆分前端后台管理大页面，优先从后台设置页、友链和站点导航面板抽出 hook/component，降低页面文件承担的状态与表单职责。
 
 ### 验证
 
@@ -94,6 +95,8 @@
 - Service 更新命令改造后已运行 `uv run pytest tests/test_content_service.py tests/test_admin_content_api.py tests/test_admin_links_api.py tests/test_public_content_api.py`，54 个测试通过；仍存在 FastAPI/Starlette TestClient 和 HTTP 状态常量的上游弃用警告。
 - 后台链接路由拆分后已运行 `uv run ruff check app/api/admin/links.py app/api/admin/links_common.py app/api/admin/link_groups.py app/api/admin/friend_links.py app/api/admin/site_nav.py tests/test_admin_links_api.py`，通过。
 - 后台链接路由拆分后已运行 `uv run pytest tests/test_admin_links_api.py tests/test_public_content_api.py tests/test_admin_content_api.py`，47 个测试通过；仍存在 FastAPI/Starlette TestClient 和 HTTP 状态常量的上游弃用警告。
+- 后台文章/页面编辑状态抽取后已运行 `npm.cmd run lint`，通过。
+- 后台文章/页面编辑状态抽取后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 
 ## 2026-06-18
 

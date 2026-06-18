@@ -1,87 +1,35 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye, FilePlus2, Save } from 'lucide-react'
-import { useMemo, useState } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
 import { AdminModal } from '../../components/AdminModal.tsx'
 import { MathHtml } from '../../components/MathHtml.tsx'
-import { invalidatePageCaches } from '../../app/queryInvalidation.ts'
-import {
-  createAdminPage,
-  listAdminPages,
-  updateAdminPage,
-} from '../../features/content/api.ts'
 import { contentStatusLabels } from '../../features/content/contentLabels.ts'
+import { useAdminPageEditor } from '../../features/content/useAdminPageEditor.ts'
 import { useAuth } from '../../features/auth/useAuth.ts'
 
-import type {
-  AdminPageItem,
-  ContentStatus,
-  PageFormPayload,
-} from '../../features/content/types.ts'
-
-const emptyPageForm: PageFormPayload = {
-  title: '',
-  slug: '',
-  content_md: '',
-  status: 'draft',
-  show_in_nav: false,
-  sort_order: 0,
-  seo_title: '',
-  seo_description: '',
-}
-const emptyPages: AdminPageItem[] = []
-const LIST_PAGE_SIZE = 8
+import type { ContentStatus } from '../../features/content/types.ts'
 
 export function AdminPagesPage() {
   const { session } = useAuth()
-  const queryClient = useQueryClient()
-  const [selectedId, setSelectedId] = useState<number | 'new'>('new')
-  const [form, setForm] = useState<PageFormPayload>(emptyPageForm)
-  const [notice, setNotice] = useState<string | null>(null)
-  const [isPreviewOpen, setPreviewOpen] = useState(false)
-
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['admin-pages'],
-    queryFn: listAdminPages,
-  })
-  const pages = data?.items ?? emptyPages
-  const [listPage, setListPage] = useState(0)
-  const safeListPage = Math.min(
-    listPage,
-    Math.max(0, Math.ceil(pages.length / LIST_PAGE_SIZE) - 1),
-  )
-  const visiblePages = pages.slice(
-    safeListPage * LIST_PAGE_SIZE,
-    safeListPage * LIST_PAGE_SIZE + LIST_PAGE_SIZE,
-  )
-  const selectedPage = useMemo(
-    () => pages.find((page) => page.id === selectedId) ?? null,
-    [pages, selectedId],
-  )
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (!session) {
-        throw new Error('当前会话已失效')
-      }
-
-      const payload = normalizePageForm(form)
-      if (selectedPage) {
-        return updateAdminPage(selectedPage.id, payload, session.csrfToken)
-      }
-      return createAdminPage(payload, session.csrfToken)
-    },
-    onSuccess: (page) => {
-      void invalidatePageCaches(queryClient)
-      setSelectedId(page.id)
-      setForm(pageToForm(page))
-      setNotice('页面已保存')
-    },
-    onError: (error) => {
-      setNotice(error instanceof Error ? error.message : '保存失败')
-    },
-  })
+  const editor = useAdminPageEditor(session)
+  const {
+    form,
+    isError,
+    isLoading,
+    isPreviewOpen,
+    listPageSize,
+    notice,
+    pages,
+    safeListPage,
+    saveMutation,
+    selectedPage,
+    setListPage,
+    setPreviewOpen,
+    startNewPage,
+    updateForm,
+    visiblePages,
+    selectPage,
+  } = editor
 
   return (
     <div className="admin-flow">
@@ -90,12 +38,7 @@ export function AdminPagesPage() {
         <h1>页面管理</h1>
         <button
           className="text-button admin-heading__action"
-          onClick={() => {
-            setSelectedId('new')
-            setForm(emptyPageForm)
-            setPreviewOpen(false)
-            setNotice(null)
-          }}
+          onClick={startNewPage}
           type="button"
         >
           <FilePlus2 size={17} strokeWidth={1.8} aria-hidden="true" />
@@ -115,14 +58,11 @@ export function AdminPagesPage() {
             <div className="content-list">
               {visiblePages.map((page) => (
                 <button
-                  className={page.id === selectedId ? 'content-row active' : 'content-row'}
+                  className={
+                    page.id === selectedPage?.id ? 'content-row active' : 'content-row'
+                  }
                   key={page.id}
-                  onClick={() => {
-                    setSelectedId(page.id)
-                    setForm(pageToForm(page))
-                    setPreviewOpen(false)
-                    setNotice(null)
-                  }}
+                  onClick={() => selectPage(page)}
                   type="button"
                 >
                   <span>
@@ -139,7 +79,7 @@ export function AdminPagesPage() {
           )}
           <ListPager
             page={safeListPage}
-            pageSize={LIST_PAGE_SIZE}
+            pageSize={listPageSize}
             totalItems={pages.length}
             isLoading={isLoading}
             variant="admin"
@@ -283,36 +223,4 @@ export function AdminPagesPage() {
     </div>
   )
 
-  function updateForm<Key extends keyof PageFormPayload>(
-    key: Key,
-    value: PageFormPayload[Key],
-  ) {
-    setForm((current) => ({ ...current, [key]: value }))
-  }
-}
-
-function pageToForm(page: AdminPageItem): PageFormPayload {
-  return {
-    title: page.title,
-    slug: page.slug,
-    content_md: page.content_md,
-    status: page.status,
-    show_in_nav: page.show_in_nav,
-    sort_order: page.sort_order,
-    seo_title: page.seo_title ?? '',
-    seo_description: page.seo_description ?? '',
-  }
-}
-
-function normalizePageForm(form: PageFormPayload): PageFormPayload {
-  return {
-    ...form,
-    seo_title: nullableText(form.seo_title),
-    seo_description: nullableText(form.seo_description),
-  }
-}
-
-function nullableText(value: string | null): string | null {
-  const trimmed = value?.trim() ?? ''
-  return trimmed === '' ? null : trimmed
 }

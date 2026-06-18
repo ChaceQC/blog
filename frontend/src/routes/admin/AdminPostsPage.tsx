@@ -1,183 +1,55 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Brackets, Eye, FilePlus2, Link2, Rocket, Save } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRef } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
 import { AdminModal } from '../../components/AdminModal.tsx'
 import { MathHtml } from '../../components/MathHtml.tsx'
-import { invalidatePostCaches } from '../../app/queryInvalidation.ts'
-import {
-  createAdminPost,
-  listAdminPosts,
-  previewAdminPost,
-  publishAdminPost,
-  updateAdminPost,
-} from '../../features/content/api.ts'
 import {
   contentStatusLabels,
   postVisibilityLabels,
 } from '../../features/content/contentLabels.ts'
 import { PostCoverPicker } from '../../features/content/PostCoverPicker.tsx'
 import {
-  createEmptyPostForm,
-  formatPostSaveError,
   inputToLabels,
   labelsToInput,
-  normalizePostForm,
-  postToForm,
-  postToPreviewInput,
-  slugPattern,
 } from '../../features/content/postForm.ts'
-import { hasAdminPermission } from '../../features/auth/permissions.ts'
+import { useAdminPostEditor } from '../../features/content/useAdminPostEditor.ts'
 import { useAuth } from '../../features/auth/useAuth.ts'
 
-import type {
-  AdminPostListResponse,
-  AdminPostItem,
-  ContentStatus,
-  PostFormPayload,
-  PostVisibility,
-} from '../../features/content/types.ts'
-
-const emptyPosts: AdminPostItem[] = []
-const LIST_PAGE_SIZE = 8
+import type { ContentStatus, PostVisibility } from '../../features/content/types.ts'
 
 export function AdminPostsPage() {
   const { session } = useAuth()
-  const queryClient = useQueryClient()
   const markdownRef = useRef<HTMLTextAreaElement>(null)
-  const [selectedId, setSelectedId] = useState<number | 'new'>('new')
-  const [form, setForm] = useState<PostFormPayload | null>(null)
-  const [previewInput, setPreviewInput] = useState<{
-    content_md: string
-    slug: string
-  } | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-  const [listPage, setListPage] = useState(0)
-  const [isPreviewOpen, setPreviewOpen] = useState(false)
-
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['admin-posts'],
-    queryFn: listAdminPosts,
-  })
-  const posts = data?.items ?? emptyPosts
-  const safeListPage = Math.min(
-    listPage,
-    Math.max(0, Math.ceil(posts.length / LIST_PAGE_SIZE) - 1),
-  )
-  const visiblePosts = posts.slice(
-    safeListPage * LIST_PAGE_SIZE,
-    safeListPage * LIST_PAGE_SIZE + LIST_PAGE_SIZE,
-  )
-  const selectedPost = useMemo(
-    () => posts.find((post) => post.id === selectedId) ?? null,
-    [posts, selectedId],
-  )
-  const currentForm = form ?? createEmptyPostForm(posts)
-  const savedForm = useMemo(
-    () => (selectedPost ? postToForm(selectedPost) : null),
-    [selectedPost],
-  )
-  const canWrite =
-    session !== null && hasAdminPermission(session.user, 'post:write')
-  const canPublish =
-    session !== null && hasAdminPermission(session.user, 'post:publish')
-  const hasUnsavedChanges =
-    savedForm === null || postFormSignature(currentForm) !== postFormSignature(savedForm)
-  const canSaveDraft = canWrite && (selectedPost === null || hasUnsavedChanges)
-  const isPublishStatusLocked =
-    currentForm.status === 'published' || currentForm.status === 'scheduled'
-  const canSubmitPublish =
-    selectedPost !== null && canPublish && !hasUnsavedChanges && !isPublishStatusLocked
-  const canPreview =
-    session !== null &&
-    canWrite &&
-    slugPattern.test(currentForm.slug.trim()) &&
-    currentForm.content_md.trim().length > 0
-  const previewQuery = useQuery({
-    queryKey: [
-      'admin-post-preview',
-      previewInput?.slug,
-      previewInput?.content_md,
-    ],
-    queryFn: () => {
-      if (!session || !previewInput) {
-        throw new Error('预览参数不足')
-      }
-      return previewAdminPost(previewInput, session.csrfToken)
-    },
-    enabled:
-      isPreviewOpen &&
-      session !== null &&
-      canWrite &&
-      canPreview &&
-      previewInput !== null,
-    staleTime: 10_000,
-  })
-  const previewHtml =
-    (canPreview ? previewQuery.data?.content_html : null) ??
-    (!canPreview ? selectedPost?.content_html : null) ??
-    ''
-
-  useEffect(() => {
-    if (!isPreviewOpen || !canPreview) {
-      return
-    }
-
-    const timer = window.setTimeout(() => {
-      setPreviewInput({
-        slug: currentForm.slug.trim(),
-        content_md: currentForm.content_md,
-      })
-    }, 350)
-    return () => window.clearTimeout(timer)
-  }, [canPreview, currentForm.content_md, currentForm.slug, isPreviewOpen])
-
-  const saveMutation = useMutation({
-    mutationFn: async (draftForm: PostFormPayload) => {
-      if (!session || !canWrite) {
-        throw new Error('当前账号没有文章写入权限')
-      }
-
-      const payload = normalizePostForm(draftForm)
-      if (selectedPost) {
-        return updateAdminPost(selectedPost.id, payload, session.csrfToken)
-      }
-      return createAdminPost(payload, session.csrfToken)
-    },
-    onSuccess: (post) => {
-      queryClient.setQueryData<AdminPostListResponse>(
-        ['admin-posts'],
-        (current) => upsertPostListItem(current, post),
-      )
-      void invalidatePostCaches(queryClient)
-      setSelectedId(post.id)
-      setForm(postToForm(post))
-      setPreviewInput(postToPreviewInput(post))
-      setNotice('草稿已保存')
-    },
-    onError: (error) => {
-      setNotice(formatPostSaveError(error))
-    },
-  })
-  const publishMutation = useMutation({
-    mutationFn: async () => {
-      if (!session || !selectedPost || !canSubmitPublish) {
-        throw new Error('当前文章无法发布')
-      }
-      return publishAdminPost(selectedPost.id, session.csrfToken)
-    },
-    onSuccess: (post) => {
-      void invalidatePostCaches(queryClient)
-      setSelectedId(post.id)
-      setForm(postToForm(post))
-      setPreviewInput(postToPreviewInput(post))
-      setNotice('文章已发布')
-    },
-    onError: (error) => {
-      setNotice(error instanceof Error ? error.message : '发布失败')
-    },
-  })
+  const editor = useAdminPostEditor(session)
+  const {
+    canPreview,
+    canSaveDraft,
+    canSubmitPublish,
+    canWrite,
+    currentForm,
+    isError,
+    isLoading,
+    isPreviewOpen,
+    listPageSize,
+    notice,
+    openPostPreview,
+    posts,
+    previewHtml,
+    previewQuery,
+    publishMutation,
+    safeListPage,
+    saveAsDraft,
+    saveMutation,
+    selectedPost,
+    selectPost,
+    setListPage,
+    setPreviewOpen,
+    startNewPost,
+    updateForm,
+    updateStatus,
+    visiblePosts,
+  } = editor
 
   return (
     <div className="admin-flow">
@@ -186,13 +58,7 @@ export function AdminPostsPage() {
         <h1>文章管理</h1>
         <button
           className="text-button admin-heading__action"
-          onClick={() => {
-            setSelectedId('new')
-            setForm(null)
-            setPreviewInput(null)
-            setPreviewOpen(false)
-            setNotice(null)
-          }}
+          onClick={startNewPost}
           type="button"
         >
           <FilePlus2 size={17} strokeWidth={1.8} aria-hidden="true" />
@@ -212,15 +78,11 @@ export function AdminPostsPage() {
             <div className="content-list">
               {visiblePosts.map((post) => (
                 <button
-                  className={post.id === selectedId ? 'content-row active' : 'content-row'}
+                  className={
+                    post.id === selectedPost?.id ? 'content-row active' : 'content-row'
+                  }
                   key={post.id}
-                  onClick={() => {
-                    setSelectedId(post.id)
-                    setForm(postToForm(post))
-                    setPreviewInput(postToPreviewInput(post))
-                    setPreviewOpen(false)
-                    setNotice(null)
-                  }}
+                  onClick={() => selectPost(post)}
                   type="button"
                 >
                   <span>
@@ -237,7 +99,7 @@ export function AdminPostsPage() {
           )}
           <ListPager
             page={safeListPage}
-            pageSize={LIST_PAGE_SIZE}
+            pageSize={listPageSize}
             totalItems={posts.length}
             isLoading={isLoading}
             variant="admin"
@@ -458,36 +320,6 @@ export function AdminPostsPage() {
     </div>
   )
 
-  function updateForm<Key extends keyof PostFormPayload>(
-    key: Key,
-    value: PostFormPayload[Key],
-  ) {
-    setForm((current) => ({ ...(current ?? currentForm), [key]: value }))
-  }
-
-  function updateStatus(status: ContentStatus) {
-    setForm((current) => {
-      const nextForm = { ...(current ?? currentForm), status }
-      if (status !== 'scheduled') {
-        nextForm.published_at = null
-      }
-      return nextForm
-    })
-  }
-
-  function saveAsDraft() {
-    if (!canSaveDraft || saveMutation.isPending) {
-      return
-    }
-    const draftForm: PostFormPayload = {
-      ...currentForm,
-      status: 'draft',
-      published_at: null,
-    }
-    setForm(draftForm)
-    saveMutation.mutate(draftForm)
-  }
-
   function wrapMarkdownSelection(prefix: string, suffix: string, fallback: string) {
     const textarea = markdownRef.current
     const start = textarea?.selectionStart ?? currentForm.content_md.length
@@ -506,38 +338,4 @@ export function AdminPostsPage() {
     })
   }
 
-  function openPostPreview() {
-    if (canPreview) {
-      setPreviewInput({
-        slug: currentForm.slug.trim(),
-        content_md: currentForm.content_md,
-      })
-    }
-    setPreviewOpen(true)
-  }
-}
-
-function postFormSignature(form: PostFormPayload): string {
-  return JSON.stringify({
-    ...form,
-    category_names: [...form.category_names],
-    tag_names: [...form.tag_names],
-  })
-}
-
-function upsertPostListItem(
-  current: AdminPostListResponse | undefined,
-  post: AdminPostItem,
-): AdminPostListResponse {
-  if (!current) {
-    return { items: [post] }
-  }
-  const existingIndex = current.items.findIndex((item) => item.id === post.id)
-  if (existingIndex === -1) {
-    return { ...current, items: [post, ...current.items] }
-  }
-  return {
-    ...current,
-    items: current.items.map((item) => (item.id === post.id ? post : item)),
-  }
 }
