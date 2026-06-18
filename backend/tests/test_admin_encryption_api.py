@@ -33,11 +33,13 @@ class FakeEncryptionSessionRepository:
         self,
         *,
         session_id: str,
+        scope: str,
         key_material: bytes,
         expires_at: datetime,
     ) -> SimpleNamespace:
         session = SimpleNamespace(
             session_id=session_id,
+            scope=scope,
             key_material=key_material,
             expires_at=expires_at,
         )
@@ -219,6 +221,52 @@ def test_login_rejects_missing_encryption_session_header() -> None:
     assert response.json()["detail"] == "missing encryption session"
 
 
+def test_login_rejects_public_encryption_session_before_authentication() -> None:
+    client_private_key = ec.generate_private_key(ec.SECP256R1())
+    client = TestClient(app)
+    encryption_repository = FakeEncryptionSessionRepository()
+    encryption_manager = EncryptionSessionManager(
+        repository=encryption_repository,
+        settings=get_settings(),
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        encryption_manager
+    )
+    try:
+        session_response = client.post(
+            "/api/public/encryption/sessions",
+            json={
+                "client_public_key": _export_public_key(
+                    client_private_key.public_key(),
+                ),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert session_response.status_code == 200
+    session_payload = session_response.json()
+    assert session_payload["scope"] == "public"
+
+    app.dependency_overrides[get_auth_service] = lambda: RaisingAuthService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        encryption_manager
+    )
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
+    try:
+        response = client.post(
+            "/api/admin/auth/login",
+            headers={"X-Encryption-Session": session_payload["session_id"]},
+            json={"username": "admin", "password": "correct-password"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid encryption session"
+
+
 def test_refresh_uses_cookie_without_csrf_header() -> None:
     refresh_token = "r" * 32
     client_private_key = ec.generate_private_key(ec.SECP256R1())
@@ -292,11 +340,13 @@ def test_cleanup_expired_encryption_sessions_deletes_only_expired() -> None:
     repository = FakeEncryptionSessionRepository()
     repository.sessions["expired"] = SimpleNamespace(
         session_id="expired",
+        scope="admin",
         key_material=b"expired-key",
         expires_at=now - timedelta(seconds=1),
     )
     repository.sessions["active"] = SimpleNamespace(
         session_id="active",
+        scope="admin",
         key_material=b"active-key",
         expires_at=now + timedelta(seconds=1),
     )
@@ -318,6 +368,7 @@ def test_cleanup_expired_encryption_sessions_skips_empty_commit() -> None:
     repository = FakeEncryptionSessionRepository()
     repository.sessions["active"] = SimpleNamespace(
         session_id="active",
+        scope="admin",
         key_material=b"active-key",
         expires_at=now + timedelta(seconds=1),
     )

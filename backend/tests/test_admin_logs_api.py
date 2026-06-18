@@ -80,10 +80,12 @@ class FakeEncryptionSessionManager:
         self,
         *,
         session_id: str,
+        scope: str,
         profile: EncryptionProfile,
         payload: dict[str, object],
     ) -> EncryptedApiResponse:
         assert session_id == "sensitive-session"
+        assert scope == "admin"
         assert profile == EncryptionProfile.SENSITIVE
         self.payload = payload
         return EncryptedApiResponse(

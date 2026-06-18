@@ -483,6 +483,7 @@ systemctl list-timers 'blog-*'
 脚本位于 `deploy/scripts/`：
 
 - `backup_mysql.sh`：备份 MySQL。
+- `upgrade_backend_db.sh`：默认先备份 MySQL、构建 backend 镜像，再用一次性后端容器执行 Alembic 数据库迁移。
 - `restore_mysql.sh`：恢复 MySQL。
 - `backup_uploads.sh`：备份上传文件目录。
 - `restore_uploads.sh`：恢复上传文件目录，会覆盖同名文件但不会删除现有额外文件。
@@ -490,6 +491,7 @@ systemctl list-timers 'blog-*'
 
 ```bash
 bash deploy/scripts/backup_mysql.sh
+bash deploy/scripts/upgrade_backend_db.sh
 bash deploy/scripts/backup_uploads.sh
 bash deploy/scripts/restore_mysql.sh /data/blog/backups/mysql/blog-YYYYMMDDTHHMMSSZ.sql.gz
 CONFIRM_RESTORE_UPLOADS=yes bash deploy/scripts/restore_uploads.sh /data/blog/backups/uploads/uploads-YYYYMMDDTHHMMSSZ.tar.gz

@@ -12,6 +12,7 @@ from app.api.admin.dependencies import (
 from app.api.admin.encrypted_response import (
     encrypted_response,
     require_encryption_session,
+    validate_encryption_session,
 )
 from app.api.admin.limits import enforce_rate_limit
 from app.api.admin.session import (
@@ -48,7 +49,11 @@ async def login(
     rate_limiter: RateLimitServiceDependency,
     logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
-    require_encryption_session(request)
+    await validate_encryption_session(
+        request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.SENSITIVE,
+    )
     limit_key = (
         f"admin-login:{client_ip(request) or 'unknown'}:"
         f"{payload.username.casefold()}"
@@ -103,7 +108,11 @@ async def refresh(
     encryption_manager: EncryptionSessionManagerDependency,
     payload: RefreshTokenRequest | None = None,
 ) -> EncryptedApiResponse:
-    require_encryption_session(request)
+    await validate_encryption_session(
+        request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.SENSITIVE,
+    )
     refresh_token = (
         payload.refresh_token if payload is not None else None
     ) or refresh_token_from_request(request)

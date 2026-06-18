@@ -81,12 +81,31 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f
 `deploy/scripts/` 当前包含：
 
 - `backup_mysql.sh`：备份 MySQL。
+- `upgrade_backend_db.sh`：默认先备份 MySQL、构建 backend 镜像，再用一次性后端容器执行 Alembic 数据库迁移。
 - `restore_mysql.sh`：恢复 MySQL。
 - `backup_uploads.sh`：备份上传文件目录，默认读取 `/data/blog/uploads` 并写入 `/data/blog/backups/uploads`。
 - `restore_uploads.sh`：恢复上传文件目录，会覆盖同名文件但不会删除现有额外文件；执行前必须设置 `CONFIRM_RESTORE_UPLOADS=yes`。
 - `renew_cert.sh`：证书续期示例。
 
 备份至少应覆盖 MySQL、上传文件目录、生产环境变量、证书和部署版本信息。备份文件应加密保存到服务器外部位置，并定期做恢复演练。
+
+发布包含数据库迁移的新版本后执行：
+
+```bash
+bash deploy/scripts/upgrade_backend_db.sh
+```
+
+如已通过其他方式完成备份，可跳过脚本内置备份：
+
+```bash
+RUN_BACKUP=no bash deploy/scripts/upgrade_backend_db.sh
+```
+
+如已确认 backend 镜像包含最新迁移文件，也可跳过构建：
+
+```bash
+BUILD_BACKEND=no bash deploy/scripts/upgrade_backend_db.sh
+```
 
 ## systemd Timer
 

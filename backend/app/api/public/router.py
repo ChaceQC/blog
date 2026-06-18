@@ -100,6 +100,7 @@ async def list_public_categories(
         request=request,
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
+        scope="public",
     )
     await _record_public_access(
         logs,
@@ -144,6 +145,7 @@ async def get_public_category(
         request=request,
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
+        scope="public",
     )
     await _record_public_access(
         logs,
@@ -174,6 +176,7 @@ async def list_public_tags(
         request=request,
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
+        scope="public",
     )
     await _record_public_access(
         logs,
@@ -218,6 +221,7 @@ async def get_public_tag(
         request=request,
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
+        scope="public",
     )
     await _record_public_access(
         logs,
@@ -280,6 +284,7 @@ async def list_public_posts(
         request=request,
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
+        scope="public",
     )
     await _record_public_access(
         logs,
@@ -344,6 +349,7 @@ async def get_public_post(
         request=request,
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
+        scope="public",
     )
     await _record_public_access(
         logs,
@@ -389,6 +395,7 @@ async def get_public_page(
         request=request,
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
+        scope="public",
     )
     await _record_public_access(
         logs,
@@ -416,6 +423,7 @@ async def get_public_site_profile(
         request=request,
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
+        scope="public",
     )
     await _record_public_access(
         logs,
@@ -447,6 +455,7 @@ async def list_public_friend_links(
         request=request,
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
+        scope="public",
     )
     await _record_public_access(
         logs,
@@ -491,6 +500,7 @@ async def create_public_friend_link_application(
         request=request,
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
+        scope="public",
     )
     application = _validate_decrypted_payload(
         PublicFriendLinkApplicationRequest,
@@ -513,6 +523,7 @@ async def create_public_friend_link_application(
         request=request,
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
+        scope="public",
     )
     await _record_public_access(
         logs,
@@ -545,6 +556,7 @@ async def list_public_site_items(
         request=request,
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
+        scope="public",
     )
     await _record_public_access(
         logs,

@@ -1,5 +1,32 @@
 # 项目进度
 
+## 2026-06-18
+
+### 已完成
+
+- 修复应用层加密会话 scope 边界：`encryption_sessions` 持久化 `scope`，后端加密会话管理器在加密响应、解密请求和登录/刷新预校验时强制匹配 `admin` / `public` scope 与允许的加密 profile。
+- 公开 API 的加密响应和公开友链申请解密显式使用 `public` scope，后台 API 默认使用 `admin` scope，避免 public 加密会话被复用于后台敏感响应。
+- 新增 Alembic 迁移 `20260618_0006_encryption_session_scope.py`，为 `encryption_sessions` 增加 `scope` 字段；新增回归测试覆盖 public 会话请求后台登录在认证前被拒绝。
+- 新增部署脚本 `deploy/scripts/upgrade_backend_db.sh`，默认先调用 MySQL 备份脚本、构建 backend 镜像，再用一次性 backend 容器执行 `alembic upgrade head` 并输出当前迁移版本。
+- 同步更新根目录 `README.md` 与 `deploy/README.md` 的维护脚本说明。
+
+### 进行中
+
+- 无。
+
+### 阻塞与风险
+
+- 本地 Windows 环境的 `bash -n deploy/scripts/upgrade_backend_db.sh` 因 WSL 未安装发行版无法完成语法检查；脚本内容已按现有 Bash 维护脚本风格编写。
+
+### 下一步
+
+- 继续修复安全审计中发现的后台友链/站点导航 URL 校验问题。
+
+### 验证
+
+- 已运行 `uv run pytest`，结果 `119 passed, 2 skipped`。
+- 已运行 `uv run python -m compileall app tests`。
+
 ## 2026-06-17
 
 ### 已完成

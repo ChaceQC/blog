@@ -59,9 +59,11 @@ class FakeEncryptionSessionManager:
         self,
         *,
         session_id: str,
+        scope: str,
         profile: EncryptionProfile,
         payload: dict[str, object],
     ) -> EncryptedApiResponse:
+        assert scope == "admin"
         assert profile == EncryptionProfile.SENSITIVE
         self.payload = payload
         return EncryptedApiResponse(
@@ -75,10 +77,12 @@ class FakeEncryptionSessionManager:
         self,
         *,
         session_id: str,
+        scope: str,
         profile: EncryptionProfile,
         payload: EncryptedApiRequest,
     ) -> dict[str, object]:
         assert session_id == "sensitive-session"
+        assert scope == "admin"
         assert profile == EncryptionProfile.SENSITIVE
         self.request_payload = payload
         return self.decrypted_payload

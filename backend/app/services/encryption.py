@@ -35,6 +35,7 @@ class EncryptionSessionRepositoryProtocol(Protocol):
         self,
         *,
         session_id: str,
+        scope: str,
         key_material: bytes,
         expires_at: datetime,
     ) -> EncryptionSession: ...
@@ -84,6 +85,7 @@ class EncryptionSessionManager:
         )
         await self._repository.create_session(
             session_id=session_id,
+            scope=scope,
             key_material=shared_key,
             expires_at=expires_at,
         )
@@ -106,14 +108,32 @@ class EncryptionSessionManager:
             await self._repository.commit()
         return deleted_count
 
+    async def validate_session(
+        self,
+        *,
+        session_id: str,
+        scope: EncryptionSessionScope,
+        profile: EncryptionProfile,
+    ) -> None:
+        await self._get_session(
+            session_id=session_id,
+            expected_scope=scope,
+            expected_profile=profile,
+        )
+
     async def encrypt_response(
         self,
         *,
         session_id: str,
+        scope: EncryptionSessionScope,
         profile: EncryptionProfile,
         payload: JsonObject,
     ) -> EncryptedApiResponse:
-        session = await self._get_session(session_id)
+        session = await self._get_session(
+            session_id=session_id,
+            expected_scope=scope,
+            expected_profile=profile,
+        )
         try:
             envelope = encrypt_json_payload_with_key_material(
                 payload,
@@ -134,12 +154,17 @@ class EncryptionSessionManager:
         self,
         *,
         session_id: str,
+        scope: EncryptionSessionScope,
         profile: EncryptionProfile,
         payload: EncryptedApiRequest,
     ) -> JsonObject:
         if payload.session_id != session_id:
             raise EncryptionSessionError("encrypted request session mismatch")
-        session = await self._get_session(session_id)
+        session = await self._get_session(
+            session_id=session_id,
+            expected_scope=scope,
+            expected_profile=profile,
+        )
         try:
             return decrypt_json_payload_with_key_material(
                 EncryptedEnvelope(
@@ -153,13 +178,23 @@ class EncryptionSessionManager:
         except EncryptionError as exc:
             raise EncryptionSessionError("failed to decrypt request") from exc
 
-    async def _get_session(self, session_id: str) -> EncryptionSession:
+    async def _get_session(
+        self,
+        *,
+        session_id: str,
+        expected_scope: EncryptionSessionScope,
+        expected_profile: EncryptionProfile,
+    ) -> EncryptionSession:
         session = await self._repository.get_active_session(
             session_id=session_id,
             now=datetime.now(UTC),
         )
         if session is None:
             raise EncryptionSessionError("encryption session is invalid or expired")
+        if session.scope != expected_scope:
+            raise EncryptionSessionError("encryption session scope mismatch")
+        if expected_profile not in _profiles_for_scope(expected_scope):
+            raise EncryptionSessionError("encryption profile is not allowed")
         return session
 
 

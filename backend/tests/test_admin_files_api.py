@@ -218,16 +218,19 @@ class FakeLogService:
 class FakeEncryptionSessionManager:
     def __init__(self, session_id: str = "content-session") -> None:
         self.session_id = session_id
+        self.expected_scope = "public" if session_id == "public-session" else "admin"
         self.payload: dict[str, object] | None = None
 
     async def encrypt_response(
         self,
         *,
         session_id: str,
+        scope: str,
         profile: EncryptionProfile,
         payload: dict[str, object],
     ) -> EncryptedApiResponse:
         assert session_id == self.session_id
+        assert scope == self.expected_scope
         assert profile == EncryptionProfile.CONTENT
         self.payload = payload
         return EncryptedApiResponse(

@@ -137,6 +137,7 @@ class FakeEncryptionSessionManager:
         self,
         *,
         session_id: str,
+        scope: str,
         profile: EncryptionProfile,
         payload: dict[str, object],
     ) -> EncryptedApiResponse:

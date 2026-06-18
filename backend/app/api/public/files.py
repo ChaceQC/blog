@@ -66,6 +66,7 @@ async def list_public_files(
         request=request,
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
+        scope="public",
     )
     await _record_file_access(
         logs,
@@ -133,6 +134,7 @@ async def create_public_file_temporary_url(
         request=request,
         manager=encryption_manager,
         profile=EncryptionProfile.CONTENT,
+        scope="public",
     )
     await _record_file_access(
         logs,

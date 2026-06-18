@@ -14,11 +14,13 @@ class EncryptionSessionRepository:
         self,
         *,
         session_id: str,
+        scope: str,
         key_material: bytes,
         expires_at: datetime,
     ) -> EncryptionSession:
         session = EncryptionSession(
             session_id=session_id,
+            scope=scope,
             key_material=key_material,
             expires_at=expires_at,
         )
