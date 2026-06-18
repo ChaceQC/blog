@@ -53,7 +53,7 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml co
 - 提供 React 静态资源。
 - 反向代理 `/api/` 到后端。
 - 精确反代 `/rss.xml`、`/sitemap.xml` 和 `/robots.txt`，避免被 SPA 的 `index.html` 兜底吞掉。
-- 设置上传体积限制、基础安全响应头和代理头。
+- 设置上传体积限制、基础安全响应头和代理头。当前模板使用 `client_max_body_size 20m`，后端生产环境变量应同步为 `BLOG_UPLOAD_MAX_SIZE_BYTES=20971520`。
 
 后端生产响应也会设置 HSTS 与 Content Security Policy，Nginx 的同类响应头保留为公网入口兜底；部署前仍应确认公网只暴露 Nginx `80/443`，后端、MySQL、Redis 不映射到宿主公网端口。
 

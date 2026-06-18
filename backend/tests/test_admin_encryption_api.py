@@ -3,6 +3,7 @@ from base64 import urlsafe_b64decode, urlsafe_b64encode
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi.testclient import TestClient
 
@@ -19,6 +20,7 @@ from app.core.encryption import (
     decrypt_json_payload_with_key_material,
 )
 from app.main import app
+from app.schemas.encryption import BrowserPublicKey
 from app.services.auth import AuthenticatedUser, TokenPair
 from app.services.encryption import EncryptionSessionManager
 from app.services.rate_limit import RateLimitService
@@ -34,17 +36,34 @@ class FakeEncryptionSessionRepository:
         *,
         session_id: str,
         scope: str,
+        client_ip: str | None,
         key_material: bytes,
         expires_at: datetime,
     ) -> SimpleNamespace:
         session = SimpleNamespace(
             session_id=session_id,
             scope=scope,
+            client_ip=client_ip,
             key_material=key_material,
             expires_at=expires_at,
         )
         self.sessions[session_id] = session
         return session
+
+    async def count_active_sessions_by_client(
+        self,
+        *,
+        scope: str,
+        client_ip: str,
+        now: datetime,
+    ) -> int:
+        return sum(
+            1
+            for session in self.sessions.values()
+            if session.scope == scope
+            and session.client_ip == client_ip
+            and session.expires_at > now
+        )
 
     async def get_active_session(
         self,
@@ -382,6 +401,38 @@ def test_cleanup_expired_encryption_sessions_skips_empty_commit() -> None:
     assert deleted_count == 0
     assert "active" in repository.sessions
     assert repository.commit_count == 0
+
+
+def test_create_session_rejects_active_session_overflow() -> None:
+    client_private_key = ec.generate_private_key(ec.SECP256R1())
+    now = datetime.now(UTC)
+    repository = FakeEncryptionSessionRepository()
+    repository.sessions["active"] = SimpleNamespace(
+        session_id="active",
+        scope="public",
+        client_ip="203.0.113.9",
+        key_material=b"active-key",
+        expires_at=now + timedelta(minutes=5),
+    )
+    manager = EncryptionSessionManager(
+        repository=repository,
+        settings=get_settings(),
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        asyncio.run(
+            manager.create_session(
+                client_public_key=BrowserPublicKey.model_validate(
+                    _export_public_key(client_private_key.public_key()),
+                ),
+                scope="public",
+                client_ip="203.0.113.9",
+                active_session_limit=1,
+            ),
+        )
+
+    assert exc_info.value.__class__.__name__ == "ActiveEncryptionSessionLimitExceeded"
+    assert len(repository.sessions) == 1
 
 
 def _export_public_key(public_key: ec.EllipticCurvePublicKey) -> dict[str, str]:

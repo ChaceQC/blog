@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from email.utils import format_datetime
+from hashlib import sha256
 from html import escape
 from typing import Any
 
@@ -17,6 +18,7 @@ from app.core.request import client_ip
 from app.models.content import Post
 
 FEED_POST_LIMIT = 1000
+FEED_CACHE_CONTROL = "public, max-age=300, stale-while-revalidate=60"
 
 router = APIRouter(tags=["feeds"])
 
@@ -37,13 +39,20 @@ async def rss_feed(
         site_description=profile["description"],
         base_url=settings.public_base_url,
     )
+    response = _cacheable_response(
+        request=request,
+        content=xml,
+        media_type="application/rss+xml",
+    )
+    if response.status_code == status.HTTP_304_NOT_MODIFIED:
+        return response
     await _record_feed_access(
         logs,
         request=request,
         access_type="public_rss",
         count=len(posts),
     )
-    return Response(content=xml, media_type="application/rss+xml")
+    return response
 
 
 @router.get("/sitemap.xml")
@@ -64,13 +73,20 @@ async def sitemap(
         tags=tags,
         base_url=settings.public_base_url,
     )
+    response = _cacheable_response(
+        request=request,
+        content=xml,
+        media_type="application/xml",
+    )
+    if response.status_code == status.HTTP_304_NOT_MODIFIED:
+        return response
     await _record_feed_access(
         logs,
         request=request,
         access_type="public_sitemap",
         count=len(posts) + len(categories) + len(tags),
     )
-    return Response(content=xml, media_type="application/xml")
+    return response
 
 
 @router.get("/robots.txt")
@@ -80,13 +96,31 @@ async def robots_txt(
     logs: LogServiceDependency,
 ) -> Response:
     text = _render_robots(base_url=settings.public_base_url)
+    response = _cacheable_response(
+        request=request,
+        content=text,
+        media_type="text/plain; charset=utf-8",
+    )
+    if response.status_code == status.HTTP_304_NOT_MODIFIED:
+        return response
     await _record_feed_access(
         logs,
         request=request,
         access_type="public_robots",
         count=0,
     )
-    return Response(content=text, media_type="text/plain; charset=utf-8")
+    return response
+
+
+def _cacheable_response(*, request: Request, content: str, media_type: str) -> Response:
+    etag = f'"{sha256(content.encode("utf-8")).hexdigest()}"'
+    headers = {
+        "Cache-Control": FEED_CACHE_CONTROL,
+        "ETag": etag,
+    }
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
+    return Response(content=content, media_type=media_type, headers=headers)
 
 
 def _render_rss(

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import EncryptionSession
@@ -15,18 +15,36 @@ class EncryptionSessionRepository:
         *,
         session_id: str,
         scope: str,
+        client_ip: str | None,
         key_material: bytes,
         expires_at: datetime,
     ) -> EncryptionSession:
         session = EncryptionSession(
             session_id=session_id,
             scope=scope,
+            client_ip=client_ip,
             key_material=key_material,
             expires_at=expires_at,
         )
         self.session.add(session)
         await self.session.flush()
         return session
+
+    async def count_active_sessions_by_client(
+        self,
+        *,
+        scope: str,
+        client_ip: str,
+        now: datetime,
+    ) -> int:
+        result = await self.session.execute(
+            select(func.count(EncryptionSession.id)).where(
+                EncryptionSession.scope == scope,
+                EncryptionSession.client_ip == client_ip,
+                EncryptionSession.expires_at > now,
+            ),
+        )
+        return int(result.scalar_one())
 
     async def get_active_session(
         self,

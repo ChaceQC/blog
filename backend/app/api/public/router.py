@@ -22,6 +22,7 @@ from app.api.public.files import router as public_files_router
 from app.core.database import get_session
 from app.core.encryption import EncryptionProfile
 from app.core.request import client_ip
+from app.core.url_validation import validate_public_href
 from app.models.content import Post
 from app.providers.markdown import count_words
 from app.repositories.content import ContentRepository
@@ -686,7 +687,11 @@ def _social_links_value(value: object) -> list[dict[str, str]]:
             and isinstance(url, str)
             and url.strip()
         ):
-            links.append({"label": label.strip(), "url": url.strip()})
+            try:
+                safe_url = validate_public_href(url)
+            except ValueError:
+                continue
+            links.append({"label": label.strip(), "url": safe_url})
     return links[:12]
 
 

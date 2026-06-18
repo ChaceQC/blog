@@ -1,10 +1,10 @@
 from datetime import datetime
 from typing import Any, Literal
-from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.site_nav_tags import normalize_site_nav_tags_json
+from app.core.url_validation import validate_http_url, validate_public_href
 
 FriendLinkStatus = Literal["pending", "healthy", "rejected"]
 SiteNavOpenTarget = Literal["blank", "self"]
@@ -165,10 +165,7 @@ class PublicFriendLinkApplicationRequest(BaseModel):
     def _validate_http_url(cls, value: str | None) -> str | None:
         if value is None:
             return value
-        parsed = urlparse(value)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise ValueError("url must use http or https")
-        return value
+        return validate_http_url(value)
 
 
 class PublicFriendLinkApplicationResponse(BaseModel):
@@ -196,6 +193,13 @@ class FriendLinkCreateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @field_validator("url", "avatar_url", "rss_url")
+    @classmethod
+    def _validate_http_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return validate_http_url(value)
+
 
 class FriendLinkUpdateRequest(BaseModel):
     group_id: int | None = Field(default=None, ge=1)
@@ -208,6 +212,13 @@ class FriendLinkUpdateRequest(BaseModel):
     sort_order: int | None = Field(default=None, ge=0, le=10000)
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("url", "avatar_url", "rss_url")
+    @classmethod
+    def _validate_http_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return validate_http_url(value)
 
 
 class AdminSiteNavItem(BaseModel):
@@ -276,6 +287,13 @@ class SiteNavItemCreateRequest(BaseModel):
     def _normalize_tags_json(cls, value: object) -> dict[str, list[str]] | None:
         return normalize_site_nav_tags_json(value)
 
+    @field_validator("url", "icon_url")
+    @classmethod
+    def _validate_public_href(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return validate_public_href(value)
+
 
 class SiteNavItemUpdateRequest(BaseModel):
     group_id: int | None = Field(default=None, ge=1)
@@ -294,3 +312,10 @@ class SiteNavItemUpdateRequest(BaseModel):
     @classmethod
     def _normalize_tags_json(cls, value: object) -> dict[str, list[str]] | None:
         return normalize_site_nav_tags_json(value)
+
+    @field_validator("url", "icon_url")
+    @classmethod
+    def _validate_public_href(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return validate_public_href(value)

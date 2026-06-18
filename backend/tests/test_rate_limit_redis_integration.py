@@ -124,7 +124,11 @@ class FakeEncryptionSessionManager:
         *,
         client_public_key: BrowserPublicKey,
         scope: str = "admin",
+        client_ip: str | None = None,
+        active_session_limit: int | None = None,
     ) -> CreateEncryptionSessionResponse:
+        assert client_ip == "testclient"
+        assert active_session_limit is None
         return CreateEncryptionSessionResponse(
             session_id="redis-test-session",
             scope="admin",

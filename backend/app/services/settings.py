@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
+from app.core.url_validation import validate_public_href
 from app.models.setting import Setting
 
 SITE_PROFILE_KEY = "site_profile"
@@ -87,6 +88,8 @@ class SettingService:
         is_public: bool,
         updated_by: int | None,
     ) -> Setting:
+        if key_name == SITE_PROFILE_KEY:
+            value_json = normalize_site_profile(value_json)
         setting = await self.repository.upsert_setting(
             key_name=key_name,
             value_json=value_json,
@@ -108,3 +111,35 @@ class SettingService:
             updated_by=None,
             updated_at=None,
         )
+
+
+def normalize_site_profile(value_json: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(value_json)
+    avatar_url = normalized.get("avatar_url")
+    if isinstance(avatar_url, str) and avatar_url.strip():
+        normalized["avatar_url"] = validate_public_href(avatar_url)
+
+    social_links = normalized.get("social_links")
+    if isinstance(social_links, list):
+        normalized["social_links"] = _normalize_social_links(social_links)
+    return normalized
+
+
+def _normalize_social_links(value: list[object]) -> list[dict[str, str]]:
+    links: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        label = item.get("label")
+        url = item.get("url")
+        if (
+            not isinstance(label, str)
+            or not label.strip()
+            or not isinstance(url, str)
+            or not url.strip()
+        ):
+            continue
+        links.append({"label": label.strip(), "url": validate_public_href(url)})
+        if len(links) >= 12:
+            break
+    return links

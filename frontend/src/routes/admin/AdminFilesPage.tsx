@@ -25,7 +25,7 @@ const visibilityLabels = {
   public: '公开',
   private: '私有',
 } satisfies Record<FileVisibility, string>
-const uploadMaxSizeBytes = 30 * 1024 * 1024
+const uploadMaxSizeBytes = 20 * 1024 * 1024
 const LIST_PAGE_SIZE = 8
 
 export function AdminFilesPage() {
@@ -89,7 +89,7 @@ export function AdminFilesPage() {
         throw new Error('请选择要上传的文件')
       }
       if (uploadFile.size > uploadMaxSizeBytes) {
-        throw new Error('文件超过 30MB，请压缩后再上传')
+        throw new Error('文件超过 20MB，请压缩后再上传')
       }
       return uploadAdminFile(
         uploadFile,
@@ -281,7 +281,7 @@ export function AdminFilesPage() {
             </div>
           </form>
           <div className="admin-note-list">
-            <p>可以上传 JPEG、PNG、GIF、WebP 和 PDF，单个文件不超过 30MB。</p>
+            <p>可以上传 JPEG、PNG、GIF、WebP 和 PDF，单个文件不超过 20MB。</p>
             <p>文章图片使用渲染接口，公开文件栏下载才生成短时链接。</p>
             <p>删除后会先从列表移走，后面再统一清理原文件。</p>
           </div>

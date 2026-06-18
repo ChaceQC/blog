@@ -108,6 +108,7 @@ class EncryptionSession(Base):
     id: Mapped[int] = pk_column()
     session_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     scope: Mapped[str] = mapped_column(String(16), nullable=False)
+    client_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     key_material: Mapped[bytes] = mapped_column(LargeBinary(64), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DATETIME_6, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

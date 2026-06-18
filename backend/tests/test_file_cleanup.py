@@ -2,7 +2,9 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
-from app.services.files import FileService
+import pytest
+
+from app.services.files import FileService, FileValidationError, UploadFileCommand
 
 
 class FakeCleanupRepository:
@@ -35,9 +37,25 @@ class FakeCleanupRepository:
     async def commit(self) -> None:
         self.commit_count += 1
 
+    async def get_file_by_sha256(self, sha256: str) -> object | None:
+        return None
+
+    async def create_file(self, **payload: object) -> object:
+        return SimpleNamespace(id=99, status="active", **payload)
+
+    async def refresh(self, instance: object) -> None:
+        return None
+
 
 class FakeStorage:
-    pass
+    async def save(self, source_path, object_key: str) -> object:
+        data = source_path.read_bytes()
+        return SimpleNamespace(
+            object_key=object_key,
+            public_url=None,
+            size_bytes=len(data),
+            sha256="e" * 64,
+        )
 
 
 def test_cleanup_deleted_files_removes_unreferenced_local_files(tmp_path) -> None:
@@ -211,6 +229,38 @@ def test_cleanup_orphan_files_respects_scan_limit(tmp_path) -> None:
     assert result.scanned_files == 2
     assert result.orphan_files == 2
     assert len(result.orphan_object_keys) == 2
+
+
+def test_upload_rejects_image_with_too_many_pixels() -> None:
+    repository = FakeCleanupRepository([])
+    service = FileService(repository=repository, storage=FakeStorage())
+
+    with pytest.raises(FileValidationError):
+        asyncio.run(
+            service.upload_file(
+                UploadFileCommand(
+                    original_name="huge.png",
+                    content_type="image/png",
+                    data=_png_header(width=12001, height=12001),
+                    visibility="public",
+                    public_listed=False,
+                    uploader_id=1,
+                    alt_text=None,
+                    max_size_bytes=1024,
+                ),
+            ),
+        )
+
+
+def _png_header(*, width: int, height: int) -> bytes:
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIHDR"
+        + width.to_bytes(4, "big")
+        + height.to_bytes(4, "big")
+        + b"\x08\x02\x00\x00\x00"
+        + b"\x90wS\xde"
+    )
 
 
 def _file_item(file_id: int, object_key: str, sha256: str) -> object:

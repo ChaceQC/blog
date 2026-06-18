@@ -1,5 +1,42 @@
 # 项目进度
 
+## 2026-06-19
+
+### 已完成
+
+- 基于最新安全审计结论确认本轮修复边界：生产流量默认经 Nginx，后端不直接暴露公网；文件上传、图片上传、友链和站点 URL 通过管理员操作或审核后才进入公开链路。
+- 梳理待修复安全项优先级：优先处理公开加密会话应用层限流、公开 RSS/sitemap 高成本 GET 缓存与日志压力、加密信封和 Markdown 正文字段长度上限；随后处理管理员配置 URL 统一校验、友链健康检查 SSRF 防御纵深、上传大小配置一致性和图片像素限制。
+- 明确数据库迁移检查要求：本轮修复若新增或修改数据库字段、索引、约束或默认值，必须同步评估并补充 Alembic 迁移脚本；仅调整 Pydantic schema、Service 逻辑、配置示例或 Nginx 模板时不新增迁移。
+- 公开加密会话已接入应用层限流和单 IP 活跃会话上限：`backend/app/api/public/encryption.py` 现在会复用后台限流服务，并在 `encryption_sessions` 中记录 `client_ip`，以限制同 IP 的 public scope 活跃 session 数量。
+- 新增 Alembic 迁移 `20260619_0007_encryption_session_client_ip.py`，为 `encryption_sessions` 增加 `client_ip` 字段和组合索引 `scope/client_ip/expires_at`，用于公开加密会话活跃上限统计。
+- RSS、sitemap 和 robots.txt 已补充 `Cache-Control` / `ETag`；当客户端命中 `If-None-Match` 时返回 `304`，并跳过应用层访问日志写入，减少公开高成本 GET 的重复开销。
+- 加密信封和 Markdown 正文已补充业务长度上限：`session_id`、`nonce`、`ciphertext`、`content_md` 都加了最大长度校验，避免解密、JSON、Markdown 渲染和 sanitize 的无界输入。
+- 友链与站点相关 URL 已统一校验：友链 URL 只允许 `http/https`，站点导航和站点资料社交入口允许 `http/https/mailto/站内路径`，并在保存与回读时过滤危险协议。
+- 友链健康检查已补充 SSRF 防御纵深：会拒绝解析到 localhost、内网、链路本地、multicast、reserved 和 unspecified 地址的目标，并在重定向链路上重复校验。
+- 文件上传已统一到 Nginx 的 20m 限制：后端默认/示例上传上限改为 `20971520`，前端上传提示同步改为 20MB，并补充图片像素与 Pillow 解压炸弹防护。
+- 补充后端与前端测试：新增公开加密会话限流、公开加密会话活跃上限、feed 304、站点资料 URL 过滤、友链/站点 URL 校验、SSRF 私网拒绝、Markdown/密文长度和图片像素限制回归测试。
+
+### 待修复清单
+
+- 无。六项安全审计项已全部修复并补充测试。
+
+### 进行中
+
+- 准备做最后一轮全量验证与提交整理，确认文档、配置和迁移脚本都已同步。
+
+### 阻塞与风险
+
+- `encryption_sessions.client_ip` 是数据库新增字段，生产库需要执行新的 Alembic 迁移。
+- 上传上限已从 30MB 收敛到 20MB，服务器上的后端环境变量需要同步为 `BLOG_UPLOAD_MAX_SIZE_BYTES=20971520`，否则会与 Nginx 配置不一致。
+
+### 下一步
+
+- 运行全量后端测试和前端构建，确认本轮安全修复没有回归。
+
+### 验证
+
+- 本次仅写入安全修复进度记录，尚未执行代码测试；后续每完成一个修复小步后运行相关 `pytest`，必要时补充前端 `npm.cmd run lint` / `npm.cmd run build` 和迁移 SQL 检查。
+
 ## 2026-06-18
 
 ### 已完成

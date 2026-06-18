@@ -36,9 +36,18 @@ class EncryptionSessionRepositoryProtocol(Protocol):
         *,
         session_id: str,
         scope: str,
+        client_ip: str | None,
         key_material: bytes,
         expires_at: datetime,
     ) -> EncryptionSession: ...
+
+    async def count_active_sessions_by_client(
+        self,
+        *,
+        scope: str,
+        client_ip: str,
+        now: datetime,
+    ) -> int: ...
 
     async def get_active_session(
         self,
@@ -53,6 +62,10 @@ class EncryptionSessionRepositoryProtocol(Protocol):
 
 
 class EncryptionSessionError(Exception):
+    pass
+
+
+class ActiveEncryptionSessionLimitExceeded(EncryptionSessionError):
     pass
 
 
@@ -71,9 +84,26 @@ class EncryptionSessionManager:
         *,
         client_public_key: BrowserPublicKey,
         scope: EncryptionSessionScope = "admin",
+        client_ip: str | None = None,
+        active_session_limit: int | None = None,
     ) -> CreateEncryptionSessionResponse:
         now = datetime.now(UTC)
         await self._repository.delete_expired_sessions(now=now)
+        if (
+            active_session_limit is not None
+            and client_ip is not None
+            and active_session_limit >= 0
+        ):
+            active_count = await self._repository.count_active_sessions_by_client(
+                scope=scope,
+                client_ip=client_ip,
+                now=now,
+            )
+            if active_count >= active_session_limit:
+                raise ActiveEncryptionSessionLimitExceeded(
+                    "too many active encryption sessions",
+                )
+
         server_private_key = ec.generate_private_key(ec.SECP256R1())
         shared_key = server_private_key.exchange(
             ec.ECDH(),
@@ -86,6 +116,7 @@ class EncryptionSessionManager:
         await self._repository.create_session(
             session_id=session_id,
             scope=scope,
+            client_ip=client_ip,
             key_material=shared_key,
             expires_at=expires_at,
         )

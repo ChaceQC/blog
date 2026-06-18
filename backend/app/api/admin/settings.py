@@ -70,13 +70,19 @@ async def update_setting(
         SettingUpdateRequest,
         decrypted_payload,
     )
-    setting = await service.update_setting(
-        key_name=key_name,
-        value_json=setting_payload.value_json,
-        group_name=setting_payload.group_name,
-        is_public=setting_payload.is_public,
-        updated_by=current_user.id,
-    )
+    try:
+        setting = await service.update_setting(
+            key_name=key_name,
+            value_json=setting_payload.value_json,
+            group_name=setting_payload.group_name,
+            is_public=setting_payload.is_public,
+            updated_by=current_user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="invalid setting value",
+        ) from exc
     await record_admin_audit(
         logs=logs,
         request=request,

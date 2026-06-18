@@ -19,13 +19,20 @@ from app.schemas.encryption import (
     EncryptedApiResponse,
 )
 from app.services.content import ContentNotFoundError
+from app.services.encryption import ActiveEncryptionSessionLimitExceeded
 from app.services.links import CreateFriendLinkCommand, SiteNavItemNotFoundError
-from app.services.rate_limit import RateLimitService
+from app.services.rate_limit import RateLimitRule, RateLimitService
 
 
 class FakeEncryptionSessionManager:
-    def __init__(self, decrypted_payload: dict[str, object] | None = None) -> None:
+    def __init__(
+        self,
+        decrypted_payload: dict[str, object] | None = None,
+        *,
+        raise_active_limit: bool = False,
+    ) -> None:
         self.decrypted_payload = decrypted_payload or {}
+        self.raise_active_limit = raise_active_limit
         self.payload: dict[str, object] | None = None
         self.request_payload: EncryptedApiRequest | None = None
 
@@ -53,9 +60,17 @@ class FakeEncryptionSessionManager:
         *,
         client_public_key: BrowserPublicKey,
         scope: str = "admin",
+        client_ip: str | None = None,
+        active_session_limit: int | None = None,
     ) -> CreateEncryptionSessionResponse:
         assert client_public_key.kty == "EC"
         assert scope == "public"
+        assert client_ip == "testclient"
+        assert active_session_limit == 10
+        if self.raise_active_limit:
+            raise ActiveEncryptionSessionLimitExceeded(
+                "too many active encryption sessions",
+            )
         return CreateEncryptionSessionResponse(
             session_id="public-session",
             scope="public",
@@ -87,9 +102,26 @@ class FakeEncryptionSessionManager:
 class FakeLogService:
     def __init__(self) -> None:
         self.items: list[dict[str, object]] = []
+        self.events: list[dict[str, object]] = []
 
     async def record_access_log(self, **kwargs: object) -> None:
         self.items.append(dict(kwargs))
+
+    async def record_security_event(self, **kwargs: object) -> None:
+        self.events.append(dict(kwargs))
+
+
+class RejectingRateLimitService(RateLimitService):
+    def check(
+        self,
+        *,
+        key: str,
+        rule: RateLimitRule,
+        now=None,
+    ) -> None:
+        from app.services.rate_limit import RateLimitExceeded
+
+        raise RateLimitExceeded(9)
 
 
 class FakePublicContentService:
@@ -339,6 +371,8 @@ def test_public_encryption_session_uses_public_scope() -> None:
     app.dependency_overrides[get_encryption_session_manager] = (
         lambda: FakeEncryptionSessionManager()
     )
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
 
     try:
         response = client.post(
@@ -359,6 +393,66 @@ def test_public_encryption_session_uses_public_scope() -> None:
     assert response.json()["scope"] == "public"
 
 
+def test_public_encryption_session_records_rate_limit_hit() -> None:
+    client = TestClient(app)
+    logs = FakeLogService()
+    app.dependency_overrides[get_encryption_session_manager] = (
+        lambda: FakeEncryptionSessionManager()
+    )
+    app.dependency_overrides[get_log_service] = lambda: logs
+    app.dependency_overrides[get_rate_limit_service] = (
+        lambda: RejectingRateLimitService()
+    )
+
+    try:
+        response = client.post(
+            "/api/public/encryption/sessions",
+            json={
+                "client_public_key": {
+                    "kty": "EC",
+                    "crv": "P-256",
+                    "x": "client-x",
+                    "y": "client-y",
+                },
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "9"
+    assert logs.events[0]["event_type"] == "rate_limit.public_encryption_session"
+
+
+def test_public_encryption_session_rejects_active_session_overflow() -> None:
+    client = TestClient(app)
+    logs = FakeLogService()
+    app.dependency_overrides[get_encryption_session_manager] = (
+        lambda: FakeEncryptionSessionManager(raise_active_limit=True)
+    )
+    app.dependency_overrides[get_log_service] = lambda: logs
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
+
+    try:
+        response = client.post(
+            "/api/public/encryption/sessions",
+            json={
+                "client_public_key": {
+                    "kty": "EC",
+                    "crv": "P-256",
+                    "x": "client-x",
+                    "y": "client-y",
+                },
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "too many active encryption sessions"
+    assert logs.events[0]["event_type"] == "rate_limit.public_encryption_session_active"
+
+
 def test_rss_feed_returns_public_posts_xml() -> None:
     client = TestClient(app)
     logs = FakeLogService()
@@ -375,6 +469,10 @@ def test_rss_feed_returns_public_posts_xml() -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/rss+xml")
+    assert response.headers["cache-control"] == (
+        "public, max-age=300, stale-while-revalidate=60"
+    )
+    assert response.headers["etag"]
     assert "<title>恬妡的小屋</title>" in response.text
     assert "<title>SEO 标题</title>" in response.text
     assert "http://127.0.0.1:15173/posts/public-post" in response.text
@@ -382,6 +480,32 @@ def test_rss_feed_returns_public_posts_xml() -> None:
     assert "<category>FastAPI</category>" in response.text
     assert logs.items[0]["access_type"] == "public_rss"
     assert logs.items[0]["detail_json"] == {"count": 1}
+
+
+def test_rss_feed_returns_304_without_access_log_for_matching_etag() -> None:
+    client = TestClient(app)
+    logs = FakeLogService()
+    app.dependency_overrides[get_public_content_service] = (
+        lambda: FakePublicContentService()
+    )
+    app.dependency_overrides[get_setting_service] = lambda: FakeSettingService()
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        first = client.get("/rss.xml")
+        logs.items.clear()
+        second = client.get(
+            "/rss.xml",
+            headers={"If-None-Match": first.headers["etag"]},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert first.status_code == 200
+    assert second.status_code == 304
+    assert second.content == b""
+    assert second.headers["etag"] == first.headers["etag"]
+    assert logs.items == []
 
 
 def test_sitemap_returns_public_post_urls_xml() -> None:
@@ -399,6 +523,7 @@ def test_sitemap_returns_public_post_urls_xml() -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/xml")
+    assert response.headers["etag"]
     assert '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' in (
         response.text
     )
@@ -724,6 +849,44 @@ def test_public_site_profile_returns_encrypted_setting() -> None:
     assert manager.payload["musings"][0]["content"] == "后台碎念"
     assert manager.payload["social_links"][0]["label"] == "GitHub"
     assert logs.items[0]["access_type"] == "public_site_profile"
+
+
+def test_public_site_profile_filters_unsafe_social_href() -> None:
+    class UnsafeSettingService:
+        async def get_site_profile(self) -> object:
+            return SimpleNamespace(
+                key_name="site_profile",
+                value_json={
+                    "title": "静默书房",
+                    "owner": "ChaceQC",
+                    "avatar_url": "https://example.com/avatar.png",
+                    "description": "描述",
+                    "quote": "引文",
+                    "social_links": [
+                        {"label": "RSS", "url": "/rss.xml"},
+                        {"label": "坏链接", "url": "javascript:alert(1)"},
+                    ],
+                },
+            )
+
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
+    logs = FakeLogService()
+    app.dependency_overrides[get_setting_service] = lambda: UnsafeSettingService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.get(
+            "/api/public/settings/site-profile",
+            headers={"X-Encryption-Session": "public-session"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert manager.payload is not None
+    assert manager.payload["social_links"] == [{"label": "RSS", "url": "/rss.xml"}]
 
 
 def test_public_post_detail_returns_404_for_missing_post() -> None:

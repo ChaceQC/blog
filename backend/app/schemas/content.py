@@ -6,13 +6,14 @@ from pydantic import BaseModel, ConfigDict, Field
 ContentStatus = Literal["draft", "published", "scheduled", "archived"]
 PostVisibility = Literal["public", "hidden", "private"]
 SLUG_PATTERN = r"^[a-z0-9][a-z0-9_-]*$"
+CONTENT_MD_MAX_LENGTH = 200_000
 
 
 class PostCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=1, max_length=220, pattern=SLUG_PATTERN)
     summary: str | None = Field(default=None, max_length=500)
-    content_md: str = Field(min_length=1)
+    content_md: str = Field(min_length=1, max_length=CONTENT_MD_MAX_LENGTH)
     status: ContentStatus = "draft"
     visibility: PostVisibility = "public"
     cover_file_id: int | None = Field(default=None, ge=1)
@@ -35,7 +36,11 @@ class PostUpdateRequest(BaseModel):
         pattern=SLUG_PATTERN,
     )
     summary: str | None = Field(default=None, max_length=500)
-    content_md: str | None = Field(default=None, min_length=1)
+    content_md: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=CONTENT_MD_MAX_LENGTH,
+    )
     status: ContentStatus | None = None
     visibility: PostVisibility | None = None
     cover_file_id: int | None = Field(default=None, ge=1)
@@ -51,7 +56,7 @@ class PostUpdateRequest(BaseModel):
 
 class PostPreviewRequest(BaseModel):
     slug: str = Field(min_length=1, max_length=220, pattern=SLUG_PATTERN)
-    content_md: str = Field(min_length=1)
+    content_md: str = Field(min_length=1, max_length=CONTENT_MD_MAX_LENGTH)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -152,7 +157,7 @@ class PublicTaxonomyListResponse(BaseModel):
 class PageCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=1, max_length=220, pattern=SLUG_PATTERN)
-    content_md: str = Field(min_length=1)
+    content_md: str = Field(min_length=1, max_length=CONTENT_MD_MAX_LENGTH)
     status: ContentStatus = "draft"
     show_in_nav: bool = False
     sort_order: int = Field(default=0, ge=0, le=10000)
@@ -170,7 +175,11 @@ class PageUpdateRequest(BaseModel):
         max_length=220,
         pattern=SLUG_PATTERN,
     )
-    content_md: str | None = Field(default=None, min_length=1)
+    content_md: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=CONTENT_MD_MAX_LENGTH,
+    )
     status: ContentStatus | None = None
     show_in_nav: bool | None = None
     sort_order: int | None = Field(default=None, ge=0, le=10000)

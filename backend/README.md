@@ -56,7 +56,7 @@ MySQL 8 默认认证插件需要 `asyncmy` 配合 `cryptography` 完成认证，
 
 后台文章、页面、文件、友链、导航和设置的关键写操作会写入 `audit_logs`，记录操作者、动作、实体、IP、UA 和最小变更摘要；正文、密钥、Token 和完整设置值不写入审计日志。
 
-登录入口、加密协商入口和公开友链申请入口已接入可配置限流，命中后返回 `429` 并写入 `security_events`。阈值通过 `BLOG_ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_FRIEND_LINK_APPLICATION_RATE_LIMIT_MAX_ATTEMPTS` 和 `BLOG_FRIEND_LINK_APPLICATION_RATE_LIMIT_WINDOW_SECONDS` 配置。限流后端通过 `BLOG_RATE_LIMIT_BACKEND` 配置，默认本地开发使用 `memory`，生产示例使用 `redis` 和 `BLOG_REDIS_URL=redis://redis:6379/0`。Redis 适配器使用 sorted set 与 Lua 脚本保证单次命中检查原子性，并显式使用 RESP2 以兼容 Redis 5 与 Redis 7；如果 Redis 连接异常，会按相同 key 回落到进程内限流器，避免入口完全失去保护。真实 Redis 集成测试默认跳过，设置 `BLOG_TEST_REDIS_URL` 后会验证后台登录和加密协商入口的 `429`、`Retry-After` 与安全事件记录。
+登录入口、后台/公开加密协商入口和公开友链申请入口已接入可配置限流，命中后返回 `429` 并写入 `security_events`。阈值通过 `BLOG_ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_MAX_ATTEMPTS`、`BLOG_ENCRYPTION_SESSION_RATE_LIMIT_WINDOW_SECONDS`、`BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`、`BLOG_FRIEND_LINK_APPLICATION_RATE_LIMIT_MAX_ATTEMPTS` 和 `BLOG_FRIEND_LINK_APPLICATION_RATE_LIMIT_WINDOW_SECONDS` 配置。公开加密会话会在 `encryption_sessions.client_ip` 保存短期客户端 IP，用于限制单 IP 活跃 public scope 会话数量。限流后端通过 `BLOG_RATE_LIMIT_BACKEND` 配置，默认本地开发使用 `memory`，生产示例使用 `redis` 和 `BLOG_REDIS_URL=redis://redis:6379/0`。Redis 适配器使用 sorted set 与 Lua 脚本保证单次命中检查原子性，并显式使用 RESP2 以兼容 Redis 5 与 Redis 7；如果 Redis 连接异常，会按相同 key 回落到进程内限流器，避免入口完全失去保护。真实 Redis 集成测试默认跳过，设置 `BLOG_TEST_REDIS_URL` 后会验证后台登录和加密协商入口的 `429`、`Retry-After` 与安全事件记录。
 
 ## 后台维护任务
 
@@ -71,7 +71,7 @@ uv run python -m app.cli cleanup-orphan-files --limit 1000 --delete
 uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 ```
 
-`cleanup-encryption-sessions` 会删除 `encryption_sessions` 中已过期的会话记录，并输出清理数量。`cleanup-deleted-files` 只清理已软删除、超过保留天数、没有 `file_usages` 引用且 object key 解析后仍位于 `BLOG_UPLOAD_ROOT` 内的本地文件；物理文件缺失时会清理对应数据库软删记录，路径不安全或仍有引用时会跳过。默认保留 7 天，单次最多扫描 100 条。`cleanup-orphan-files` 扫描 `BLOG_UPLOAD_ROOT` 下 `public` 与 `private` 目录中的本地文件，找出没有 active/deleted 数据库记录的孤儿文件；默认只 dry-run 汇总并展示示例，只有显式传入 `--delete` 才会删除，单次默认最多扫描 1000 个本地文件。`check-friend-links` 会检查已通过友链的 HTTP 状态，写入 `last_checked_at` 和 `last_status_code`；访问失败记录为 `0`，不会自动把人工审核状态改成拒绝。生产部署可使用 `deploy/systemd` 中的 timer 示例：加密会话每小时清理、软删除文件每天清理、孤儿文件每周 dry-run 扫描、友链状态每天检查。后续 sitemap 刷新也应沿用同一类维护任务入口。
+`cleanup-encryption-sessions` 会删除 `encryption_sessions` 中已过期的会话记录，并输出清理数量。`cleanup-deleted-files` 只清理已软删除、超过保留天数、没有 `file_usages` 引用且 object key 解析后仍位于 `BLOG_UPLOAD_ROOT` 内的本地文件；物理文件缺失时会清理对应数据库软删记录，路径不安全或仍有引用时会跳过。默认保留 7 天，单次最多扫描 100 条。`cleanup-orphan-files` 扫描 `BLOG_UPLOAD_ROOT` 下 `public` 与 `private` 目录中的本地文件，找出没有 active/deleted 数据库记录的孤儿文件；默认只 dry-run 汇总并展示示例，只有显式传入 `--delete` 才会删除，单次默认最多扫描 1000 个本地文件。`check-friend-links` 会检查已通过友链的 HTTP 状态，写入 `last_checked_at` 和 `last_status_code`；检查器只允许 `http/https`，请求前解析域名并拒绝 localhost、内网、链路本地、metadata 等非公网地址，重定向目标也会重新校验；访问失败记录为 `0`，不会自动把人工审核状态改成拒绝。生产部署可使用 `deploy/systemd` 中的 timer 示例：加密会话每小时清理、软删除文件每天清理、孤儿文件每周 dry-run 扫描、友链状态每天检查。后续 sitemap 刷新也应沿用同一类维护任务入口。
 
 ## 后台内容管理
 
@@ -97,7 +97,7 @@ uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 
 - `GET /api/public/posts`：返回已公开且已到发布时间的文章列表，支持通过 `category={slug}` 和 `tag={slug}` 按分类、标签筛选；列表响应包含 `items` 和 `total`，供前台直接显示总页数。
 - `GET /api/public/friend-links`、`GET /api/public/site-items` 和 `GET /api/public/files`：公开友链、站点目录和公开文件列表响应同样包含 `items` 和 `total`，前台分页不需要额外多取一条记录判断下一页；站点目录条目会返回 `icon_url`、`tags_json` 和 `open_target` 供前台展示图标、标签和打开方式。
-- `GET /api/public/site-items/{id}/visit`：公开导航跳转入口，只有公开条目会递增 `click_count` 并 302 跳转到真实 URL，隐藏或私有条目返回 404。
+- `GET /api/public/site-items/{id}/visit`：公开导航跳转入口，只有公开条目会递增 `click_count` 并 302 跳转到真实 URL，隐藏或私有条目返回 404。友链 URL 只允许 `http/https`；站点导航、站点资料头像和社交入口允许 `http`、`https`、`mailto` 和站内路径，禁止 `javascript:` 等危险协议。
 - `GET /api/public/categories`：返回已公开且已到发布时间文章使用到的分类，包含 `id`、`name`、`slug` 和 `post_count`。
 - `GET /api/public/categories/{slug}`：返回单个公开分类归档信息；分类不存在或没有公开文章时返回 404。
 - `GET /api/public/tags`：返回已公开且已到发布时间文章使用到的标签，包含 `id`、`name`、`slug` 和 `post_count`。
@@ -110,7 +110,7 @@ uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 - `GET /sitemap.xml`：输出 sitemap XML，包含首页、文章列表页、已公开文章永久链接、分类归档页和标签归档页。
 - `GET /robots.txt`：允许常规公开内容抓取，屏蔽 `/admin` 与 `/api/admin/`，并声明 sitemap 地址。
 
-这些公开 SEO 端点的绝对 URL 均由 `BLOG_PUBLIC_BASE_URL` 生成；RSS 文章条目会使用发布时间、更新时间、SEO 标题、SEO 描述、分类和标签，并写入 `access_logs`。
+这些公开 SEO 端点的绝对 URL 均由 `BLOG_PUBLIC_BASE_URL` 生成；RSS 文章条目会使用发布时间、更新时间、SEO 标题、SEO 描述、分类和标签。RSS、sitemap 和 robots.txt 均返回 `Cache-Control: public, max-age=300, stale-while-revalidate=60` 与 `ETag`，客户端命中 `If-None-Match` 时返回 `304` 且不写应用访问日志；正常 `200` 响应仍写入 `access_logs`。
 
 ## 后台文件管理
 
@@ -123,7 +123,7 @@ uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 - `GET /api/admin/files/{id}/preview`：为后台文章预览提供短时签名图片访问，不用于公开下载。
 - `DELETE /api/admin/files/{id}`：软删除文件，需要 `file:delete` 权限和 `X-CSRF-Token`。
 
-当前本地存储驱动会将文件写入 `BLOG_UPLOAD_ROOT`，但不会挂载静态目录，也不会为新文件写入 `/uploads/...` 公开 URL。公开文件栏下载通过后台加密接口按需生成短时签名链接，再由 `/api/public/files/{id}/download?token=...` 校验后返回文件；私有文件不生成公开访问链接，只能通过后台鉴权下载接口读取。文章正文图片渲染使用专门的 `/api/public/posts/{slug}/files/{file_id}/render?expires=...&token=...`，公开封面缩略图使用 `/api/public/posts/{slug}/files/{file_id}/thumbnail?expires=...&token=...`，签名由公开文章详情或后台预览接口按场景颁发。后台文件列表的使用次数来自 `file_usages`，目前文章封面记录为 `cover`，正文图片记录为 `post_body`。上传大小通过 `BLOG_UPLOAD_MAX_SIZE_BYTES` 配置，当前默认 30MB；当前白名单支持 JPEG、PNG、GIF、WebP 和 PDF，并校验扩展名、MIME 与文件头；删除只标记为 `deleted`，由 `cleanup-deleted-files` 在超过保留期且无引用时处理物理文件和数据库记录；本地存储中没有对应 active/deleted 数据库记录的残留文件可先用 `cleanup-orphan-files` dry-run 盘点，再加 `--delete` 清理。短时链接有效期通过 `BLOG_FILE_TEMPORARY_URL_EXPIRE_SECONDS` 配置。公开内容读取、公开文件下载、文章图片渲染、文章缩略图、后台短时链接生成和后台文件下载都会写入 `access_logs`。
+当前本地存储驱动会将文件写入 `BLOG_UPLOAD_ROOT`，但不会挂载静态目录，也不会为新文件写入 `/uploads/...` 公开 URL。公开文件栏下载通过后台加密接口按需生成短时签名链接，再由 `/api/public/files/{id}/download?token=...` 校验后返回文件；私有文件不生成公开访问链接，只能通过后台鉴权下载接口读取。文章正文图片渲染使用专门的 `/api/public/posts/{slug}/files/{file_id}/render?expires=...&token=...`，公开封面缩略图使用 `/api/public/posts/{slug}/files/{file_id}/thumbnail?expires=...&token=...`，签名由公开文章详情或后台预览接口按场景颁发。后台文件列表的使用次数来自 `file_usages`，目前文章封面记录为 `cover`，正文图片记录为 `post_body`。上传大小通过 `BLOG_UPLOAD_MAX_SIZE_BYTES` 配置，当前默认 `20971520` 字节，与 Nginx `client_max_body_size 20m` 对齐；当前白名单支持 JPEG、PNG、GIF、WebP 和 PDF，并校验扩展名、MIME、文件头和图片像素边界，图片单边默认不超过 12000 像素且总像素不超过 4000 万，Pillow 解压炸弹警告会视为失败；删除只标记为 `deleted`，由 `cleanup-deleted-files` 在超过保留期且无引用时处理物理文件和数据库记录；本地存储中没有对应 active/deleted 数据库记录的残留文件可先用 `cleanup-orphan-files` dry-run 盘点，再加 `--delete` 清理。短时链接有效期通过 `BLOG_FILE_TEMPORARY_URL_EXPIRE_SECONDS` 配置。公开内容读取、公开文件下载、文章图片渲染、文章缩略图、后台短时链接生成和后台文件下载都会写入 `access_logs`。
 
 ## 初始管理员
 

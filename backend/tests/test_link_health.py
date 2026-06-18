@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from app.services.link_health import FAILED_STATUS_CODE, FriendLinkHealthService
+from app.tasks import links as link_tasks
 
 
 class FakeLinkHealthRepository:
@@ -80,6 +81,52 @@ def test_check_healthy_friend_links_skips_empty_commit() -> None:
     assert repository.commit_count == 0
 
 
+def test_url_checker_rejects_loopback_target(monkeypatch) -> None:
+    monkeypatch.setattr(
+        link_tasks.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (
+                link_tasks.socket.AF_INET,
+                link_tasks.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1", 80),
+            ),
+        ],
+    )
+
+    assert link_tasks._request_status(
+        "https://example.test",
+        method="HEAD",
+        timeout_seconds=1,
+        opener=_RaisingOpener(),
+    ) is None
+
+
+def test_url_checker_allows_public_target(monkeypatch) -> None:
+    monkeypatch.setattr(
+        link_tasks.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (
+                link_tasks.socket.AF_INET,
+                link_tasks.socket.SOCK_STREAM,
+                6,
+                "",
+                ("93.184.216.34", 443),
+            ),
+        ],
+    )
+
+    assert link_tasks._request_status(
+        "https://example.test",
+        method="HEAD",
+        timeout_seconds=1,
+        opener=_FakeOpener(204),
+    ) == 204
+
+
 def _link_item(link_id: int, url: str) -> object:
     return SimpleNamespace(
         id=link_id,
@@ -87,3 +134,27 @@ def _link_item(link_id: int, url: str) -> object:
         last_checked_at=None,
         last_status_code=None,
     )
+
+
+class _FakeResponse:
+    def __init__(self, status: int) -> None:
+        self.status = status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+
+class _FakeOpener:
+    def __init__(self, status: int) -> None:
+        self.status = status
+
+    def open(self, *args: object, **kwargs: object) -> _FakeResponse:
+        return _FakeResponse(self.status)
+
+
+class _RaisingOpener:
+    def open(self, *args: object, **kwargs: object) -> _FakeResponse:
+        raise AssertionError("unsafe URL should not be opened")

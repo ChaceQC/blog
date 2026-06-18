@@ -4,6 +4,7 @@ import json
 import re
 import struct
 import tempfile
+import warnings
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from binascii import Error as BinasciiError
 from collections.abc import Sequence
@@ -27,6 +28,9 @@ ALLOWED_FILE_TYPES = {
     ".pdf": "application/pdf",
 }
 ALLOWED_VISIBILITIES = {"public", "private"}
+MAX_IMAGE_PIXELS = 40_000_000
+MAX_IMAGE_SIDE = 12_000
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
 
 class FileValidationError(Exception):
@@ -222,6 +226,7 @@ class FileService:
             sha256=sha256,
         )
         width, height = _read_image_size(command.data, expected_mime)
+        _validate_image_dimensions(width=width, height=height)
         temp_path = _write_temp_file(command.data)
         try:
             stored_object = await self.storage.save(temp_path, object_key)
@@ -694,6 +699,17 @@ def _read_image_size(data: bytes, mime_type: str) -> tuple[int | None, int | Non
     return None, None
 
 
+def _validate_image_dimensions(*, width: int | None, height: int | None) -> None:
+    if width is None or height is None:
+        return
+    if width <= 0 or height <= 0:
+        raise InvalidFileTypeError("invalid image dimensions")
+    if width > MAX_IMAGE_SIDE or height > MAX_IMAGE_SIDE:
+        raise InvalidFileTypeError("image dimensions are too large")
+    if width * height > MAX_IMAGE_PIXELS:
+        raise InvalidFileTypeError("image pixel count is too large")
+
+
 def _read_jpeg_size(data: bytes) -> tuple[int | None, int | None]:
     index = 2
     while index + 9 < len(data):
@@ -1026,12 +1042,22 @@ def _create_thumbnail(
 ) -> None:
     target_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with Image.open(source_path) as image:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            image_context = Image.open(source_path)
+        with image_context as image:
+            _validate_image_dimensions(width=image.width, height=image.height)
             image.thumbnail((max_side, max_side))
             if image.mode not in {"RGB", "L"}:
                 image = image.convert("RGB")
             image.save(target_path, format="JPEG", quality=78, optimize=True)
-    except (OSError, UnidentifiedImageError) as exc:
+    except (
+        OSError,
+        UnidentifiedImageError,
+        Image.DecompressionBombError,
+        Image.DecompressionBombWarning,
+        InvalidFileTypeError,
+    ) as exc:
         raise ManagedFileNotFoundError("thumbnail generation failed") from exc
 
 

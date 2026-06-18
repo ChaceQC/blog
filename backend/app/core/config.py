@@ -26,6 +26,11 @@ class Settings(BaseSettings):
         ge=10,
         le=3600,
     )
+    public_encryption_session_active_limit_per_ip: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+    )
     friend_link_application_rate_limit_max_attempts: int = Field(
         default=5,
         ge=1,
@@ -47,7 +52,7 @@ class Settings(BaseSettings):
     docs_enabled: bool
     readiness_check_database: bool
     upload_root: Path
-    upload_max_size_bytes: int = Field(default=30 * 1024 * 1024, ge=1024)
+    upload_max_size_bytes: int = Field(default=20 * 1024 * 1024, ge=1024)
     file_temporary_url_expire_seconds: int = Field(default=300, ge=30, le=3600)
 
     dev_server_host: str

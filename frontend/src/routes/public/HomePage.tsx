@@ -18,7 +18,10 @@ import {
 import { usePageSeo } from '../../features/seo/usePageSeo.ts'
 import { getPublicSiteProfile } from '../../features/settings/api.ts'
 import { siteSettings } from '../../features/settings/siteSettings.ts'
-import { listPublicSiteItems } from '../../features/sites/api.ts'
+import {
+  listPublicSiteItems,
+  publicSiteItemVisitUrl,
+} from '../../features/sites/api.ts'
 
 export function HomePage() {
   const {
@@ -212,7 +215,12 @@ export function HomePage() {
         </div>
         <div className="gateway-list">
           {featuredSites.map((site) => (
-            <a href={site.url} key={site.id} rel="noreferrer" target="_blank">
+            <a
+              href={publicSiteItemVisitUrl(site.id)}
+              key={site.id}
+              rel={site.open_target === 'blank' ? 'noreferrer' : undefined}
+              target={site.open_target === 'blank' ? '_blank' : '_self'}
+            >
               <Send size={15} strokeWidth={1.7} aria-hidden="true" />
               <span>
                 <strong>{site.title}</strong>

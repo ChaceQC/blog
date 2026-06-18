@@ -175,8 +175,10 @@ npm.cmd run build
 - `BLOG_SECRET_KEY`：应用密钥，生产必须使用强随机值。
 - `BLOG_PUBLIC_BASE_URL`：公网 HTTPS 基础地址，用于生成 RSS、sitemap、robots.txt 和签名 URL。
 - `BLOG_UPLOAD_ROOT`：上传文件存储目录。
+- `BLOG_UPLOAD_MAX_SIZE_BYTES`：后端上传上限，默认 `20971520`，需与 Nginx `client_max_body_size 20m` 保持一致。
 - `BLOG_RATE_LIMIT_BACKEND`：限流后端，支持 `memory` 和 `redis`。
 - `BLOG_REDIS_URL`：Redis 连接串，生产示例为 `redis://redis:6379/0`。
+- `BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`：公开加密会话单 IP 活跃数量上限，默认 `10`。
 
 后端所有响应都会设置 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 和 `Permissions-Policy`；生产环境额外设置 HSTS 与 Content Security Policy，Nginx 仍保留同等安全响应头作为公网入口兜底。
 
@@ -347,6 +349,8 @@ BLOG_DOCS_ENABLED=false
 BLOG_RATE_LIMIT_BACKEND=redis
 BLOG_REDIS_URL=redis://redis:6379/0
 BLOG_UPLOAD_ROOT=/data/blog/uploads
+BLOG_UPLOAD_MAX_SIZE_BYTES=20971520
+BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP=10
 ```
 
 编辑 `deploy/env/nginx.env`：

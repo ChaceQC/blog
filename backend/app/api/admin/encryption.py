@@ -43,6 +43,7 @@ async def create_encryption_session(
         return await manager.create_session(
             client_public_key=payload.client_public_key,
             scope="admin",
+            client_ip=client_ip(request),
         )
     except EncryptionSessionError as exc:
         raise HTTPException(
