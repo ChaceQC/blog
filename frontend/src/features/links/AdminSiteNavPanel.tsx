@@ -1,113 +1,39 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Navigation, Save } from 'lucide-react'
-import { useMemo, useState } from 'react'
 
-import { invalidateSiteNavCaches } from '../../app/queryInvalidation.ts'
 import { ListPager } from '../../components/ListPager.tsx'
-import { usePagedItems } from '../../hooks/usePagedItems.ts'
-import {
-  siteNavTagsPayload,
-  siteNavTagsToText,
-} from '../sites/siteNavTags.ts'
-import { emptyToNull, parseOptionalId } from '../../utils/formText.ts'
+import { parseOptionalId } from '../../utils/formText.ts'
 import { safePreviewHref } from '../../utils/urls.ts'
 import { AdminSiteNavGroupsPanel } from './AdminSiteNavGroupsPanel.tsx'
-import {
-  createAdminSiteNavItem,
-  listAdminSiteNavGroups,
-  listAdminSiteNavItems,
-  updateAdminSiteNavItem,
-} from './api.ts'
+import { useAdminSiteNavEditor } from './useAdminSiteNavEditor.ts'
 import { useAuth } from '../auth/useAuth.ts'
 
 import type {
   AdminSiteNavGroup,
-  AdminSiteNavItem,
   AdminSiteNavOpenTarget,
   AdminSiteNavVisibility,
-  SiteNavItemWritePayload,
 } from './types.ts'
-
-const LIST_PAGE_SIZE = 6
-
-type SiteNavForm = {
-  groupId: number | null
-  title: string
-  url: string
-  iconUrl: string
-  description: string
-  tagsText: string
-  openTarget: AdminSiteNavOpenTarget
-  visibility: AdminSiteNavVisibility
-  sortOrder: number
-}
-
-const emptySiteForm: SiteNavForm = {
-  groupId: null,
-  title: '',
-  url: '',
-  iconUrl: '',
-  description: '',
-  tagsText: '',
-  openTarget: 'blank',
-  visibility: 'public',
-  sortOrder: 0,
-}
 
 export function AdminSiteNavPanel() {
   const { session } = useAuth()
-  const queryClient = useQueryClient()
-  const [selectedSiteId, setSelectedSiteId] = useState<number | null>(null)
-  const [siteDraftForm, setSiteDraftForm] = useState<SiteNavForm | null>(null)
-  const [siteNotice, setSiteNotice] = useState<string | null>(null)
-  const [listPage, setListPage] = useState(0)
-  const sitesQuery = useQuery({
-    queryKey: ['admin-site-nav-items'],
-    queryFn: listAdminSiteNavItems,
-  })
-  const groupsQuery = useQuery({
-    queryKey: ['admin-site-nav-groups'],
-    queryFn: listAdminSiteNavGroups,
-  })
-  const sites = useMemo(() => sitesQuery.data?.items ?? [], [sitesQuery.data])
-  const groups = useMemo(() => groupsQuery.data?.items ?? [], [groupsQuery.data])
-  const { safePage: safeListPage, visibleItems: visibleSites } = usePagedItems(
+  const editor = useAdminSiteNavEditor(session)
+  const {
+    groups,
+    groupsQuery,
+    isCreatingSite,
+    listPageSize,
+    safeListPage,
+    saveSiteMutation,
+    selectSite,
+    selectedSite,
+    setListPage,
+    siteForm,
+    siteNotice,
     sites,
-    listPage,
-    LIST_PAGE_SIZE,
-  )
-  const selectedSite = useMemo(
-    () =>
-      sites.find((site) => site.id === selectedSiteId) ?? sites[0] ?? null,
-    [sites, selectedSiteId],
-  )
-  const loadedSiteForm = useMemo(
-    () => (selectedSite ? siteToForm(selectedSite) : emptySiteForm),
-    [selectedSite],
-  )
-  const siteForm = siteDraftForm ?? loadedSiteForm
-  const isCreatingSite = selectedSiteId === null && siteDraftForm !== null
-  const saveSiteMutation = useMutation({
-    mutationFn: async () => {
-      if (!session) {
-        throw new Error('当前会话已失效')
-      }
-      const payload = siteFormToPayload(siteForm)
-      if (isCreatingSite || !selectedSite) {
-        return createAdminSiteNavItem(payload, session.csrfToken)
-      }
-      return updateAdminSiteNavItem(selectedSite.id, payload, session.csrfToken)
-    },
-    onSuccess: (site) => {
-      setSelectedSiteId(site.id)
-      setSiteDraftForm(null)
-      void invalidateSiteNavCaches(queryClient)
-      setSiteNotice(isCreatingSite ? '导航已创建' : '导航已保存')
-    },
-    onError: (error) => {
-      setSiteNotice(error instanceof Error ? error.message : '导航保存失败')
-    },
-  })
+    sitesQuery,
+    startCreatingSite,
+    updateSiteForm,
+    visibleSites,
+  } = editor
 
   return (
     <>
@@ -118,11 +44,7 @@ export function AdminSiteNavPanel() {
             <small>{sitesQuery.isLoading ? '加载中' : `共 ${sites.length} 条`}</small>
             <button
               className="text-button text-button--muted"
-              onClick={() => {
-                setSelectedSiteId(null)
-                setSiteDraftForm(emptySiteForm)
-                setSiteNotice('正在新建导航')
-              }}
+              onClick={startCreatingSite}
               type="button"
             >
               <Navigation size={14} strokeWidth={1.8} aria-hidden="true" />
@@ -137,11 +59,7 @@ export function AdminSiteNavPanel() {
                   site.id === selectedSite?.id ? 'content-row active' : 'content-row'
                 }
                 key={site.id}
-                onClick={() => {
-                  setSelectedSiteId(site.id)
-                  setSiteDraftForm(null)
-                  setSiteNotice(null)
-                }}
+                onClick={() => selectSite(site)}
                 type="button"
               >
                 <span>
@@ -155,7 +73,7 @@ export function AdminSiteNavPanel() {
           </div>
           <ListPager
             page={safeListPage}
-            pageSize={LIST_PAGE_SIZE}
+            pageSize={listPageSize}
             totalItems={sites.length}
             isLoading={sitesQuery.isLoading}
             variant="admin"
@@ -324,40 +242,6 @@ export function AdminSiteNavPanel() {
     </>
   )
 
-  function updateSiteForm<Key extends keyof SiteNavForm>(
-    key: Key,
-    value: SiteNavForm[Key],
-  ) {
-    setSiteDraftForm((current) => ({ ...(current ?? siteForm), [key]: value }))
-  }
-}
-
-function siteToForm(site: AdminSiteNavItem): SiteNavForm {
-  return {
-    groupId: site.group_id,
-    title: site.title,
-    url: site.url,
-    iconUrl: site.icon_url ?? '',
-    description: site.description ?? '',
-    tagsText: siteNavTagsToText(site.tags_json),
-    openTarget: site.open_target,
-    visibility: site.visibility,
-    sortOrder: site.sort_order,
-  }
-}
-
-function siteFormToPayload(form: SiteNavForm): SiteNavItemWritePayload {
-  return {
-    group_id: form.groupId,
-    title: form.title,
-    url: form.url,
-    icon_url: emptyToNull(form.iconUrl),
-    description: emptyToNull(form.description),
-    tags_json: siteNavTagsPayload(form.tagsText),
-    open_target: form.openTarget,
-    visibility: form.visibility,
-    sort_order: Number.isFinite(form.sortOrder) ? form.sortOrder : 0,
-  }
 }
 
 function groupLabel(
