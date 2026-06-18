@@ -31,7 +31,17 @@
 
 ### 待修复清单
 
-- 无。最新 P1/P2 安全审计项已完成代码修复并通过全量验证。
+- P1：公开 API 反向依赖后台模块，边界不够干净。`backend/app/api/public/router.py` 与 `backend/app/api/public/files.py` 直接引用 `app.api.admin.dependencies`、`app.api.admin.encrypted_response` 和 `app.api.admin.limits`，导致公开层依赖后台层；后续应抽出 `app/api/dependencies.py`、`app/api/encrypted_response.py` 或 `app/api/shared/`，让 admin/public 都依赖共享层。
+- P1：`FileService` 过度集中，职责过多。`backend/app/services/files.py` 同时承载上传校验、存储、清理、下载鉴权、缩略图、临时 token、文章图片 URL 签名和 HTML URL 重写；后续应拆分为 `FileUploadService`、`FileAccessService`、`ThumbnailService`、`FileCleanupService`、`FileTokenSigner` 和 `ArticleAssetUrlSigner` 等更小职责。
+- P1：公开路由文件过大，路由层承担了太多业务装配。`backend/app/api/public/router.py` 同时处理分类、标签、文章、页面、站点资料、友链、站点导航、访问日志、加密响应、DTO 转换和 URL 签名；后续应拆为 `public/posts.py`、`public/taxonomy.py`、`public/settings.py`、`public/links.py`，并把响应装配移动到 assembler/presenter 层。
+- P2：Service 返回 ORM 模型，API 层直接做 DTO 装配。`ContentService`、`FileService`、`LinkService` 等服务仍返回 SQLAlchemy 模型或带 ORM 透传包装对象，API 再调用 `model_validate`；后续应逐步引入 read model / domain DTO，至少先覆盖公开读取接口，降低 API、Service、Repository 对 ORM 的共同耦合。
+- P2：更新逻辑大量使用 `dict + setattr`，类型边界偏弱。`backend/app/services/content.py`、`backend/app/services/links.py` 和 `backend/app/services/link_groups.py` 的更新入口依赖 `changes: dict[...]` 与白名单 `setattr`；后续应改为明确的 `UpdatePostCommand`、`UpdateFriendLinkCommand`、`UpdateSiteNavItemCommand` 或 Service 层专用 DTO。
+- P2：后台链接路由 CRUD 模式重复明显。`backend/app/api/admin/links.py` 多次重复“解密、校验、调用 service、捕获异常、记录审计、加密响应”流程；后续应拆分路由文件，并抽取 admin encrypted command handler 或 use-case helper 统一横切流程。
+- P2：前端管理页仍偏“页面即应用”。`frontend/src/routes/admin/AdminPostsPage.tsx`、`frontend/src/routes/admin/AdminSettingsPage.tsx`、`frontend/src/features/links/AdminFriendLinksPanel.tsx` 和 `frontend/src/features/links/AdminSiteNavPanel.tsx` 同时处理列表、分页、选中态、表单态、权限、mutation、预览和 JSX；后续应拆出 `useAdminPostEditor`、列表面板、编辑表单、Markdown 工具栏和预览弹窗等 hook/component。
+- P2：前后端类型手写镜像，后续容易漂移。后端 Pydantic schema 与前端 `features/*/types.ts` 手写维护同一批字段、可空性和响应结构；后续应评估基于 OpenAPI 生成 TypeScript 类型，或至少补充 contract test。
+- P3：前端分页、空值归一化、表单转换重复。多个页面重复 `safeListPage + slice + ListPager`、`parsePage`、`emptyToNull/nullableText`、`groupLabel` 和日期格式化；后续应抽取 `usePagedItems`、`useQueryPage`、`formText.ts` 和 `dateFormat.ts`。
+- P3：全局 CSS 已经过大。`frontend/src/index.css` 集中了基础样式、公开站点、后台布局、表单、弹窗、文章排版和响应式规则；后续应按 `base.css`、`public.css`、`admin.css`、`components.css`、`prose.css` 拆分，或逐步转为 CSS modules。
+- P3：依赖注入存在全局缓存状态。`backend/app/api/admin/dependencies.py` 对访问日志去重 backend 和限流服务使用模块级缓存；生产可用，但测试、多 app 实例或热切换配置时容易有状态残留，后续应放入 FastAPI lifespan / `app.state` 后由 dependency 读取。
 
 ### 进行中
 
