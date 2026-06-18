@@ -12,7 +12,7 @@ COMPOSE_FILES=(
 )
 
 if [[ "${RUN_BACKUP}" != "no" ]]; then
-  "${SCRIPT_DIR}/backup_mysql.sh"
+  bash "${SCRIPT_DIR}/backup_mysql.sh"
 fi
 
 if [[ "${BUILD_BACKEND}" != "no" ]]; then
