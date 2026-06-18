@@ -1,76 +1,78 @@
 import hashlib
-import hmac
-import json
-import re
-import struct
-import tempfile
-import warnings
-from base64 import urlsafe_b64decode, urlsafe_b64encode
-from binascii import Error as BinasciiError
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
-from PIL import Image, UnidentifiedImageError
-
 from app.core.auth import utc_now
 from app.core.storage import StorageProvider
 from app.models.file import BlogFile
+from app.services.file_errors import (
+    FileAccessDeniedError,
+    FileTooLargeError,
+    FileValidationError,
+    InvalidFileAccessTokenError,
+    InvalidFileTypeError,
+    InvalidFileVisibilityError,
+    ManagedFileNotFoundError,
+)
+from app.services.file_storage import (
+    article_render_reference_exists,
+    create_thumbnail,
+    iter_managed_storage_files,
+    resolve_storage_path,
+    storage_path_to_object_key,
+    thumbnail_path,
+)
+from app.services.file_tokens import (
+    ArticleRenderToken,
+    create_admin_file_preview_token,
+    create_article_render_token,
+    sign_admin_preview_image_urls,
+    sign_article_render_urls,
+    sign_file_token,
+    verify_admin_file_preview_token,
+    verify_article_render_token,
+    verify_file_token,
+)
+from app.services.file_uploads import (
+    UploadFileCommand,
+    build_object_key,
+    can_reuse_existing_upload,
+    extract_extension,
+    normalize_original_name,
+    read_image_size,
+    validate_image_dimensions,
+    validate_size,
+    validate_type,
+    validate_visibility,
+    write_temp_file,
+)
 
-ALLOWED_FILE_TYPES = {
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".png": "image/png",
-    ".gif": "image/gif",
-    ".webp": "image/webp",
-    ".pdf": "application/pdf",
-}
-ALLOWED_VISIBILITIES = {"public", "private"}
-MAX_IMAGE_PIXELS = 40_000_000
-MAX_IMAGE_SIDE = 12_000
-Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
-
-
-class FileValidationError(Exception):
-    pass
-
-
-class FileTooLargeError(FileValidationError):
-    pass
-
-
-class InvalidFileTypeError(FileValidationError):
-    pass
-
-
-class InvalidFileVisibilityError(FileValidationError):
-    pass
-
-
-class ManagedFileNotFoundError(Exception):
-    pass
-
-
-class FileAccessDeniedError(Exception):
-    pass
-
-
-class InvalidFileAccessTokenError(Exception):
-    pass
-
-
-@dataclass(frozen=True)
-class UploadFileCommand:
-    original_name: str
-    content_type: str | None
-    data: bytes
-    visibility: str
-    public_listed: bool
-    uploader_id: int | None
-    alt_text: str | None
-    max_size_bytes: int
+__all__ = (
+    "ArticleRenderToken",
+    "DeletedFileCleanupResult",
+    "FileAccessDeniedError",
+    "FileDownload",
+    "FileService",
+    "FileTooLargeError",
+    "FileValidationError",
+    "FileWithUsage",
+    "InvalidFileAccessTokenError",
+    "InvalidFileTypeError",
+    "InvalidFileVisibilityError",
+    "ManagedFileNotFoundError",
+    "OrphanFileCleanupResult",
+    "TemporaryFileAccess",
+    "UploadFileCommand",
+    "create_admin_file_preview_token",
+    "create_article_render_token",
+    "sign_admin_preview_image_urls",
+    "sign_article_render_urls",
+    "verify_admin_file_preview_token",
+    "verify_article_render_token",
+)
 
 
 @dataclass(frozen=True)
@@ -114,12 +116,6 @@ class OrphanFileCleanupResult:
     skipped_files: int
     dry_run: bool
     orphan_object_keys: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class ArticleRenderToken:
-    token: str
-    expires: int
 
 
 class FileRepositoryProtocol(Protocol):
@@ -205,19 +201,19 @@ class FileService:
         return await self.repository.count_public_listed_files()
 
     async def upload_file(self, command: UploadFileCommand) -> FileWithUsage:
-        self._validate_size(command.data, command.max_size_bytes)
-        self._validate_visibility(command.visibility)
+        validate_size(command.data, command.max_size_bytes)
+        validate_visibility(command.visibility)
 
-        original_name = _normalize_original_name(command.original_name)
-        extension = _extract_extension(original_name)
-        expected_mime = self._validate_type(
+        original_name = normalize_original_name(command.original_name)
+        extension = extract_extension(original_name)
+        expected_mime = validate_type(
             extension=extension,
             content_type=command.content_type,
             data=command.data,
         )
         sha256 = hashlib.sha256(command.data).hexdigest()
         existing_file = await self.repository.get_file_by_sha256(sha256)
-        if existing_file is not None and _can_reuse_existing_upload(
+        if existing_file is not None and can_reuse_existing_upload(
             existing_file,
             command=command,
             original_name=original_name,
@@ -226,14 +222,14 @@ class FileService:
         ):
             return FileWithUsage(file=existing_file, usage_count=0)
 
-        object_key = _build_object_key(
+        object_key = build_object_key(
             visibility=command.visibility,
             extension=extension,
             sha256=sha256,
         )
-        width, height = _read_image_size(command.data, expected_mime)
-        _validate_image_dimensions(width=width, height=height)
-        temp_path = _write_temp_file(command.data)
+        width, height = read_image_size(command.data, expected_mime)
+        validate_image_dimensions(width=width, height=height)
+        temp_path = write_temp_file(command.data)
         try:
             stored_object = await self.storage.save(temp_path, object_key)
         finally:
@@ -283,7 +279,7 @@ class FileService:
                 skipped_files += 1
                 continue
 
-            path = _resolve_storage_path(
+            path = resolve_storage_path(
                 upload_root,
                 file.object_key,
                 public_only=False,
@@ -298,9 +294,9 @@ class FileService:
             else:
                 missing_objects += 1
 
-            thumbnail_path = _thumbnail_path(upload_root, file)
-            if thumbnail_path.is_file():
-                thumbnail_path.unlink()
+            file_thumbnail_path = thumbnail_path(upload_root, file)
+            if file_thumbnail_path.is_file():
+                file_thumbnail_path.unlink()
 
             await self.repository.delete_file_record(file.id)
             deleted_records += 1
@@ -331,12 +327,12 @@ class FileService:
         skipped_files = 0
         orphan_object_keys: list[str] = []
 
-        for path in _iter_managed_storage_files(upload_root):
+        for path in iter_managed_storage_files(upload_root):
             if scanned_files >= limit:
                 break
             scanned_files += 1
 
-            object_key = _storage_path_to_object_key(upload_root, path)
+            object_key = storage_path_to_object_key(upload_root, path)
             if object_key is None:
                 skipped_files += 1
                 continue
@@ -350,7 +346,7 @@ class FileService:
             if dry_run:
                 continue
 
-            resolved_path = _resolve_storage_path(
+            resolved_path = resolve_storage_path(
                 upload_root,
                 object_key,
                 public_only=False,
@@ -396,7 +392,7 @@ class FileService:
             raise FileAccessDeniedError("file is not public")
 
         expires_at = utc_now() + timedelta(seconds=expires_seconds)
-        token = _sign_file_token(
+        token = sign_file_token(
             file_id=file.id,
             sha256=file.sha256,
             expires_at=expires_at,
@@ -433,7 +429,7 @@ class FileService:
             raise ManagedFileNotFoundError("file not found")
         if file.visibility != "public" or file.status != "active":
             raise FileAccessDeniedError("file is not public")
-        if not _verify_file_token(
+        if not verify_file_token(
             token,
             file_id=file.id,
             sha256=file.sha256,
@@ -441,7 +437,7 @@ class FileService:
         ):
             raise InvalidFileAccessTokenError("invalid temporary file token")
 
-        path = _resolve_storage_path(upload_root, file.object_key)
+        path = resolve_storage_path(upload_root, file.object_key)
         if path is None or not path.is_file():
             raise ManagedFileNotFoundError("stored file not found")
 
@@ -463,7 +459,7 @@ class FileService:
         if file.status != "active":
             raise FileAccessDeniedError("file is not downloadable")
 
-        path = _resolve_storage_path(upload_root, file.object_key, public_only=False)
+        path = resolve_storage_path(upload_root, file.object_key, public_only=False)
         if path is None or not path.is_file():
             raise ManagedFileNotFoundError("stored file not found")
 
@@ -492,7 +488,7 @@ class FileService:
             or not file.mime_type.startswith("image/")
         ):
             raise FileAccessDeniedError("file is not renderable")
-        if not _article_render_reference_exists(
+        if not article_render_reference_exists(
             post_slug=post_slug,
             file_id=file.id,
             cover_file_id=post_cover_file_id,
@@ -501,7 +497,7 @@ class FileService:
         ):
             raise FileAccessDeniedError("file is not referenced by post")
 
-        path = _resolve_storage_path(upload_root, file.object_key)
+        path = resolve_storage_path(upload_root, file.object_key)
         if path is None or not path.is_file():
             raise ManagedFileNotFoundError("stored file not found")
 
@@ -531,7 +527,7 @@ class FileService:
             or not file.mime_type.startswith("image/")
         ):
             raise FileAccessDeniedError("file is not thumbnailable")
-        if not _article_render_reference_exists(
+        if not article_render_reference_exists(
             post_slug=post_slug,
             file_id=file.id,
             cover_file_id=post_cover_file_id,
@@ -540,20 +536,20 @@ class FileService:
         ):
             raise FileAccessDeniedError("file is not referenced by post")
 
-        source_path = _resolve_storage_path(upload_root, file.object_key)
+        source_path = resolve_storage_path(upload_root, file.object_key)
         if source_path is None or not source_path.is_file():
             raise ManagedFileNotFoundError("stored file not found")
 
-        thumbnail_path = _thumbnail_path(upload_root, file)
-        if not thumbnail_path.is_file():
-            _create_thumbnail(
+        file_thumbnail_path = thumbnail_path(upload_root, file)
+        if not file_thumbnail_path.is_file():
+            create_thumbnail(
                 source_path=source_path,
-                target_path=thumbnail_path,
+                target_path=file_thumbnail_path,
                 max_side=max_side,
             )
 
         return FileDownload(
-            path=thumbnail_path,
+            path=file_thumbnail_path,
             media_type="image/jpeg",
             filename=f"{Path(file.original_name).stem}-thumb.jpg",
         )
@@ -580,7 +576,7 @@ class FileService:
         ):
             raise InvalidFileAccessTokenError("invalid preview token")
 
-        path = _resolve_storage_path(upload_root, file.object_key, public_only=False)
+        path = resolve_storage_path(upload_root, file.object_key, public_only=False)
         if path is None or not path.is_file():
             raise ManagedFileNotFoundError("stored file not found")
 
@@ -603,7 +599,7 @@ class FileService:
         if file.status != "active" or not file.mime_type.startswith("image/"):
             raise FileAccessDeniedError("file is not thumbnailable")
 
-        source_path = _resolve_storage_path(
+        source_path = resolve_storage_path(
             upload_root,
             file.object_key,
             public_only=False,
@@ -611,507 +607,16 @@ class FileService:
         if source_path is None or not source_path.is_file():
             raise ManagedFileNotFoundError("stored file not found")
 
-        thumbnail_path = _thumbnail_path(upload_root, file)
-        if not thumbnail_path.is_file():
-            _create_thumbnail(
+        file_thumbnail_path = thumbnail_path(upload_root, file)
+        if not file_thumbnail_path.is_file():
+            create_thumbnail(
                 source_path=source_path,
-                target_path=thumbnail_path,
+                target_path=file_thumbnail_path,
                 max_side=max_side,
             )
 
         return FileDownload(
-            path=thumbnail_path,
+            path=file_thumbnail_path,
             media_type="image/jpeg",
             filename=f"{Path(file.original_name).stem}-thumb.jpg",
         )
-
-    def _validate_size(self, data: bytes, max_size_bytes: int) -> None:
-        if not data:
-            raise InvalidFileTypeError("empty file is not allowed")
-        if len(data) > max_size_bytes:
-            raise FileTooLargeError("file is too large")
-
-    def _validate_visibility(self, visibility: str) -> None:
-        if visibility not in ALLOWED_VISIBILITIES:
-            raise InvalidFileVisibilityError("invalid file visibility")
-
-    def _validate_type(
-        self,
-        *,
-        extension: str,
-        content_type: str | None,
-        data: bytes,
-    ) -> str:
-        expected_mime = ALLOWED_FILE_TYPES.get(extension)
-        normalized_mime = (content_type or "").split(";", maxsplit=1)[0].lower()
-        if expected_mime is None or normalized_mime != expected_mime:
-            raise InvalidFileTypeError("unsupported file type")
-        if not _matches_file_signature(data, expected_mime):
-            raise InvalidFileTypeError("file signature does not match mime type")
-        return expected_mime
-
-
-def _normalize_original_name(original_name: str) -> str:
-    name = Path(original_name).name.strip()
-    if not name or len(name) > 255:
-        raise InvalidFileTypeError("invalid file name")
-    return name
-
-
-def _extract_extension(original_name: str) -> str:
-    extension = Path(original_name).suffix.lower()
-    if extension == ".jpeg":
-        return ".jpg"
-    return extension
-
-
-def _build_object_key(*, visibility: str, extension: str, sha256: str) -> str:
-    now = utc_now()
-    return (
-        f"{visibility}/{now:%Y}/{now:%m}/"
-        f"{sha256[:24]}{extension.replace('.jpeg', '.jpg')}"
-    )
-
-
-def _can_reuse_existing_upload(
-    file: BlogFile,
-    *,
-    command: UploadFileCommand,
-    original_name: str,
-    expected_mime: str,
-    extension: str,
-) -> bool:
-    public_listed = command.public_listed and command.visibility == "public"
-    return (
-        file.status == "active"
-        and file.visibility == command.visibility
-        and file.public_listed == public_listed
-        and file.original_name == original_name
-        and file.mime_type == expected_mime
-        and file.extension == extension.removeprefix(".")
-        and file.alt_text == command.alt_text
-    )
-
-
-def _write_temp_file(data: bytes) -> Path:
-    with tempfile.NamedTemporaryFile(delete=False) as file:
-        file.write(data)
-        return Path(file.name)
-
-
-def _matches_file_signature(data: bytes, mime_type: str) -> bool:
-    if mime_type == "image/jpeg":
-        return data.startswith(b"\xff\xd8\xff")
-    if mime_type == "image/png":
-        return data.startswith(b"\x89PNG\r\n\x1a\n")
-    if mime_type == "image/gif":
-        return data.startswith((b"GIF87a", b"GIF89a"))
-    if mime_type == "image/webp":
-        return len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"
-    if mime_type == "application/pdf":
-        return data.startswith(b"%PDF-")
-    return False
-
-
-def _read_image_size(data: bytes, mime_type: str) -> tuple[int | None, int | None]:
-    if mime_type == "image/png" and len(data) >= 24:
-        width, height = struct.unpack(">II", data[16:24])
-        return width, height
-    if mime_type == "image/gif" and len(data) >= 10:
-        width, height = struct.unpack("<HH", data[6:10])
-        return width, height
-    if mime_type == "image/jpeg":
-        return _read_jpeg_size(data)
-    return None, None
-
-
-def _validate_image_dimensions(*, width: int | None, height: int | None) -> None:
-    if width is None or height is None:
-        return
-    if width <= 0 or height <= 0:
-        raise InvalidFileTypeError("invalid image dimensions")
-    if width > MAX_IMAGE_SIDE or height > MAX_IMAGE_SIDE:
-        raise InvalidFileTypeError("image dimensions are too large")
-    if width * height > MAX_IMAGE_PIXELS:
-        raise InvalidFileTypeError("image pixel count is too large")
-
-
-def _read_jpeg_size(data: bytes) -> tuple[int | None, int | None]:
-    index = 2
-    while index + 9 < len(data):
-        if data[index] != 0xFF:
-            index += 1
-            continue
-        marker = data[index + 1]
-        index += 2
-        if marker in {0xD8, 0xD9}:
-            continue
-        if index + 2 > len(data):
-            break
-        length = int.from_bytes(data[index : index + 2], "big")
-        if length < 2 or index + length > len(data):
-            break
-        if marker in {
-            0xC0,
-            0xC1,
-            0xC2,
-            0xC3,
-            0xC5,
-            0xC6,
-            0xC7,
-            0xC9,
-            0xCA,
-            0xCB,
-            0xCD,
-            0xCE,
-            0xCF,
-        }:
-            height = int.from_bytes(data[index + 3 : index + 5], "big")
-            width = int.from_bytes(data[index + 5 : index + 7], "big")
-            return width, height
-        index += length
-    return None, None
-
-
-def _sign_file_token(
-    *,
-    file_id: int,
-    sha256: str,
-    expires_at: datetime,
-    secret_key: str,
-) -> str:
-    payload = {
-        "exp": int(expires_at.timestamp()),
-        "file_id": file_id,
-        "sha256": sha256,
-    }
-    payload_bytes = json.dumps(
-        payload,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    payload_part = _base64url_encode(payload_bytes)
-    signature = hmac.new(
-        secret_key.encode("utf-8"),
-        payload_part.encode("ascii"),
-        hashlib.sha256,
-    ).digest()
-    return f"{payload_part}.{_base64url_encode(signature)}"
-
-
-def _verify_file_token(
-    token: str,
-    *,
-    file_id: int,
-    sha256: str,
-    secret_key: str,
-) -> bool:
-    try:
-        payload_part, signature_part = token.split(".", maxsplit=1)
-        expected_signature = hmac.new(
-            secret_key.encode("utf-8"),
-            payload_part.encode("ascii"),
-            hashlib.sha256,
-        ).digest()
-        if not hmac.compare_digest(
-            signature_part,
-            _base64url_encode(expected_signature),
-        ):
-            return False
-        payload = json.loads(_base64url_decode(payload_part))
-    except (BinasciiError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
-        return False
-
-    return (
-        payload.get("file_id") == file_id
-        and payload.get("sha256") == sha256
-        and isinstance(payload.get("exp"), int)
-        and payload["exp"] > int(utc_now().timestamp())
-    )
-
-
-def create_article_render_token(
-    *,
-    post_slug: str,
-    file_id: int,
-    expires_seconds: int,
-    secret_key: str,
-) -> ArticleRenderToken:
-    expires = int((utc_now() + timedelta(seconds=expires_seconds)).timestamp())
-    payload = {
-        "exp": expires,
-        "file_id": file_id,
-        "scope": "post_image_render",
-        "slug": post_slug,
-    }
-    payload_bytes = json.dumps(
-        payload,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    payload_part = _base64url_encode(payload_bytes)
-    signature = hmac.new(
-        secret_key.encode("utf-8"),
-        payload_part.encode("ascii"),
-        hashlib.sha256,
-    ).digest()
-    return ArticleRenderToken(
-        token=f"{payload_part}.{_base64url_encode(signature)}",
-        expires=expires,
-    )
-
-
-def create_admin_file_preview_token(
-    *,
-    file_id: int,
-    expires_seconds: int,
-    secret_key: str,
-) -> ArticleRenderToken:
-    expires = int((utc_now() + timedelta(seconds=expires_seconds)).timestamp())
-    payload = {
-        "exp": expires,
-        "file_id": file_id,
-        "scope": "admin_file_preview",
-    }
-    payload_bytes = json.dumps(
-        payload,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    payload_part = _base64url_encode(payload_bytes)
-    signature = hmac.new(
-        secret_key.encode("utf-8"),
-        payload_part.encode("ascii"),
-        hashlib.sha256,
-    ).digest()
-    return ArticleRenderToken(
-        token=f"{payload_part}.{_base64url_encode(signature)}",
-        expires=expires,
-    )
-
-
-def verify_article_render_token(
-    *,
-    token: str,
-    expires: int,
-    post_slug: str,
-    file_id: int,
-    secret_key: str,
-) -> bool:
-    try:
-        payload_part, signature_part = token.split(".", maxsplit=1)
-        expected_signature = hmac.new(
-            secret_key.encode("utf-8"),
-            payload_part.encode("ascii"),
-            hashlib.sha256,
-        ).digest()
-        if not hmac.compare_digest(
-            signature_part,
-            _base64url_encode(expected_signature),
-        ):
-            return False
-        payload = json.loads(_base64url_decode(payload_part))
-    except (BinasciiError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
-        return False
-
-    return (
-        payload.get("scope") == "post_image_render"
-        and payload.get("slug") == post_slug
-        and payload.get("file_id") == file_id
-        and payload.get("exp") == expires
-        and expires > int(utc_now().timestamp())
-    )
-
-
-def verify_admin_file_preview_token(
-    *,
-    token: str,
-    expires: int,
-    file_id: int,
-    secret_key: str,
-) -> bool:
-    try:
-        payload_part, signature_part = token.split(".", maxsplit=1)
-        expected_signature = hmac.new(
-            secret_key.encode("utf-8"),
-            payload_part.encode("ascii"),
-            hashlib.sha256,
-        ).digest()
-        if not hmac.compare_digest(
-            signature_part,
-            _base64url_encode(expected_signature),
-        ):
-            return False
-        payload = json.loads(_base64url_decode(payload_part))
-    except (BinasciiError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
-        return False
-
-    return (
-        payload.get("scope") == "admin_file_preview"
-        and payload.get("file_id") == file_id
-        and payload.get("exp") == expires
-        and expires > int(utc_now().timestamp())
-    )
-
-
-def sign_article_render_urls(
-    *,
-    content_html: str,
-    post_slug: str,
-    expires_seconds: int,
-    secret_key: str,
-) -> str:
-    pattern = re.compile(
-        r'(?P<prefix>\bsrc=["\'])'
-        r'(?P<path>/?api/public/posts/'
-        + re.escape(post_slug)
-        + r'/files/(?P<file_id>\d+)/render)'
-        r'(?P<suffix>["\'])',
-    )
-
-    def replace(match: re.Match[str]) -> str:
-        file_id = int(match.group("file_id"))
-        access = create_article_render_token(
-            post_slug=post_slug,
-            file_id=file_id,
-            expires_seconds=expires_seconds,
-            secret_key=secret_key,
-        )
-        path = match.group("path")
-        signed_path = f"{path}?expires={access.expires}&token={access.token}"
-        return f"{match.group('prefix')}{signed_path}{match.group('suffix')}"
-
-    return pattern.sub(replace, content_html)
-
-
-def sign_admin_preview_image_urls(
-    *,
-    content_html: str,
-    post_slug: str,
-    expires_seconds: int,
-    secret_key: str,
-) -> str:
-    pattern = re.compile(
-        r'(?P<prefix>\bsrc=["\'])'
-        r'(?P<path>/?api/public/posts/'
-        + re.escape(post_slug)
-        + r'/files/(?P<file_id>\d+)/render)'
-        r'(?P<suffix>["\'])',
-    )
-
-    def replace(match: re.Match[str]) -> str:
-        file_id = int(match.group("file_id"))
-        access = create_admin_file_preview_token(
-            file_id=file_id,
-            expires_seconds=expires_seconds,
-            secret_key=secret_key,
-        )
-        preview_path = (
-            f"/api/admin/files/{file_id}/preview?"
-            f"expires={access.expires}&token={access.token}"
-        )
-        return f"{match.group('prefix')}{preview_path}{match.group('suffix')}"
-
-    return pattern.sub(replace, content_html)
-
-
-def _resolve_storage_path(
-    upload_root: Path,
-    object_key: str,
-    *,
-    public_only: bool = True,
-) -> Path | None:
-    if public_only and not object_key.startswith("public/"):
-        return None
-
-    root = upload_root.resolve()
-    path = (upload_root / object_key).resolve()
-    try:
-        path.relative_to(root)
-    except ValueError:
-        return None
-    return path
-
-
-def _iter_managed_storage_files(upload_root: Path) -> Sequence[Path]:
-    files: list[Path] = []
-    for visibility in sorted(ALLOWED_VISIBILITIES):
-        base_path = upload_root / visibility
-        if not base_path.exists():
-            continue
-        files.extend(path for path in base_path.rglob("*") if path.is_file())
-    return sorted(files)
-
-
-def _storage_path_to_object_key(upload_root: Path, path: Path) -> str | None:
-    root = upload_root.resolve()
-    resolved_path = path.resolve()
-    try:
-        relative_path = resolved_path.relative_to(root)
-    except ValueError:
-        return None
-    parts = relative_path.parts
-    if not parts or parts[0] not in ALLOWED_VISIBILITIES:
-        return None
-    return relative_path.as_posix()
-
-
-def _thumbnail_path(upload_root: Path, file: BlogFile) -> Path:
-    return upload_root / ".thumbs" / f"{file.sha256[:32]}-360.jpg"
-
-
-def _create_thumbnail(
-    *,
-    source_path: Path,
-    target_path: Path,
-    max_side: int,
-) -> None:
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", Image.DecompressionBombWarning)
-            image_context = Image.open(source_path)
-        with image_context as image:
-            _validate_image_dimensions(width=image.width, height=image.height)
-            image.thumbnail((max_side, max_side))
-            if image.mode not in {"RGB", "L"}:
-                image = image.convert("RGB")
-            image.save(target_path, format="JPEG", quality=78, optimize=True)
-    except (
-        OSError,
-        UnidentifiedImageError,
-        Image.DecompressionBombError,
-        Image.DecompressionBombWarning,
-        InvalidFileTypeError,
-    ) as exc:
-        raise ManagedFileNotFoundError("thumbnail generation failed") from exc
-
-
-def _article_render_reference_exists(
-    *,
-    post_slug: str,
-    file_id: int,
-    cover_file_id: int | None,
-    content_md: str,
-    content_html: str,
-) -> bool:
-    if cover_file_id == file_id:
-        return True
-
-    references = (
-        f"/api/public/posts/{post_slug}/files/{file_id}/render",
-        f"api/public/posts/{post_slug}/files/{file_id}/render",
-    )
-    return any(
-        reference in content_md or reference in content_html
-        for reference in references
-    )
-
-
-def _base64url_encode(value: bytes) -> str:
-    return urlsafe_b64encode(value).decode("ascii").rstrip("=")
-
-
-def _base64url_decode(value: str) -> str:
-    padding = "=" * (-len(value) % 4)
-    return urlsafe_b64decode(f"{value}{padding}").decode("utf-8")

@@ -109,6 +109,10 @@ backend/
     models/
     schemas/
     services/
+      file_errors.py
+      file_storage.py
+      file_tokens.py
+      file_uploads.py
     repositories/
     tasks/
   migrations/
@@ -119,7 +123,7 @@ backend/
 
 - `api`：只处理 HTTP 请求、响应、依赖注入和权限校验。`api/dependencies.py`、`api/encrypted_response.py` 和 `api/limits.py` 放置公开端与后台端共享的服务依赖、加密信封和限流入口；`api/admin` 只保留后台认证、CSRF、权限和后台路由，`api/public` 不反向依赖后台模块。公开 API 按职责拆为 `posts.py`、`taxonomy.py`、`settings.py`、`links.py`、`files.py`，`router.py` 只负责聚合子路由和公开状态接口。
 - `schemas`：Pydantic v2 请求与响应模型。
-- `services`：业务规则，例如文章发布、文件引用、友链审核。
+- `services`：业务规则，例如文章发布、文件引用、友链审核；文件模块中 `files.py` 只保留用例编排，上传校验、存储路径/缩略图、临时 token/文章图片 URL 签名和异常类型分别拆到 `file_uploads.py`、`file_storage.py`、`file_tokens.py` 和 `file_errors.py`。
 - `repositories`：数据库读写封装，基于 SQLAlchemy。
 - `models`：MySQL 表模型。
 - `core`：配置、认证、数据库、存储驱动、日志等基础设施。
