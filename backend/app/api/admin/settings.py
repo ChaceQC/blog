@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from pydantic import BaseModel, ValidationError
 
 from app.api.admin.audit import record_admin_audit
@@ -51,7 +51,10 @@ async def list_settings(
 
 @router.patch("/settings/{key_name}", response_model=EncryptedApiResponse)
 async def update_setting(
-    key_name: str,
+    key_name: Annotated[
+        str,
+        Path(min_length=1, max_length=128, pattern=r"^[a-z0-9][a-z0-9_-]*$"),
+    ],
     payload: EncryptedApiRequest,
     current_user: SettingWriterDependency,
     request: Request,

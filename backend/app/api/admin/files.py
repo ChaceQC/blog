@@ -101,7 +101,10 @@ async def upload_file(
             UploadFileCommand(
                 original_name=file.filename or "uploaded-file",
                 content_type=file.content_type,
-                data=await file.read(),
+                data=await _read_upload_data(
+                    file,
+                    max_size_bytes=settings.upload_max_size_bytes,
+                ),
                 visibility=visibility,
                 public_listed=public_listed,
                 uploader_id=current_user.id,
@@ -364,6 +367,13 @@ async def _record_admin_file_download_log(
         user_agent=request.headers.get("user-agent"),
         detail_json=detail_json,
     )
+
+
+async def _read_upload_data(file: UploadFile, *, max_size_bytes: int) -> bytes:
+    data = await file.read(max_size_bytes + 1)
+    if len(data) > max_size_bytes:
+        raise FileTooLargeError("file is too large")
+    return data
 
 
 async def _files_response(

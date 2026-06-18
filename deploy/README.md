@@ -120,6 +120,14 @@ RUN_BACKUP=no bash deploy/scripts/upgrade_backend_db.sh
 BUILD_BACKEND=no bash deploy/scripts/upgrade_backend_db.sh
 ```
 
+如果生产使用宿主机 Nginx 覆盖文件，维护脚本可通过 `COMPOSE_EXTRA_FILES`
+追加同一份覆盖配置，MySQL 备份、恢复和迁移脚本都会复用：
+
+```bash
+COMPOSE_EXTRA_FILES=deploy/docker-compose.host-nginx.yml \
+  bash deploy/scripts/upgrade_backend_db.sh
+```
+
 ## systemd Timer
 
 `deploy/systemd/` 提供宿主机调度示例，默认假设项目部署在 `/opt/blog`。如果实际路径不同，先修改各 `.service` 的 `WorkingDirectory`。

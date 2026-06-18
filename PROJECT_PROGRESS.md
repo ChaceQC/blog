@@ -21,6 +21,13 @@
 - 公开访问日志压力已收敛：新增 `BLOG_ACCESS_LOG_SKIP_TYPES`，默认跳过公开内容、公开文件、文章图片和缩略图等高频成功访问的应用层 `access_logs` 写入；错误访问、RSS/sitemap/robots、公开友链申请、公开站点跳转、后台短时链接和后台下载仍记录。
 - 公开和后台列表分页已增加统一 `offset` 业务上限：新增 `PAGE_OFFSET_MAX = 10000` 并接入公开内容、公开文件、后台内容、后台文件、后台友链/导航和后台日志列表接口，避免超大 offset 造成深分页压力。
 - 新增宿主机 Nginx 部署覆盖文件 `deploy/docker-compose.host-nginx.yml`：默认不启动 Compose 内置 Nginx，只把后端绑定到宿主机回环 `127.0.0.1:18080`，并保留单独构建 nginx 镜像以复制最新前端静态文件的发布路径。
+- 继续全量审计后补充管理员刷新令牌边界：`POST /api/admin/auth/refresh` 不再接受 JSON body 中的 `refresh_token`，只读取 HttpOnly Cookie，减少刷新令牌进入前端 JS/请求体日志的兼容面。
+- 继续全量审计后补充后台设置和公开站点资料边界：后台设置 `key_name` 增加路径参数格式限制，`value_json` 增加 32KiB 业务体积上限，`site_profile` 保存和公开读取时会截断长字符串、限制碎念/社交链接数量，并过滤不适合图片源的头像协议。
+- 继续全量审计后补充上传读取内存边界：后台 multipart 上传现在只读取 `BLOG_UPLOAD_MAX_SIZE_BYTES + 1` 字节并提前返回 413，避免后端被绕过 Nginx 时先把超大文件完整读入内存。
+- 修正同 SHA256 上传复用语义：仅当旧文件 active 且可见性、公开列表状态、原始文件名、MIME、扩展名和 alt 文案都与本次上传一致时才复用，避免私有/公开元数据被旧记录“串用”。
+- 生产配置新增启动期校验：生产环境 `BLOG_PUBLIC_BASE_URL` 必须是带 host 的 `https://` 绝对地址，防止 RSS、sitemap、robots.txt 和 canonical/签名链接因误配置输出危险或畸形 URL。
+- 宿主机 Nginx 维护脚本补齐：`backup_mysql.sh`、`restore_mysql.sh` 和 `upgrade_backend_db.sh` 支持通过 `COMPOSE_EXTRA_FILES` 追加 `deploy/docker-compose.host-nginx.yml` 等覆盖文件，文档已同步示例。
+- 前端后台友链和站点导航编辑页的“打开链接”预览按钮新增协议白名单，只允许 `http/https/mailto/站内路径`，未保存的危险协议会降级为 `#`。
 
 ### 待修复清单
 
@@ -32,15 +39,16 @@
 
 ### 阻塞与风险
 
-- 今日早些时候新增的 `encryption_sessions.client_ip` 需要生产库执行 Alembic 迁移到 head；本次 P1/P2 后续修复没有再新增或修改数据库字段、索引、约束或默认值，因此不需要新的迁移脚本。
+- 今日早些时候新增的 `encryption_sessions.client_ip` 需要生产库执行 Alembic 迁移到 head；本次继续全量审计的新增修复没有再新增或修改数据库字段、索引、约束或默认值，因此不需要新的迁移脚本。
 - 上传上限已从 30MB 收敛到 20MB，服务器上的后端环境变量需要同步为 `BLOG_UPLOAD_MAX_SIZE_BYTES=20971520`，否则会与 Nginx 配置不一致。
 - 本次依赖切换需要服务器真实 `deploy/env/backend.env` 同步改为 `BLOG_DATABASE_URL=mysql+aiomysql://...`；代码会临时兼容旧 `mysql+asyncmy://` 前缀，但不建议生产长期保留旧写法。
 - 宿主机 Nginx 反代场景需要设置 `BLOG_TRUSTED_PROXY_HOSTS` 为后端看到的宿主机/网关直连 IP 或 CIDR；示例值 `["127.0.0.1"]` 仅适用于后端直连来源确实是本机回环的部署。
+- 生产环境现在会强制校验 `BLOG_PUBLIC_BASE_URL` 为 `https://` 绝对地址；服务器真实 `backend.env` 不能再使用 `http://`、相对路径或占位值。
 - 本机 ignored 的 `deploy/env/backend.env` 仍可能保留旧连接串，`docker compose config` 只能证明配置展开语法有效；生产发布前必须按上面的真实 env 项显式更新。
 
 ### 下一步
 
-- 提交并推送 `dev`，再快进合并到 `main`；生产发布后用实际后端连接来源校准 `BLOG_TRUSTED_PROXY_HOSTS`，并复测公开加密会话、缺 session 公开 GET、超大 offset 和访问日志降噪行为。
+- 提交并推送 `dev`，再快进合并到 `main`；生产发布后用实际后端连接来源校准 `BLOG_TRUSTED_PROXY_HOSTS`，并复测公开加密会话、缺 session 公开 GET、超大 offset、上传超限和访问日志降噪行为。
 
 ### 验证
 
@@ -53,6 +61,16 @@
 - 已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config`，配置可展开；本机真实 ignored env 仍需按服务器配置项更新旧数据库连接串。
 - 已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml config` 和 `config --services`，host-nginx 覆盖可展开，默认服务为 `redis/mysql/backend`，后端仅绑定宿主机 `127.0.0.1:18080`。
 - 尝试运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml build nginx`，本机 Docker Desktop 未运行，连接 `dockerDesktopLinuxEngine` 失败；服务器或 Docker 正常运行环境仍需执行该命令生成最新静态前端镜像。
+- 继续全量审计新增修复后已运行 `uv run pytest tests/test_admin_files_api.py tests/test_admin_security.py tests/test_admin_settings_api.py tests/test_public_content_api.py tests/test_url_validation.py`，64 个测试通过；仍存在 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 状态常量的上游弃用警告。
+- 继续全量审计新增修复后已运行 `uv run ruff check .`，通过。
+- 继续全量审计新增修复后已运行 `npm.cmd run lint`，通过。
+- 继续全量审计新增部署脚本后已使用 Git for Windows Bash 运行 `bash -n deploy/scripts/backup_mysql.sh deploy/scripts/restore_mysql.sh deploy/scripts/upgrade_backend_db.sh`，通过；PowerShell 中直接调用 `bash` 会落到当前不可用的 WSL，已改用 `C:\Program Files\Git\bin\bash.exe` 验证。
+- 继续全量审计新增修复后已运行 `uv run pytest`，150 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 7 个 FastAPI/Starlette 上游弃用警告。
+- 继续全量审计新增修复后已运行 `uv run alembic upgrade head --sql`，可正常生成从空库到 `20260619_0007` 的 MySQL 迁移 SQL；本轮新增修复未产生新迁移文件。
+- 继续全量审计新增修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
+- 继续全量审计新增修复后已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
+- 继续全量审计新增修复后已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml config --quiet` 与 `config --services`，通过；默认服务为 `mysql`、`redis`、`backend`。
+- 继续尝试运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml build nginx`，本机 Docker Desktop 仍未运行，无法连接 `dockerDesktopLinuxEngine`；服务器或 Docker 正常运行环境仍需执行构建并复制静态文件。
 
 ## 2026-06-18
 

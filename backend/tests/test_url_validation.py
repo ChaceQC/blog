@@ -1,6 +1,10 @@
 import pytest
 
-from app.core.url_validation import validate_http_url, validate_public_href
+from app.core.url_validation import (
+    validate_http_url,
+    validate_public_href,
+    validate_public_image_src,
+)
 from app.schemas.content import CONTENT_MD_MAX_LENGTH, PostCreateRequest
 from app.schemas.encryption import ENCRYPTION_CIPHERTEXT_MAX_LENGTH, EncryptedApiRequest
 from app.schemas.links import (
@@ -45,6 +49,12 @@ def test_shared_url_validator_rejects_control_characters() -> None:
         validate_public_href("https://example.com/\nnext")
     with pytest.raises(ValueError):
         validate_http_url("//example.com/path")
+
+
+def test_public_image_src_allows_site_path_but_rejects_mailto() -> None:
+    assert validate_public_image_src("/avatar.png") == "/avatar.png"
+    with pytest.raises(ValueError):
+        validate_public_image_src("mailto:admin@example.com")
 
 
 def test_encrypted_request_rejects_oversized_ciphertext() -> None:

@@ -11,6 +11,12 @@ COMPOSE_FILES=(
   -f "${DEPLOY_DIR}/docker-compose.prod.yml"
 )
 
+if [[ -n "${COMPOSE_EXTRA_FILES:-}" ]]; then
+  for compose_file in ${COMPOSE_EXTRA_FILES}; do
+    COMPOSE_FILES+=(-f "${compose_file}")
+  done
+fi
+
 if [[ "${RUN_BACKUP}" != "no" ]]; then
   bash "${SCRIPT_DIR}/backup_mysql.sh"
 fi

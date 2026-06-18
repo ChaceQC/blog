@@ -10,12 +10,6 @@ class LoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str | None = Field(default=None, min_length=32, max_length=256)
-
-    model_config = ConfigDict(extra="forbid")
-
-
 class LogoutRequest(BaseModel):
     refresh_token: str | None = Field(default=None, min_length=32, max_length=256)
 
@@ -28,16 +22,6 @@ class AuthUserResponse(BaseModel):
     display_name: str | None
     roles: list[str]
     permissions: list[str]
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class TokenPairResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: Literal["bearer"] = "bearer"
-    expires_in: int
-    user: AuthUserResponse
 
     model_config = ConfigDict(extra="forbid")
 

@@ -354,6 +354,51 @@ def test_refresh_uses_cookie_without_csrf_header() -> None:
     assert decrypted["csrf_token"]
 
 
+def test_refresh_rejects_body_refresh_token_without_cookie() -> None:
+    refresh_token = "r" * 32
+    client_private_key = ec.generate_private_key(ec.SECP256R1())
+    client = TestClient(app)
+    encryption_repository = FakeEncryptionSessionRepository()
+    encryption_manager = EncryptionSessionManager(
+        repository=encryption_repository,
+        settings=get_settings(),
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        encryption_manager
+    )
+    try:
+        session_response = client.post(
+            "/api/admin/encryption/sessions",
+            json={
+                "client_public_key": _export_public_key(
+                    client_private_key.public_key(),
+                ),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert session_response.status_code == 200
+    session_payload = session_response.json()
+    auth_service = FakeRefreshAuthService()
+
+    app.dependency_overrides[get_auth_service] = lambda: auth_service
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        encryption_manager
+    )
+    try:
+        response = client.post(
+            "/api/admin/auth/refresh",
+            headers={"X-Encryption-Session": session_payload["session_id"]},
+            json={"refresh_token": refresh_token},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 401
+    assert auth_service.refresh_token is None
+
+
 def test_cleanup_expired_encryption_sessions_deletes_only_expired() -> None:
     now = datetime(2026, 6, 17, 12, 0, tzinfo=UTC)
     repository = FakeEncryptionSessionRepository()

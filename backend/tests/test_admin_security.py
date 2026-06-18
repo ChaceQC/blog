@@ -122,3 +122,22 @@ def test_production_response_uses_hsts_and_content_security_policy() -> None:
     assert "default-src 'self'" in response.headers["content-security-policy"]
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
     assert client.get("/docs").status_code == 404
+
+
+def test_production_rejects_invalid_public_base_url() -> None:
+    settings_data = get_settings().model_dump()
+    settings_data.update(
+        {
+            "environment": "production",
+            "debug": False,
+            "docs_enabled": False,
+            "secret_key": "production-secret-key-with-at-least-32-chars",
+            "admin_cookie_secure": True,
+            "public_base_url": "javascript:alert(1)",
+            "allowed_hosts": ["example.com"],
+            "cors_origins": ["https://example.com"],
+        },
+    )
+
+    with pytest.raises(ValueError, match="BLOG_PUBLIC_BASE_URL"):
+        Settings(**settings_data)

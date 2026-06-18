@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -110,6 +111,15 @@ class Settings(BaseSettings):
             raise ValueError("BLOG_ALLOWED_HOSTS cannot contain '*' in production")
         if "*" in self.cors_origins:
             raise ValueError("BLOG_CORS_ORIGINS cannot contain '*' in production")
+        parsed_public_base_url = urlparse(self.public_base_url)
+        if (
+            parsed_public_base_url.scheme != "https"
+            or not parsed_public_base_url.netloc
+        ):
+            raise ValueError(
+                "BLOG_PUBLIC_BASE_URL must be an absolute https URL "
+                "in production",
+            )
 
         return self
 

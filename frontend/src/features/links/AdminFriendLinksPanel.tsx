@@ -11,6 +11,7 @@ import { useMemo, useState } from 'react'
 import { ListPager } from '../../components/ListPager.tsx'
 import { StatusBadge } from '../../components/StatusBadge.tsx'
 import { invalidateFriendLinkCaches } from '../../app/queryInvalidation.ts'
+import { safePreviewHref } from '../../utils/urls.ts'
 import { useAuth } from '../auth/useAuth.ts'
 import { AdminFriendLinkGroupsPanel } from './AdminFriendLinkGroupsPanel.tsx'
 import {
@@ -221,7 +222,11 @@ export function AdminFriendLinksPanel() {
                 <strong>{form.name || '未命名友链'}</strong>
                 <small>{form.description || '暂无描述'}</small>
               </span>
-              <a className="icon-button" href={form.url || '#'} aria-label="打开友链">
+              <a
+                className="icon-button"
+                href={safePreviewHref(form.url)}
+                aria-label="打开友链"
+              >
                 <ExternalLink size={17} strokeWidth={1.8} aria-hidden="true" />
               </a>
             </div>

@@ -528,6 +528,12 @@ bash deploy/scripts/restore_mysql.sh /data/blog/backups/mysql/blog-YYYYMMDDTHHMM
 CONFIRM_RESTORE_UPLOADS=yes bash deploy/scripts/restore_uploads.sh /data/blog/backups/uploads/uploads-YYYYMMDDTHHMMSSZ.tar.gz
 ```
 
+宿主机 Nginx 场景可通过 `COMPOSE_EXTRA_FILES` 让 MySQL 备份、恢复和迁移脚本复用同一份 Compose 覆盖：
+
+```bash
+COMPOSE_EXTRA_FILES=deploy/docker-compose.host-nginx.yml bash deploy/scripts/upgrade_backend_db.sh
+```
+
 生产环境至少需要备份：
 
 - MySQL 数据库。

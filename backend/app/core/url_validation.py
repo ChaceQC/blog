@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 
 HTTP_URL_SCHEMES = frozenset({"http", "https"})
 PUBLIC_HREF_SCHEMES = frozenset({"http", "https", "mailto"})
+PUBLIC_IMAGE_SOURCE_SCHEMES = frozenset({"http", "https"})
 
 
 def validate_http_url(value: str) -> str:
@@ -13,6 +14,14 @@ def validate_public_href(value: str) -> str:
     return validate_url(
         value,
         allowed_schemes=PUBLIC_HREF_SCHEMES,
+        allow_site_path=True,
+    )
+
+
+def validate_public_image_src(value: str) -> str:
+    return validate_url(
+        value,
+        allowed_schemes=PUBLIC_IMAGE_SOURCE_SCHEMES,
         allow_site_path=True,
     )
 

@@ -1,7 +1,10 @@
+import json
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+SETTING_VALUE_JSON_MAX_BYTES = 32_768
 
 
 class AdminSettingItem(BaseModel):
@@ -28,6 +31,17 @@ class SettingUpdateRequest(BaseModel):
     is_public: bool
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_value_json_size(self) -> "SettingUpdateRequest":
+        encoded = json.dumps(
+            self.value_json,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        if len(encoded) > SETTING_VALUE_JSON_MAX_BYTES:
+            raise ValueError("value_json is too large")
+        return self
 
 
 class PublicSiteProfileResponse(BaseModel):

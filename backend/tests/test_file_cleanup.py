@@ -38,9 +38,10 @@ class FakeCleanupRepository:
         self.commit_count += 1
 
     async def get_file_by_sha256(self, sha256: str) -> object | None:
-        return None
+        return getattr(self, "existing_file", None)
 
     async def create_file(self, **payload: object) -> object:
+        self.created_payload = payload
         return SimpleNamespace(id=99, status="active", **payload)
 
     async def refresh(self, instance: object) -> None:
@@ -250,6 +251,74 @@ def test_upload_rejects_image_with_too_many_pixels() -> None:
                 ),
             ),
         )
+
+
+def test_upload_reuses_existing_file_only_when_metadata_matches() -> None:
+    existing = SimpleNamespace(
+        id=7,
+        status="active",
+        visibility="public",
+        public_listed=True,
+        original_name="same.pdf",
+        mime_type="application/pdf",
+        extension="pdf",
+        alt_text="资料",
+    )
+    repository = FakeCleanupRepository([])
+    repository.existing_file = existing
+    service = FileService(repository=repository, storage=FakeStorage())
+
+    result = asyncio.run(
+        service.upload_file(
+            UploadFileCommand(
+                original_name="same.pdf",
+                content_type="application/pdf",
+                data=b"%PDF-1.7\n",
+                visibility="public",
+                public_listed=True,
+                uploader_id=1,
+                alt_text="资料",
+                max_size_bytes=1024,
+            ),
+        ),
+    )
+
+    assert result.file is existing
+    assert not hasattr(repository, "created_payload")
+
+
+def test_upload_creates_new_record_when_duplicate_visibility_differs() -> None:
+    repository = FakeCleanupRepository([])
+    repository.existing_file = SimpleNamespace(
+        id=7,
+        status="active",
+        visibility="private",
+        public_listed=False,
+        original_name="same.pdf",
+        mime_type="application/pdf",
+        extension="pdf",
+        alt_text=None,
+    )
+    service = FileService(repository=repository, storage=FakeStorage())
+
+    result = asyncio.run(
+        service.upload_file(
+            UploadFileCommand(
+                original_name="same.pdf",
+                content_type="application/pdf",
+                data=b"%PDF-1.7\n",
+                visibility="public",
+                public_listed=True,
+                uploader_id=1,
+                alt_text=None,
+                max_size_bytes=1024,
+            ),
+        ),
+    )
+
+    assert result.file.id == 99
+    assert repository.created_payload["visibility"] == "public"
+    assert repository.created_payload["public_listed"] is True
 
 
 def _png_header(*, width: int, height: int) -> bytes:

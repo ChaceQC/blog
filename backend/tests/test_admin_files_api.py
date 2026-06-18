@@ -8,9 +8,9 @@ from app.api.admin.dependencies import (
     get_encryption_session_manager,
     get_file_service,
     get_log_service,
+    get_settings,
 )
 from app.api.public.files import get_public_file_content_service
-from app.core.config import get_settings
 from app.core.encryption import EncryptionProfile
 from app.main import app
 from app.schemas.encryption import EncryptedApiResponse
@@ -83,6 +83,11 @@ class FakeFileService:
             token="public-signed-token",
             expires_at=datetime(2026, 6, 16, tzinfo=UTC),
         )
+
+
+class FailIfUploadCalledFileService(FakeFileService):
+    async def upload_file(self, command: UploadFileCommand) -> object:
+        raise AssertionError("upload service should not be called")
 
 
 class FakeDownloadFileService:
@@ -252,6 +257,10 @@ class FakeEncryptionSessionManager:
         assert profile == EncryptionProfile.CONTENT
 
 
+class SmallUploadSettings:
+    upload_max_size_bytes = 8
+
+
 def override_admin_user() -> AuthenticatedUser:
     return AuthenticatedUser(
         id=1,
@@ -327,6 +336,38 @@ def test_admin_file_upload_accepts_multipart_and_csrf() -> None:
         "public_listed": True,
         "status": "active",
     }
+
+
+def test_admin_file_upload_rejects_oversized_body_before_service() -> None:
+    manager = FakeEncryptionSessionManager()
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_file_service] = lambda: FailIfUploadCalledFileService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_settings] = lambda: SmallUploadSettings()
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/admin/files",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "content-session",
+            },
+            cookies={"blog_admin_csrf": "csrf-token"},
+            data={
+                "visibility": "public",
+                "alt_text": "封面图",
+                "public_listed": "true",
+            },
+            files={"file": ("cover.png", b"012345678", "image/png")},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 413
+    assert response.json()["detail"] == "file is too large"
+    assert manager.payload is None
 
 
 def test_admin_file_delete_requires_csrf() -> None:

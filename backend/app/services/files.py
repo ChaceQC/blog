@@ -217,7 +217,13 @@ class FileService:
         )
         sha256 = hashlib.sha256(command.data).hexdigest()
         existing_file = await self.repository.get_file_by_sha256(sha256)
-        if existing_file is not None:
+        if existing_file is not None and _can_reuse_existing_upload(
+            existing_file,
+            command=command,
+            original_name=original_name,
+            expected_mime=expected_mime,
+            extension=extension,
+        ):
             return FileWithUsage(file=existing_file, usage_count=0)
 
         object_key = _build_object_key(
@@ -664,6 +670,26 @@ def _build_object_key(*, visibility: str, extension: str, sha256: str) -> str:
     return (
         f"{visibility}/{now:%Y}/{now:%m}/"
         f"{sha256[:24]}{extension.replace('.jpeg', '.jpg')}"
+    )
+
+
+def _can_reuse_existing_upload(
+    file: BlogFile,
+    *,
+    command: UploadFileCommand,
+    original_name: str,
+    expected_mime: str,
+    extension: str,
+) -> bool:
+    public_listed = command.public_listed and command.visibility == "public"
+    return (
+        file.status == "active"
+        and file.visibility == command.visibility
+        and file.public_listed == public_listed
+        and file.original_name == original_name
+        and file.mime_type == expected_mime
+        and file.extension == extension.removeprefix(".")
+        and file.alt_text == command.alt_text
     )
 
 

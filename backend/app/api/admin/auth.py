@@ -29,7 +29,6 @@ from app.schemas.auth import (
     LoginRequest,
     LogoutRequest,
     LogoutResponse,
-    RefreshTokenRequest,
 )
 from app.schemas.encryption import EncryptedApiResponse
 from app.services.auth import AuthenticationError
@@ -106,16 +105,13 @@ async def refresh(
     service: AuthServiceDependency,
     settings: SettingsDependency,
     encryption_manager: EncryptionSessionManagerDependency,
-    payload: RefreshTokenRequest | None = None,
 ) -> EncryptedApiResponse:
     await validate_encryption_session(
         request,
         manager=encryption_manager,
         profile=EncryptionProfile.SENSITIVE,
     )
-    refresh_token = (
-        payload.refresh_token if payload is not None else None
-    ) or refresh_token_from_request(request)
+    refresh_token = refresh_token_from_request(request)
     if refresh_token is None:
         raise _unauthorized()
 

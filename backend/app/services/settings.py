@@ -3,11 +3,24 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
-from app.core.url_validation import validate_public_href
+from app.core.url_validation import validate_public_href, validate_public_image_src
 from app.models.setting import Setting
 
 SITE_PROFILE_KEY = "site_profile"
 SITE_PROFILE_GROUP = "site"
+SITE_PROFILE_TEXT_LIMITS = {
+    "title": 80,
+    "owner": 80,
+    "avatar_url": 1000,
+    "description": 500,
+    "quote": 500,
+}
+SITE_PROFILE_MUSING_CONTENT_MAX_LENGTH = 500
+SITE_PROFILE_MUSING_DATE_MAX_LENGTH = 80
+SITE_PROFILE_SOCIAL_LABEL_MAX_LENGTH = 80
+SITE_PROFILE_SOCIAL_URL_MAX_LENGTH = 1000
+SITE_PROFILE_MUSING_LIMIT = 3
+SITE_PROFILE_SOCIAL_LINK_LIMIT = 12
 DEFAULT_SITE_PROFILE = {
     "title": "静默书房",
     "owner": "ChaceQC",
@@ -115,9 +128,21 @@ class SettingService:
 
 def normalize_site_profile(value_json: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(value_json)
-    avatar_url = normalized.get("avatar_url")
+
+    for key, max_length in SITE_PROFILE_TEXT_LIMITS.items():
+        normalized[key] = _normalized_text(
+            normalized.get(key),
+            fallback=DEFAULT_SITE_PROFILE[key],
+            max_length=max_length,
+        )
+
+    avatar_url = normalized["avatar_url"]
     if isinstance(avatar_url, str) and avatar_url.strip():
-        normalized["avatar_url"] = validate_public_href(avatar_url)
+        normalized["avatar_url"] = validate_public_image_src(avatar_url)
+
+    musings = normalized.get("musings")
+    if isinstance(musings, list):
+        normalized["musings"] = _normalize_musings(musings)
 
     social_links = normalized.get("social_links")
     if isinstance(social_links, list):
@@ -125,21 +150,55 @@ def normalize_site_profile(value_json: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _normalized_text(value: object, *, fallback: object, max_length: int) -> str:
+    if not isinstance(value, str):
+        value = fallback
+    if not isinstance(value, str):
+        return ""
+    return value.strip()[:max_length]
+
+
+def _normalize_musings(value: list[object]) -> list[dict[str, str]]:
+    musings: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        content = _normalized_text(
+            item.get("content"),
+            fallback="",
+            max_length=SITE_PROFILE_MUSING_CONTENT_MAX_LENGTH,
+        )
+        if not content:
+            continue
+        date = _normalized_text(
+            item.get("date"),
+            fallback="",
+            max_length=SITE_PROFILE_MUSING_DATE_MAX_LENGTH,
+        )
+        musings.append({"content": content, "date": date})
+        if len(musings) >= SITE_PROFILE_MUSING_LIMIT:
+            break
+    return musings
+
+
 def _normalize_social_links(value: list[object]) -> list[dict[str, str]]:
     links: list[dict[str, str]] = []
     for item in value:
         if not isinstance(item, dict):
             continue
-        label = item.get("label")
-        url = item.get("url")
-        if (
-            not isinstance(label, str)
-            or not label.strip()
-            or not isinstance(url, str)
-            or not url.strip()
-        ):
+        label = _normalized_text(
+            item.get("label"),
+            fallback="",
+            max_length=SITE_PROFILE_SOCIAL_LABEL_MAX_LENGTH,
+        )
+        raw_url = _normalized_text(
+            item.get("url"),
+            fallback="",
+            max_length=SITE_PROFILE_SOCIAL_URL_MAX_LENGTH,
+        )
+        if not label or not raw_url:
             continue
-        links.append({"label": label.strip(), "url": validate_public_href(url)})
-        if len(links) >= 12:
+        links.append({"label": label, "url": validate_public_href(raw_url)})
+        if len(links) >= SITE_PROFILE_SOCIAL_LINK_LIMIT:
             break
     return links

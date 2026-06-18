@@ -8,6 +8,7 @@ import {
   siteNavTagsPayload,
   siteNavTagsToText,
 } from '../sites/siteNavTags.ts'
+import { safePreviewHref } from '../../utils/urls.ts'
 import { AdminSiteNavGroupsPanel } from './AdminSiteNavGroupsPanel.tsx'
 import {
   createAdminSiteNavItem,
@@ -192,7 +193,7 @@ export function AdminSiteNavPanel() {
               </span>
               <a
                 className="icon-button"
-                href={siteForm.url || '#'}
+                href={safePreviewHref(siteForm.url)}
                 aria-label="打开导航链接"
               >
                 <ExternalLink size={17} strokeWidth={1.8} aria-hidden="true" />

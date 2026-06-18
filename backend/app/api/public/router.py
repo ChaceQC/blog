@@ -23,7 +23,7 @@ from app.api.public.files import router as public_files_router
 from app.core.database import get_session
 from app.core.encryption import EncryptionProfile
 from app.core.request import client_ip
-from app.core.url_validation import validate_public_href
+from app.core.url_validation import validate_public_href, validate_public_image_src
 from app.models.content import Post
 from app.providers.markdown import count_words
 from app.repositories.content import ContentRepository
@@ -62,6 +62,17 @@ router = APIRouter(tags=["public"])
 router.include_router(public_encryption_router)
 router.include_router(public_files_router)
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
+SITE_PROFILE_TEXT_LIMITS = {
+    "title": 80,
+    "owner": 80,
+    "avatar_url": 1000,
+    "description": 500,
+    "quote": 500,
+}
+SITE_PROFILE_MUSING_CONTENT_MAX_LENGTH = 500
+SITE_PROFILE_MUSING_DATE_MAX_LENGTH = 80
+SITE_PROFILE_SOCIAL_LABEL_MAX_LENGTH = 80
+SITE_PROFILE_SOCIAL_URL_MAX_LENGTH = 1000
 
 
 def get_public_content_service(session: SessionDependency) -> ContentService:
@@ -315,7 +326,10 @@ async def list_public_posts(
 
 @router.get("/posts/{slug}")
 async def get_public_post(
-    slug: str,
+    slug: Annotated[
+        str,
+        Path(min_length=1, max_length=220, pattern=SLUG_PATTERN),
+    ],
     request: Request,
     service: PublicContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
@@ -652,28 +666,46 @@ async def _validate_public_content_session(
 
 
 def _site_profile_response(value: dict[str, object]) -> PublicSiteProfileResponse:
+    avatar_url = _string_value(
+        value.get("avatar_url"),
+        "https://github.com/ChaceQC.png",
+        max_length=SITE_PROFILE_TEXT_LIMITS["avatar_url"],
+    )
+    try:
+        avatar_url = validate_public_image_src(avatar_url)
+    except ValueError:
+        avatar_url = "https://github.com/ChaceQC.png"
+
     return PublicSiteProfileResponse(
-        title=_string_value(value.get("title"), "静默书房"),
-        owner=_string_value(value.get("owner"), "ChaceQC"),
-        avatar_url=_string_value(
-            value.get("avatar_url"),
-            "https://github.com/ChaceQC.png",
+        title=_string_value(
+            value.get("title"),
+            "静默书房",
+            max_length=SITE_PROFILE_TEXT_LIMITS["title"],
         ),
+        owner=_string_value(
+            value.get("owner"),
+            "ChaceQC",
+            max_length=SITE_PROFILE_TEXT_LIMITS["owner"],
+        ),
+        avatar_url=avatar_url,
         description=_string_value(
             value.get("description"),
             "把长期写作、素材管理和自建服务收束到一处安静的发布空间。",
+            max_length=SITE_PROFILE_TEXT_LIMITS["description"],
         ),
         quote=_string_value(
             value.get("quote"),
             "「把想法放慢一点，让每一次发布都留下可以回看的纹理。」",
+            max_length=SITE_PROFILE_TEXT_LIMITS["quote"],
         ),
         musings=_musings_value(value.get("musings")),
         social_links=_social_links_value(value.get("social_links")),
     )
 
 
-def _string_value(value: object, fallback: str) -> str:
-    return value if isinstance(value, str) and value else fallback
+def _string_value(value: object, fallback: str, *, max_length: int) -> str:
+    selected = value if isinstance(value, str) and value else fallback
+    return selected.strip()[:max_length]
 
 
 def _musings_value(value: object) -> list[dict[str, str]]:
@@ -689,8 +721,14 @@ def _musings_value(value: object) -> list[dict[str, str]]:
         if isinstance(content, str) and content.strip():
             musings.append(
                 {
-                    "content": content.strip(),
-                    "date": date.strip() if isinstance(date, str) else "",
+                    "content": content.strip()[
+                        :SITE_PROFILE_MUSING_CONTENT_MAX_LENGTH
+                    ],
+                    "date": (
+                        date.strip()[:SITE_PROFILE_MUSING_DATE_MAX_LENGTH]
+                        if isinstance(date, str)
+                        else ""
+                    ),
                 },
             )
     return musings[:3]
@@ -713,10 +751,17 @@ def _social_links_value(value: object) -> list[dict[str, str]]:
             and url.strip()
         ):
             try:
-                safe_url = validate_public_href(url)
+                safe_url = validate_public_href(
+                    url.strip()[:SITE_PROFILE_SOCIAL_URL_MAX_LENGTH],
+                )
             except ValueError:
                 continue
-            links.append({"label": label.strip(), "url": safe_url})
+            links.append(
+                {
+                    "label": label.strip()[:SITE_PROFILE_SOCIAL_LABEL_MAX_LENGTH],
+                    "url": safe_url,
+                },
+            )
     return links[:12]
 
 

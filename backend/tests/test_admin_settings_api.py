@@ -173,3 +173,74 @@ def test_update_admin_setting_decrypts_sensitive_request() -> None:
         "group_name": "site",
         "is_public": True,
     }
+
+
+def test_update_admin_setting_rejects_invalid_key_name_before_decrypt() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    manager = FakeEncryptionSessionManager(
+        decrypted_payload={
+            "value_json": {"title": "静默书房"},
+            "group_name": "site",
+            "is_public": True,
+        },
+    )
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_setting_service] = lambda: FakeSettingService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+
+    try:
+        response = client.patch(
+            "/api/admin/settings/bad.key",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "sensitive-session",
+            },
+            json={
+                "session_id": "sensitive-session",
+                "profile": "sensitive-v1",
+                "nonce": "test-nonce",
+                "ciphertext": "test-ciphertext",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert manager.request_payload is None
+
+
+def test_update_admin_setting_rejects_oversized_value_json() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    manager = FakeEncryptionSessionManager(
+        decrypted_payload={
+            "value_json": {"content": "字" * 40_000},
+            "group_name": "site",
+            "is_public": True,
+        },
+    )
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_setting_service] = lambda: FakeSettingService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+
+    try:
+        response = client.patch(
+            f"/api/admin/settings/{SITE_PROFILE_KEY}",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "sensitive-session",
+            },
+            json={
+                "session_id": "sensitive-session",
+                "profile": "sensitive-v1",
+                "nonce": "test-nonce",
+                "ciphertext": "test-ciphertext",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422

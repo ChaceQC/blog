@@ -10,15 +10,23 @@ fi
 BACKUP_FILE="$1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+COMPOSE_FILES=(
+  -f "${DEPLOY_DIR}/docker-compose.yml"
+  -f "${DEPLOY_DIR}/docker-compose.prod.yml"
+)
+
+if [[ -n "${COMPOSE_EXTRA_FILES:-}" ]]; then
+  for compose_file in ${COMPOSE_EXTRA_FILES}; do
+    COMPOSE_FILES+=(-f "${compose_file}")
+  done
+fi
 
 if [[ ! -f "${BACKUP_FILE}" ]]; then
   echo "备份文件不存在：${BACKUP_FILE}" >&2
   exit 1
 fi
 
-gzip -dc "${BACKUP_FILE}" | docker compose \
-  -f "${DEPLOY_DIR}/docker-compose.yml" \
-  -f "${DEPLOY_DIR}/docker-compose.prod.yml" \
+gzip -dc "${BACKUP_FILE}" | docker compose "${COMPOSE_FILES[@]}" \
   exec -T mysql \
   sh -c 'mysql -uroot -p"${MYSQL_ROOT_PASSWORD}" "${MYSQL_DATABASE}"'
 
