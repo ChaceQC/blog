@@ -107,6 +107,73 @@ body::before {
   }
 }
 
+@keyframes public-nav-in {
+  from {
+    opacity: 0;
+    transform: translate(50%, -12px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(50%, 0) scale(1);
+  }
+}
+
+@keyframes public-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes public-reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes public-line-draw {
+  from {
+    transform: scaleY(0);
+  }
+
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes public-line-draw-x {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes public-avatar-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
 button,
 input,
 textarea,
@@ -182,6 +249,18 @@ img {
   box-shadow: 0 4px 24px rgba(20, 19, 18, 0.035);
   backdrop-filter: blur(24px);
   transform: translateX(50%);
+  animation: public-nav-in 480ms cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
+  transition:
+    background-color 220ms ease,
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    transform 220ms ease;
+}
+
+.site-header:hover {
+  border-color: rgba(20, 19, 18, 0.14);
+  background: rgba(254, 254, 251, 0.82);
+  box-shadow: 0 12px 36px rgba(20, 19, 18, 0.07);
 }
 
 .brand {
@@ -205,6 +284,15 @@ img {
   background: var(--color-neutral-2);
   color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-border);
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.brand:hover .brand-mark {
+  background: rgba(197, 100, 115, 0.1);
+  transform: translateY(-1px) rotate(-3deg);
 }
 
 .brand--admin {
@@ -246,24 +334,50 @@ img {
 }
 
 .site-header nav a {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  overflow: hidden;
   padding: 0 10px;
   color: var(--color-neutral-7);
   font-size: 0.9rem;
+}
+
+.site-header nav a::after {
+  position: absolute;
+  right: 10px;
+  bottom: 6px;
+  left: 10px;
+  height: 1px;
+  background: var(--color-accent);
+  content: "";
+  opacity: 0;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition:
+    opacity 180ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .site-header nav a:hover,
 .site-header nav a.active {
   background: var(--color-neutral-2);
   color: var(--color-neutral-10);
+  transform: translateY(-1px);
+}
+
+.site-header nav a:hover::after,
+.site-header nav a.active::after {
+  opacity: 1;
+  transform: scaleX(1);
 }
 
 .page-flow {
   display: grid;
   gap: 88px;
   padding: 96px 0 120px;
+  animation: public-page-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .page-flow--narrow {
@@ -278,6 +392,18 @@ img {
   min-height: 34svh;
   align-content: center;
   text-align: center;
+}
+
+.page-heading > * {
+  animation: soft-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.page-heading > :nth-child(2) {
+  animation-delay: 70ms;
+}
+
+.page-heading > :nth-child(3) {
+  animation-delay: 130ms;
 }
 
 .page-heading small {
@@ -302,6 +428,7 @@ img {
 }
 
 .hero-section {
+  position: relative;
   display: grid;
   justify-items: center;
   min-height: 62svh;
@@ -317,7 +444,7 @@ img {
 }
 
 .hero-identity > * {
-  animation: soft-rise 520ms ease both;
+  animation: soft-rise 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .hero-identity > :nth-child(2) {
@@ -334,11 +461,21 @@ img {
 }
 
 .hero-avatar {
-  width: 70px;
+  width: clamp(74px, 8vw, 104px);
   aspect-ratio: 1;
   border-radius: 999px;
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-whisper);
+  animation:
+    soft-rise 620ms cubic-bezier(0.22, 1, 0.36, 1) both,
+    public-avatar-float 5.2s ease-in-out 900ms infinite;
+  transition:
+    box-shadow 220ms ease,
+    transform 220ms ease;
+}
+
+.hero-avatar:hover {
+  box-shadow: 0 14px 42px rgba(20, 19, 18, 0.1);
 }
 
 .hero-section h1 {
@@ -404,11 +541,20 @@ img {
   width: 34px;
   color: var(--color-neutral-6);
   font-size: 0.86rem;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .social-strip a:hover {
   background: var(--color-neutral-3);
   color: var(--color-neutral-10);
+  box-shadow:
+    inset 0 0 0 1px rgba(197, 100, 115, 0.24),
+    0 8px 22px rgba(20, 19, 18, 0.06);
+  transform: translateY(-3px);
 }
 
 .content-section {
@@ -544,6 +690,7 @@ img {
 .compact-row {
   transition:
     background-color 180ms ease,
+    color 180ms ease,
     transform 180ms ease;
 }
 
@@ -581,6 +728,7 @@ img {
   width: 1px;
   background: var(--color-neutral-4);
   content: "";
+  transform-origin: top;
 }
 
 .recent-item:first-child::before {
@@ -591,6 +739,7 @@ img {
   width: 2px;
   background: var(--color-accent);
   content: "";
+  transform-origin: top;
 }
 
 .recent-item__index,
@@ -598,10 +747,19 @@ img {
   color: var(--color-neutral-6);
   font-family: var(--font-serif);
   font-size: 1.25rem;
+  transition:
+    color 180ms ease,
+    transform 180ms ease;
 }
 
 .recent-item:first-child .recent-item__index {
   color: var(--color-accent);
+}
+
+.recent-item:hover .recent-item__index,
+.post-row:hover .post-row__index {
+  color: var(--color-accent);
+  transform: translateY(-1px) scale(1.04);
 }
 
 .recent-item__body {
@@ -625,6 +783,15 @@ img {
 .recent-item strong {
   font-family: var(--font-serif);
   font-size: 1.12rem;
+  transition: color 180ms ease;
+}
+
+.recent-item:hover strong,
+.post-row:hover h2,
+.compact-row:hover strong,
+.site-tile:hover strong,
+.gateway-list a:hover strong {
+  color: var(--color-accent);
 }
 
 .recent-item time {
@@ -683,6 +850,14 @@ img {
   gap: 7px;
   padding-left: 18px;
   border-left: 1px solid var(--color-border);
+  transition:
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.musing-item:hover {
+  border-left-color: rgba(197, 100, 115, 0.42);
+  transform: translateX(2px);
 }
 
 .inline-link {
@@ -699,6 +874,7 @@ img {
 }
 
 .gateway-list a {
+  position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 12px;
@@ -711,11 +887,23 @@ img {
   transition:
     background-color 180ms ease,
     border-color 180ms ease,
+    box-shadow 180ms ease,
     transform 180ms ease;
 }
 
 .gateway-list a:hover {
   border-color: rgba(197, 100, 115, 0.28);
+  box-shadow: 0 10px 32px rgba(20, 19, 18, 0.055);
+}
+
+.gateway-list a svg {
+  transition:
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.gateway-list a:hover svg {
+  transform: translate(2px, -2px) rotate(-5deg);
 }
 
 .writing-orbit {
@@ -752,6 +940,7 @@ img {
   height: 1px;
   background: var(--color-border);
   content: "";
+  transform-origin: left;
 }
 
 .writing-orbit__dot {
@@ -784,6 +973,14 @@ img {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition:
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.writing-orbit__dot:hover span {
+  color: var(--color-neutral-10);
+  transform: translateY(-1px);
 }
 
 .writing-orbit__track strong {
@@ -888,6 +1085,11 @@ img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.post-row:hover .post-row__cover img {
+  transform: scale(1.05);
 }
 
 .post-row__body {
@@ -1017,12 +1219,14 @@ img {
   padding: 0 12px;
   text-decoration: none;
   transition:
+    background-color 160ms ease,
     border-color 160ms ease,
     color 160ms ease,
     transform 160ms ease;
 }
 
 .archive-filter-chip:hover {
+  background: rgba(254, 254, 251, 0.78);
   border-color: rgba(197, 100, 115, 0.36);
   color: var(--color-neutral-9);
   transform: translateY(-1px);
@@ -1152,7 +1356,7 @@ img {
 
 .timeline-link:hover {
   color: var(--color-neutral-10);
-  transform: translateX(-2px);
+  transform: translateX(3px);
 }
 
 .post-detail {
@@ -1331,6 +1535,17 @@ img {
   text-align: left;
 }
 
+.compact-row svg {
+  transition:
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.compact-row:hover svg {
+  color: var(--color-accent);
+  transform: translateY(-2px);
+}
+
 .compact-row span,
 .site-tile__head span,
 .file-row span,
@@ -1373,7 +1588,12 @@ img {
   box-shadow: none;
   transition:
     background-color 180ms ease,
+    color 180ms ease,
     transform 180ms ease;
+}
+
+.site-tile:hover {
+  transform: translateX(3px);
 }
 
 .site-tile__head {
@@ -1397,6 +1617,13 @@ img {
   position: absolute;
   right: 4px;
   top: 20px;
+  transition:
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.site-tile:hover .site-tile__arrow {
+  transform: translate(3px, -3px);
 }
 
 .site-tile p {
@@ -1421,6 +1648,61 @@ img {
   border-bottom: 1px solid var(--color-border);
   color: var(--color-neutral-6);
   font-size: 0.82rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .home-board,
+    .writing-orbit,
+    .page-flow > .content-section,
+    .closing-section,
+    .post-detail > .post-prose {
+      animation: public-reveal-up both;
+      animation-range: entry 6% cover 28%;
+      animation-timeline: view();
+    }
+
+    .recent-item,
+    .post-row,
+    .compact-row,
+    .site-tile,
+    .gateway-list a,
+    .note-panel,
+    .archive-filter-panel,
+    .public-application-form {
+      animation: public-reveal-up both;
+      animation-range: entry 8% cover 24%;
+      animation-timeline: view();
+    }
+
+    .recent-list::before,
+    .recent-item:first-child::before {
+      animation: public-line-draw both;
+      animation-range: entry 10% cover 42%;
+      animation-timeline: view();
+    }
+
+    .writing-orbit__track::before {
+      animation: public-line-draw-x both;
+      animation-range: entry 16% cover 44%;
+      animation-timeline: view();
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+
+  .hero-avatar {
+    animation: none !important;
+  }
 }
 
 .admin-shell {
