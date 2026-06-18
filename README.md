@@ -368,14 +368,21 @@ BLOG_SSL_CERTIFICATE_KEY=/etc/nginx/ssl/blog.key
 
 ### 4. 选择 Nginx 部署方式
 
-如果使用 Compose 内置 Nginx，请继续按下文的 `deploy/docker-compose.local.yml` 挂载证书目录，并用包含 nginx 服务的 compose 命令启动。
+如果使用 Compose 内置 Nginx，请继续按下文的 `deploy/docker-compose.local.yml` 挂载证书目录，并用包含 nginx 服务的 compose 命令启动。`deploy/docker-compose.local.yml` 是服务器本地文件，已被 `.gitignore` 忽略；如果前面已经创建过，请编辑合并内容，不要直接覆盖。
 
-如果使用宿主机已有 Nginx，请叠加 `deploy/docker-compose.host-nginx.yml` 启动后端、MySQL 和 Redis。该覆盖文件会把后端只绑定到 `127.0.0.1:18080`，供宿主机 Nginx 反向代理；Compose 内置 Nginx 默认不会启动。宿主机 Nginx 仍需要把 `/api/` 反代到 `http://127.0.0.1:18080`，并把前端静态目录指向 `/var/www/blog`。
+如果使用宿主机已有 Nginx，不启动 Compose 内置 Nginx 服务即可；宿主机 Nginx 仍需要把 `/api/` 反代到 `http://127.0.0.1:18080`，并把前端静态目录指向 `/var/www/blog`。如需让宿主机访问后端容器，在服务器本地覆盖文件中加入：
+
+```yaml
+services:
+  backend:
+    ports:
+      - "127.0.0.1:18080:8000"
+```
 
 宿主机 Nginx 场景下，仍需单独构建 nginx 镜像来产出最新 React 静态文件，再复制到宿主机站点目录：
 
 ```bash
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml build nginx
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml build nginx
 CID=$(docker create blog-nginx)
 sudo rm -rf /var/www/blog/*
 sudo docker cp "$CID":/usr/share/nginx/html/. /var/www/blog/
@@ -384,15 +391,13 @@ docker rm "$CID"
 
 ### 5. 挂载已有 SSL 证书
 
-基础 Compose 文件默认只挂载项目内的 `deploy/certs/letsencrypt`，如果使用宿主机 `/etc/nginx/ssl` 中的现成证书，需要创建一个本地覆盖文件：
+基础 Compose 文件默认只挂载项目内的 `deploy/certs/letsencrypt`，如果使用宿主机 `/etc/nginx/ssl` 中的现成证书，需要在 `deploy/docker-compose.local.yml` 中加入：
 
-```bash
-cat > deploy/docker-compose.local.yml <<'YAML'
+```yaml
 services:
   nginx:
     volumes:
       - /etc/nginx/ssl:/etc/nginx/ssl:ro
-YAML
 ```
 
 确认宿主机证书文件存在且 Docker 可读：
@@ -433,7 +438,7 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f
 宿主机 Nginx 场景只启动后端、MySQL 和 Redis：
 
 ```bash
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml up -d --build backend mysql redis
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml up -d --build backend mysql redis
 ```
 
 查看状态和日志：
@@ -528,10 +533,10 @@ bash deploy/scripts/restore_mysql.sh /data/blog/backups/mysql/blog-YYYYMMDDTHHMM
 CONFIRM_RESTORE_UPLOADS=yes bash deploy/scripts/restore_uploads.sh /data/blog/backups/uploads/uploads-YYYYMMDDTHHMMSSZ.tar.gz
 ```
 
-宿主机 Nginx 场景可通过 `COMPOSE_EXTRA_FILES` 让 MySQL 备份、恢复和迁移脚本复用同一份 Compose 覆盖：
+宿主机 Nginx 场景可通过 `COMPOSE_EXTRA_FILES` 让 MySQL 备份、恢复和迁移脚本复用同一份本地 Compose 覆盖：
 
 ```bash
-COMPOSE_EXTRA_FILES=deploy/docker-compose.host-nginx.yml bash deploy/scripts/upgrade_backend_db.sh
+COMPOSE_EXTRA_FILES=deploy/docker-compose.local.yml bash deploy/scripts/upgrade_backend_db.sh
 ```
 
 生产环境至少需要备份：

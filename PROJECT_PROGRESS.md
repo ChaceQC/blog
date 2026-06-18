@@ -20,13 +20,13 @@
 - `client_ip()` 已改为仅信任配置内反向代理：新增 `BLOG_TRUSTED_PROXY_HOSTS`，支持 IP 和 CIDR，只有直接连接来源属于可信代理时才读取 `X-Forwarded-For` / `X-Real-IP`；后端直连会使用连接 IP，降低伪造代理头绕过限流或污染日志的风险。
 - 公开访问日志压力已收敛：新增 `BLOG_ACCESS_LOG_SKIP_TYPES`，默认跳过公开内容、公开文件、文章图片和缩略图等高频成功访问的应用层 `access_logs` 写入；错误访问、RSS/sitemap/robots、公开友链申请、公开站点跳转、后台短时链接和后台下载仍记录。
 - 公开和后台列表分页已增加统一 `offset` 业务上限：新增 `PAGE_OFFSET_MAX = 10000` 并接入公开内容、公开文件、后台内容、后台文件、后台友链/导航和后台日志列表接口，避免超大 offset 造成深分页压力。
-- 新增宿主机 Nginx 部署覆盖文件 `deploy/docker-compose.host-nginx.yml`：默认不启动 Compose 内置 Nginx，只把后端绑定到宿主机回环 `127.0.0.1:18080`，并保留单独构建 nginx 镜像以复制最新前端静态文件的发布路径。
+- 按最新部署决策删除仓库内 `deploy/docker-compose.host-nginx.yml`；宿主机 Nginx 场景改为使用服务器本地 `deploy/docker-compose.local.yml` 覆盖文件绑定后端回环端口，避免把机器特定端口策略提交进仓库。
 - 继续全量审计后补充管理员刷新令牌边界：`POST /api/admin/auth/refresh` 不再接受 JSON body 中的 `refresh_token`，只读取 HttpOnly Cookie，减少刷新令牌进入前端 JS/请求体日志的兼容面。
 - 继续全量审计后补充后台设置和公开站点资料边界：后台设置 `key_name` 增加路径参数格式限制，`value_json` 增加 32KiB 业务体积上限，`site_profile` 保存和公开读取时会截断长字符串、限制碎念/社交链接数量，并过滤不适合图片源的头像协议。
 - 继续全量审计后补充上传读取内存边界：后台 multipart 上传现在只读取 `BLOG_UPLOAD_MAX_SIZE_BYTES + 1` 字节并提前返回 413，避免后端被绕过 Nginx 时先把超大文件完整读入内存。
 - 修正同 SHA256 上传复用语义：仅当旧文件 active 且可见性、公开列表状态、原始文件名、MIME、扩展名和 alt 文案都与本次上传一致时才复用，避免私有/公开元数据被旧记录“串用”。
 - 生产配置新增启动期校验：生产环境 `BLOG_PUBLIC_BASE_URL` 必须是带 host 的 `https://` 绝对地址，防止 RSS、sitemap、robots.txt 和 canonical/签名链接因误配置输出危险或畸形 URL。
-- 宿主机 Nginx 维护脚本补齐：`backup_mysql.sh`、`restore_mysql.sh` 和 `upgrade_backend_db.sh` 支持通过 `COMPOSE_EXTRA_FILES` 追加 `deploy/docker-compose.host-nginx.yml` 等覆盖文件，文档已同步示例。
+- 宿主机 Nginx 维护脚本补齐：`backup_mysql.sh`、`restore_mysql.sh` 和 `upgrade_backend_db.sh` 支持通过 `COMPOSE_EXTRA_FILES` 追加服务器本地覆盖文件，文档已同步 `deploy/docker-compose.local.yml` 示例。
 - 前端后台友链和站点导航编辑页的“打开链接”预览按钮新增协议白名单，只允许 `http/https/mailto/站内路径`，未保存的危险协议会降级为 `#`。
 
 ### 待修复清单
@@ -59,8 +59,8 @@
 - 已运行 `npm.cmd run lint`，通过。
 - 已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - 已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config`，配置可展开；本机真实 ignored env 仍需按服务器配置项更新旧数据库连接串。
-- 已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml config` 和 `config --services`，host-nginx 覆盖可展开，默认服务为 `redis/mysql/backend`，后端仅绑定宿主机 `127.0.0.1:18080`。
-- 尝试运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml build nginx`，本机 Docker Desktop 未运行，连接 `dockerDesktopLinuxEngine` 失败；服务器或 Docker 正常运行环境仍需执行该命令生成最新静态前端镜像。
+- 已按当时临时覆盖文件思路验证过 host-nginx 覆盖可展开；随后根据最新要求删除仓库内 `deploy/docker-compose.host-nginx.yml`，后续宿主机 Nginx 部署使用服务器本地 `deploy/docker-compose.local.yml`。
+- 尝试运行 Docker 镜像构建时，本机 Docker Desktop 未运行，连接 `dockerDesktopLinuxEngine` 失败；服务器或 Docker 正常运行环境仍需执行构建命令生成最新静态前端镜像。
 - 继续全量审计新增修复后已运行 `uv run pytest tests/test_admin_files_api.py tests/test_admin_security.py tests/test_admin_settings_api.py tests/test_public_content_api.py tests/test_url_validation.py`，64 个测试通过；仍存在 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 状态常量的上游弃用警告。
 - 继续全量审计新增修复后已运行 `uv run ruff check .`，通过。
 - 继续全量审计新增修复后已运行 `npm.cmd run lint`，通过。
@@ -69,8 +69,8 @@
 - 继续全量审计新增修复后已运行 `uv run alembic upgrade head --sql`，可正常生成从空库到 `20260619_0007` 的 MySQL 迁移 SQL；本轮新增修复未产生新迁移文件。
 - 继续全量审计新增修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - 继续全量审计新增修复后已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
-- 继续全量审计新增修复后已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml config --quiet` 与 `config --services`，通过；默认服务为 `mysql`、`redis`、`backend`。
-- 继续尝试运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml build nginx`，本机 Docker Desktop 仍未运行，无法连接 `dockerDesktopLinuxEngine`；服务器或 Docker 正常运行环境仍需执行构建并复制静态文件。
+- 继续全量审计新增修复后已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过；仓库内 host-nginx 覆盖文件已删除，不再作为提交内容验证。
+- 继续尝试运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml build nginx`，本机 Docker Desktop 仍未运行，无法连接 `dockerDesktopLinuxEngine`；服务器或 Docker 正常运行环境仍需执行构建并复制静态文件。
 
 ## 2026-06-18
 

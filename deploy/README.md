@@ -8,7 +8,6 @@
 deploy/
   docker-compose.yml          基础服务编排
   docker-compose.prod.yml     生产端口、重启策略和资源限制覆盖
-  docker-compose.host-nginx.yml 宿主机 Nginx 覆盖，只把后端绑定到 127.0.0.1:18080
   env/                        环境变量模板
   nginx/                      Nginx 镜像、主配置和站点模板
   scripts/                    MySQL 备份、恢复和证书续期脚本
@@ -47,16 +46,27 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml co
 
 公网只应暴露 Nginx 的 `80/443`。MySQL、Redis 和后端应用端口应只在 Docker 网络内访问。
 
-如果使用宿主机 Nginx，而不是 Compose 内置 Nginx 服务，启动后端/MySQL/Redis 时叠加 `deploy/docker-compose.host-nginx.yml`：
+`deploy/docker-compose.local.yml` 是服务器本地覆盖文件，已被 `.gitignore` 忽略；如果需要同时放证书挂载和后端端口绑定，请编辑合并同一个文件，不要互相覆盖。
 
-```bash
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml up -d --build backend mysql redis
+如果使用宿主机 Nginx，而不是 Compose 内置 Nginx 服务，启动后端/MySQL/Redis 时只指定这些服务。若宿主机需要通过 `127.0.0.1:18080` 访问后端容器，请在 `deploy/docker-compose.local.yml` 中加入：
+
+```yaml
+services:
+  backend:
+    ports:
+      - "127.0.0.1:18080:8000"
 ```
 
-该覆盖文件只把后端绑定到 `127.0.0.1:18080`，供宿主机 Nginx 反向代理；MySQL 和 Redis 仍留在 Docker 内网。Compose 内置 Nginx 服务被放入 `bundled-nginx` profile，默认不会启动。若仍要从 Nginx 镜像复制 React 静态文件到宿主机站点目录，需要单独构建镜像：
+启动命令：
 
 ```bash
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.host-nginx.yml build nginx
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml up -d --build backend mysql redis
+```
+
+MySQL 和 Redis 仍留在 Docker 内网。若仍要从 Nginx 镜像复制 React 静态文件到宿主机站点目录，需要单独构建镜像：
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml build nginx
 ```
 
 ## Nginx
@@ -70,15 +80,13 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f
 
 后端生产响应也会设置 HSTS 与 Content Security Policy，Nginx 的同类响应头保留为公网入口兜底；部署前仍应确认公网只暴露 Nginx `80/443`，后端、MySQL、Redis 不映射到宿主公网端口。
 
-证书路径由 `deploy/env/nginx.env` 中的 `BLOG_SSL_CERTIFICATE` 和 `BLOG_SSL_CERTIFICATE_KEY` 控制，填写的是 Nginx 容器内路径。基础 Compose 文件默认挂载 `deploy/certs/letsencrypt` 到 `/etc/letsencrypt`；如果使用宿主机已有证书，例如 `/etc/nginx/ssl/blog.pem` 和 `/etc/nginx/ssl/blog.key`，需要额外创建本地覆盖文件挂载证书目录：
+证书路径由 `deploy/env/nginx.env` 中的 `BLOG_SSL_CERTIFICATE` 和 `BLOG_SSL_CERTIFICATE_KEY` 控制，填写的是 Nginx 容器内路径。基础 Compose 文件默认挂载 `deploy/certs/letsencrypt` 到 `/etc/letsencrypt`；如果使用宿主机已有证书，例如 `/etc/nginx/ssl/blog.pem` 和 `/etc/nginx/ssl/blog.key`，需要在 `deploy/docker-compose.local.yml` 中加入证书目录挂载：
 
-```bash
-cat > deploy/docker-compose.local.yml <<'YAML'
+```yaml
 services:
   nginx:
     volumes:
       - /etc/nginx/ssl:/etc/nginx/ssl:ro
-YAML
 ```
 
 启动时叠加该文件：
@@ -120,11 +128,11 @@ RUN_BACKUP=no bash deploy/scripts/upgrade_backend_db.sh
 BUILD_BACKEND=no bash deploy/scripts/upgrade_backend_db.sh
 ```
 
-如果生产使用宿主机 Nginx 覆盖文件，维护脚本可通过 `COMPOSE_EXTRA_FILES`
+如果生产使用宿主机 Nginx 本地覆盖文件，维护脚本可通过 `COMPOSE_EXTRA_FILES`
 追加同一份覆盖配置，MySQL 备份、恢复和迁移脚本都会复用：
 
 ```bash
-COMPOSE_EXTRA_FILES=deploy/docker-compose.host-nginx.yml \
+COMPOSE_EXTRA_FILES=deploy/docker-compose.local.yml \
   bash deploy/scripts/upgrade_backend_db.sh
 ```
 
