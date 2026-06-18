@@ -40,11 +40,12 @@
 - 后台设置页状态和表单转换已从路由组件抽出：新增 `siteProfileForm.ts` 和 `useAdminSiteProfileEditor`，将站点资料加载、表单归一化、分区状态、保存 mutation 和缓存失效移入 settings feature；`AdminSettingsPage` 缩减为页面布局、表单 JSX 和预览渲染。
 - 后台友链和站点导航面板状态职责已抽出：新增 `useAdminFriendLinksEditor`、`useAdminSiteNavEditor` 和 `siteNavForm.ts`，将列表查询、分页、选中态、表单态、保存/审核 mutation、缓存失效和表单转换移入 links feature hook；面板文件保留 JSX 编排和展示逻辑。
 - 后端管理端读取边界已收敛到 Service read model：内容与文件服务新增管理端 DTO/read 方法，日志服务返回只读日志 DTO，设置服务新增后台设置 DTO 和公开站点资料 DTO；后台内容、文件、日志、设置 API 不再直接从 ORM/record 自行扫字段，公开站点资料清洗也从路由搬入 `SettingService`。
+- 前后端类型手写镜像已补充契约测试：新增 `backend/tests/test_frontend_contract.py`，按字段名、可空性、数组和对象形状校验后端 Pydantic 响应 schema 与前端 `features/*/types.ts` 的主要响应类型，降低后续手写类型漂移风险。
 
 ### 待修复清单
 
-- P2：前后端类型手写镜像，后续容易漂移。后端 Pydantic schema 与前端 `features/*/types.ts` 手写维护同一批字段、可空性和响应结构；后续应评估基于 OpenAPI 生成 TypeScript 类型，或至少补充 contract test。
 - P3：全局 CSS 已经过大。`frontend/src/index.css` 集中了基础样式、公开站点、后台布局、表单、弹窗、文章排版和响应式规则；后续应按 `base.css`、`public.css`、`admin.css`、`components.css`、`prose.css` 拆分，或逐步转为 CSS modules。
+
 ### 进行中
 
 - 无。
@@ -61,7 +62,7 @@
 
 ### 下一步
 
-- 补充前后端契约防漂移验证，优先用 OpenAPI schema 与前端类型快照/契约测试覆盖当前手写镜像字段。
+- 拆分 `frontend/src/index.css`，按基础样式、组件、公开站点、后台和正文排版分层维护，并保持现有页面视觉行为不变。
 
 ### 验证
 
@@ -107,6 +108,8 @@
 - 后台友链和站点导航状态抽取后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - 后端管理端 read model 收敛后已运行 `uv run ruff check app/services/content_read_models.py app/services/content.py app/services/file_read_models.py app/services/files.py app/services/logs.py app/services/settings.py app/api/admin/content.py app/api/admin/files.py app/api/admin/logs.py app/api/admin/settings.py app/api/public/settings.py app/schemas/settings.py tests/test_admin_content_api.py tests/test_admin_files_api.py tests/test_admin_settings_api.py tests/test_public_content_api.py`，通过。
 - 后端管理端 read model 收敛后已运行 `uv run pytest tests/test_admin_content_api.py tests/test_admin_files_api.py tests/test_admin_logs_api.py tests/test_admin_settings_api.py tests/test_public_content_api.py tests/test_content_service.py tests/test_log_service.py`，71 个测试通过；仍存在 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 状态常量的上游弃用警告。
+- 前后端类型契约测试新增后已运行 `uv run ruff check tests/test_frontend_contract.py`，通过。
+- 前后端类型契约测试新增后已运行 `uv run pytest tests/test_frontend_contract.py -q`，23 个测试通过。
 
 ## 2026-06-18
 
