@@ -150,7 +150,7 @@ frontend/
       settings/
     api/
     stores/
-    styles/
+    styles/      # 全局样式分层，index.css 只负责聚合导入
 ```
 
 建议依赖：

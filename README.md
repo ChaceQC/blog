@@ -104,6 +104,7 @@ frontend/             React 前端工程
   src/routes/         前台和后台页面
   src/features/       posts、files、links、sites、settings 等业务模块
   src/api/            请求客户端和加密 API 封装
+  src/styles/         全局样式分层，index.css 只做聚合导入
 
 deploy/               生产部署配置
   docker-compose.yml

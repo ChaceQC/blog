@@ -41,10 +41,11 @@
 - 后台友链和站点导航面板状态职责已抽出：新增 `useAdminFriendLinksEditor`、`useAdminSiteNavEditor` 和 `siteNavForm.ts`，将列表查询、分页、选中态、表单态、保存/审核 mutation、缓存失效和表单转换移入 links feature hook；面板文件保留 JSX 编排和展示逻辑。
 - 后端管理端读取边界已收敛到 Service read model：内容与文件服务新增管理端 DTO/read 方法，日志服务返回只读日志 DTO，设置服务新增后台设置 DTO 和公开站点资料 DTO；后台内容、文件、日志、设置 API 不再直接从 ORM/record 自行扫字段，公开站点资料清洗也从路由搬入 `SettingService`。
 - 前后端类型手写镜像已补充契约测试：新增 `backend/tests/test_frontend_contract.py`，按字段名、可空性、数组和对象形状校验后端 Pydantic 响应 schema 与前端 `features/*/types.ts` 的主要响应类型，降低后续手写类型漂移风险。
+- 全局 CSS 已按职责拆分：`frontend/src/index.css` 改为聚合导入，新增 `frontend/src/styles/base.css`、`public.css`、`prose.css`、`components.css`、`admin.css`、`forms.css` 和 `responsive.css`，保持原有规则顺序和视觉行为不变。
 
 ### 待修复清单
 
-- P3：全局 CSS 已经过大。`frontend/src/index.css` 集中了基础样式、公开站点、后台布局、表单、弹窗、文章排版和响应式规则；后续应按 `base.css`、`public.css`、`admin.css`、`components.css`、`prose.css` 拆分，或逐步转为 CSS modules。
+- 无。
 
 ### 进行中
 
@@ -62,7 +63,7 @@
 
 ### 下一步
 
-- 拆分 `frontend/src/index.css`，按基础样式、组件、公开站点、后台和正文排版分层维护，并保持现有页面视觉行为不变。
+- 执行全量验证：后端 ruff/pytest/Alembic SQL、前端 lint/build、Docker Compose 配置展开和 Git 空白检查；通过后将 `dev` 合并到 `main` 并推送。
 
 ### 验证
 
@@ -110,6 +111,9 @@
 - 后端管理端 read model 收敛后已运行 `uv run pytest tests/test_admin_content_api.py tests/test_admin_files_api.py tests/test_admin_logs_api.py tests/test_admin_settings_api.py tests/test_public_content_api.py tests/test_content_service.py tests/test_log_service.py`，71 个测试通过；仍存在 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 状态常量的上游弃用警告。
 - 前后端类型契约测试新增后已运行 `uv run ruff check tests/test_frontend_contract.py`，通过。
 - 前后端类型契约测试新增后已运行 `uv run pytest tests/test_frontend_contract.py -q`，23 个测试通过。
+- CSS 拆分后已用脚本确认 7 个样式分层按导入顺序拼接后，忽略空白与原 `frontend/src/index.css` 规则内容一致。
+- CSS 拆分后已运行 `npm.cmd run lint`，通过。
+- CSS 拆分后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 
 ## 2026-06-18
 

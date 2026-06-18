@@ -1,0 +1,456 @@
+:root {
+  /* Yohaku token mirror from @yohaku/design-system. */
+  --surface-paper: #fefefb;
+  --color-neutral-1: #f9f8f5;
+  --color-neutral-2: #f0efeb;
+  --color-neutral-3: #e3e1db;
+  --color-neutral-4: #d0cec6;
+  --color-neutral-5: #a8a69f;
+  --color-neutral-6: #787670;
+  --color-neutral-7: #5c5a55;
+  --color-neutral-8: #403f3a;
+  --color-neutral-9: #24231f;
+  --color-neutral-10: #141312;
+  --color-accent: #c56473;
+  --color-info: #3d6896;
+  --color-success: #5e9f7e;
+  --color-warning: #a87a3d;
+  --color-error: #a64953;
+  --color-border: rgba(20, 19, 18, 0.1);
+  --surface-glass: rgba(249, 248, 245, 0.72);
+  --surface-panel: rgba(240, 239, 235, 0.7);
+  --selection-bg: rgba(197, 100, 115, 0.28);
+  --selection-color: var(--color-neutral-10);
+  --article-link-mark: rgba(197, 100, 115, 0.24);
+  --article-link-mark-hover: rgba(197, 100, 115, 0.16);
+  --shadow-whisper: 0 4px 24px rgba(20, 19, 18, 0.05);
+  --font-sans:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --font-serif:
+    "Noto Serif CJK SC", "Noto Serif SC", "Source Han Serif SC", SongTi SC,
+    STSong, Georgia, serif;
+
+  color: var(--color-neutral-9);
+  background: var(--surface-paper);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-color);
+  text-shadow: none;
+}
+
+::-moz-selection {
+  background: var(--selection-bg);
+  color: var(--selection-color);
+  text-shadow: none;
+}
+
+@media (pointer: fine) {
+  .public-shell ::selection,
+  .content-preview ::selection,
+  :where(.post-prose, .content-preview) *::selection {
+    background: transparent;
+  }
+
+  .public-shell ::-moz-selection,
+  .content-preview ::-moz-selection,
+  :where(.post-prose, .content-preview) *::-moz-selection {
+    background: transparent;
+  }
+
+  :where(
+      input,
+      textarea,
+      select,
+      [contenteditable="true"],
+      .sr-only,
+      [aria-hidden="true"]
+    )::selection {
+    background: var(--selection-bg);
+  }
+
+  :where(
+      input,
+      textarea,
+      select,
+      [contenteditable="true"],
+      .sr-only,
+      [aria-hidden="true"]
+    )::-moz-selection {
+    background: var(--selection-bg);
+  }
+}
+
+.selection-brush-layer {
+  position: fixed;
+  z-index: 2147483000;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+.selection-brush-stroke {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  overflow: hidden;
+  border-radius: 8px;
+  opacity: 0.98;
+  backface-visibility: hidden;
+  contain: layout paint style;
+  transform-origin: left center;
+  will-change: transform, width, height, opacity, clip-path;
+  animation: selection-brush-in 160ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.selection-brush-stroke__ink {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: 7px 10px 8px 6px;
+  transform: translateZ(0);
+  background:
+    linear-gradient(
+      100deg,
+      transparent 0 2%,
+      rgba(197, 100, 115, 0.22) 3%,
+      rgba(197, 100, 115, 0.44) 14%,
+      rgba(197, 100, 115, 0.36) 66%,
+      rgba(197, 100, 115, 0.2) 92%,
+      transparent 100%
+    ),
+    repeating-linear-gradient(
+      9deg,
+      rgba(254, 254, 251, 0.2) 0 1px,
+      transparent 1px 4px
+    ),
+    radial-gradient(
+      ellipse at 12% 42%,
+      rgba(197, 100, 115, 0.18) 0 18%,
+      transparent 52%
+    ),
+    radial-gradient(
+      ellipse at 88% 60%,
+      rgba(197, 100, 115, 0.16) 0 22%,
+      transparent 56%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(197, 100, 115, 0.14),
+    0 1px 8px rgba(197, 100, 115, 0.14);
+  clip-path: polygon(
+    8px 6%,
+    calc(100% - 4px) 0,
+    100% 45%,
+    calc(100% - 9px) 96%,
+    5px 100%,
+    0 54%
+  );
+}
+
+.selection-brush-stroke:nth-child(2n) .selection-brush-stroke__ink {
+  border-radius: 9px 6px 8px 10px;
+  clip-path: polygon(
+    3px 0,
+    calc(100% - 8px) 5%,
+    100% 56%,
+    calc(100% - 4px) 100%,
+    10px 92%,
+    0 40%
+  );
+}
+
+.selection-brush-stroke__ink::before,
+.selection-brush-stroke__ink::after {
+  position: absolute;
+  inset: 1px 5px;
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+}
+
+.selection-brush-stroke__ink::before {
+  background:
+    linear-gradient(
+      92deg,
+      transparent 0 8%,
+      rgba(254, 254, 251, 0.26) 18%,
+      transparent 32% 64%,
+      rgba(254, 254, 251, 0.16) 74%,
+      transparent 92% 100%
+    ),
+    repeating-linear-gradient(
+      96deg,
+      transparent 0 10px,
+      rgba(197, 100, 115, 0.12) 10px 12px,
+      transparent 12px 22px
+    );
+}
+
+.selection-brush-stroke__ink::after {
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse at 0% 48%,
+      transparent 0 22%,
+      rgba(197, 100, 115, 0.28) 23% 56%,
+      transparent 57%
+    ),
+    radial-gradient(
+      ellipse at 100% 54%,
+      transparent 0 18%,
+      rgba(197, 100, 115, 0.3) 19% 58%,
+      transparent 59%
+    );
+  filter: blur(0.15px);
+}
+
+@keyframes selection-brush-in {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0 round 6px);
+  }
+
+  to {
+    opacity: 0.95;
+    clip-path: inset(0 0 0 0 round 6px);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  position: relative;
+  overflow-x: hidden;
+  min-width: 320px;
+  min-height: 100svh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 18% 92%, rgba(197, 100, 115, 0.08), transparent 18rem),
+    radial-gradient(circle at 78% 88%, rgba(61, 104, 150, 0.06), transparent 20rem),
+    var(--surface-paper);
+}
+
+body::before {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background-image:
+    linear-gradient(
+      105deg,
+      transparent 0 45%,
+      rgba(61, 104, 150, 0.12) 46%,
+      transparent 48% 100%
+    ),
+    linear-gradient(
+      105deg,
+      transparent 0 60%,
+      rgba(61, 104, 150, 0.08) 61%,
+      transparent 63% 100%
+    );
+  background-size:
+    168px 256px,
+    235px 310px;
+  opacity: 0.56;
+  animation: rain-drift 18s linear infinite;
+}
+
+@keyframes rain-drift {
+  from {
+    background-position:
+      0 0,
+      0 0;
+  }
+
+  to {
+    background-position:
+      168px 256px,
+      235px 310px;
+  }
+}
+
+@keyframes soft-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes public-nav-in {
+  from {
+    opacity: 0;
+    transform: translate(50%, -12px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(50%, 0) scale(1);
+  }
+}
+
+@keyframes public-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes public-reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes public-line-draw {
+  from {
+    transform: scaleY(0);
+  }
+
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes public-line-draw-x {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes public-avatar-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes admin-sidebar-in {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes admin-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.992);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes admin-list-panel-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes admin-modal-backdrop-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes admin-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+#root {
+  min-height: 100svh;
+}
+

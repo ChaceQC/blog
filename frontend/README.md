@@ -2,7 +2,7 @@
 
 本目录是个人博客系统的 React + TypeScript + Vite 前端工程。
 
-前台 UI 采用 Innei/Yohaku 风格重新设计，依赖 `@yohaku/design-system` 作为设计 token 契约参考。当前工程未接入 Tailwind v4，因此运行时 CSS 在 `src/index.css` 中镜像 Yohaku 的 Pure 中性色、梅色 accent、serif 标题、纸面背景、细分隔线、轻玻璃和底部浮动导航，而不是直接导入包内 `@theme` CSS。
+前台 UI 采用 Innei/Yohaku 风格重新设计，依赖 `@yohaku/design-system` 作为设计 token 契约参考。当前工程未接入 Tailwind v4，因此运行时 CSS 在 `src/styles/base.css` 中镜像 Yohaku 的 Pure 中性色、梅色 accent、serif 标题、纸面背景、细分隔线、轻玻璃和底部浮动导航，而不是直接导入包内 `@theme` CSS；`src/index.css` 只负责按顺序聚合各样式分层。
 
 ## 本地开发
 
@@ -27,6 +27,7 @@ npm run build
 - `src/features/seo`：公开页面标题、description、canonical 和 Open Graph 元信息维护。
 - `src/api`：接口客户端与请求封装。
 - `src/components`：跨模块复用组件。
+- `src/styles`：全局样式分层，按 `base`、`public`、`prose`、`components`、`admin`、`forms`、`responsive` 维护。
 
 ## UI 约定
 
@@ -35,7 +36,7 @@ npm run build
 - `/categories/:slug` 与 `/tags/:slug` 复用文章归档视图，作为分类和标签的稳定公开 URL；归档筛选入口应优先链接到这两类路径。
 - `/:slug` 用于后台发布的独立页面详情，必须放在前台固定路由之后，避免抢占 `/posts`、`/links`、`/files`、`/sites` 等系统入口。
 - 后台登录与工作台沿用同一套 token，但优先保证管理界面的可读性和操作效率。
-- 不直接在业务组件中写原始色值；新增颜色应先映射到 `src/index.css` 的 Yohaku token 变量。
+- 不直接在业务组件中写原始色值；新增颜色应先映射到 `src/styles/base.css` 的 Yohaku token 变量。
 - 公开首页、公开布局品牌、后台布局品牌和页面标题优先读取 `/api/public/settings/site-profile` 的真实站点资料，不再回退到演示站点文案。
 - 首页社交入口使用统一细线图标展示，后台站点资料页可增删社交入口；新增入口应保持图标尺寸、颜色和邮箱入口一致。
 - 公开文章、友链、站点目录和文件列表分页依赖接口返回的真实 `total`，页面应直接显示总页数，不再用多取一条记录判断下一页。
