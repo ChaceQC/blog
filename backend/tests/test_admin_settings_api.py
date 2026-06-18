@@ -48,6 +48,9 @@ class FakeSettingService:
             updated_at=None,
         )
 
+    def admin_setting_response(self, setting: object) -> object:
+        return setting
+
 
 class FakeEncryptionSessionManager:
     def __init__(self, decrypted_payload: dict[str, object] | None = None) -> None:

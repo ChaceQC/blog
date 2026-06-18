@@ -17,6 +17,60 @@ class AccessLogDedupeRule:
     window_seconds: int
 
 
+@dataclass(frozen=True)
+class AuditLogRead:
+    id: int
+    actor_id: int | None
+    action: str
+    entity_type: str
+    entity_id: int | None
+    before_json: dict[str, Any] | None
+    after_json: dict[str, Any] | None
+    ip: str | None
+    user_agent: str | None
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class AccessLogRead:
+    id: int
+    access_type: str
+    method: str
+    path: str
+    status_code: int
+    entity_type: str | None
+    entity_id: int | None
+    ip: str | None
+    user_agent: str | None
+    detail_json: dict[str, Any] | None
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class LoginLogRead:
+    id: int
+    user_id: int | None
+    username: str
+    success: bool
+    ip: str | None
+    user_agent: str | None
+    reason: str | None
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class SecurityEventRead:
+    id: int
+    event_type: str
+    severity: str
+    actor_id: int | None
+    ip: str | None
+    user_agent: str | None
+    path: str | None
+    detail_json: dict[str, Any] | None
+    created_at: datetime
+
+
 class AccessLogDedupeBackend(Protocol):
     def should_record(
         self,
@@ -104,32 +158,39 @@ class LogService:
         *,
         limit: int,
         offset: int,
-    ) -> Sequence[AuditLog]:
-        return await self.repository.list_audit_logs(limit=limit, offset=offset)
+    ) -> Sequence[AuditLogRead]:
+        logs = await self.repository.list_audit_logs(limit=limit, offset=offset)
+        return [audit_log_read(log) for log in logs]
 
     async def list_access_logs(
         self,
         *,
         limit: int,
         offset: int,
-    ) -> Sequence[AccessLog]:
-        return await self.repository.list_access_logs(limit=limit, offset=offset)
+    ) -> Sequence[AccessLogRead]:
+        logs = await self.repository.list_access_logs(limit=limit, offset=offset)
+        return [access_log_read(log) for log in logs]
 
     async def list_login_logs(
         self,
         *,
         limit: int,
         offset: int,
-    ) -> Sequence[LoginLog]:
-        return await self.repository.list_login_logs(limit=limit, offset=offset)
+    ) -> Sequence[LoginLogRead]:
+        logs = await self.repository.list_login_logs(limit=limit, offset=offset)
+        return [login_log_read(log) for log in logs]
 
     async def list_security_events(
         self,
         *,
         limit: int,
         offset: int,
-    ) -> Sequence[SecurityEvent]:
-        return await self.repository.list_security_events(limit=limit, offset=offset)
+    ) -> Sequence[SecurityEventRead]:
+        events = await self.repository.list_security_events(
+            limit=limit,
+            offset=offset,
+        )
+        return [security_event_read(event) for event in events]
 
     async def record_security_event(
         self,
@@ -248,6 +309,64 @@ def build_access_log_dedupe_key(
     normalized_ip = ip or "unknown"
     normalized_method = method.upper()
     return f"{normalized_ip}:{normalized_method}:{path}"
+
+
+def audit_log_read(log: AuditLog) -> AuditLogRead:
+    return AuditLogRead(
+        id=log.id,
+        actor_id=log.actor_id,
+        action=log.action,
+        entity_type=log.entity_type,
+        entity_id=log.entity_id,
+        before_json=log.before_json,
+        after_json=log.after_json,
+        ip=log.ip,
+        user_agent=log.user_agent,
+        created_at=log.created_at,
+    )
+
+
+def access_log_read(log: AccessLog) -> AccessLogRead:
+    return AccessLogRead(
+        id=log.id,
+        access_type=log.access_type,
+        method=log.method,
+        path=log.path,
+        status_code=log.status_code,
+        entity_type=log.entity_type,
+        entity_id=log.entity_id,
+        ip=log.ip,
+        user_agent=log.user_agent,
+        detail_json=log.detail_json,
+        created_at=log.created_at,
+    )
+
+
+def login_log_read(log: LoginLog) -> LoginLogRead:
+    return LoginLogRead(
+        id=log.id,
+        user_id=log.user_id,
+        username=log.username,
+        success=log.success,
+        ip=log.ip,
+        user_agent=log.user_agent,
+        reason=log.reason,
+        created_at=log.created_at,
+    )
+
+
+def security_event_read(event: SecurityEvent) -> SecurityEventRead:
+    return SecurityEventRead(
+        id=event.id,
+        event_type=event.event_type,
+        severity=event.severity,
+        actor_id=event.actor_id,
+        ip=event.ip,
+        user_agent=event.user_agent,
+        path=event.path,
+        detail_json=event.detail_json,
+        created_at=event.created_at,
+    )
 
 
 class InMemoryAccessLogDedupeBackend:

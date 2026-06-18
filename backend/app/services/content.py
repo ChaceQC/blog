@@ -8,10 +8,16 @@ from app.core.auth import utc_now
 from app.models.content import Page, Post
 from app.providers.markdown import MarkdownRenderer, count_words
 from app.services.content_read_models import (
+    AdminPageRead,
+    AdminPostRead,
     PublicPageDetailRead,
     PublicPostDetailRead,
     PublicPostRead,
     PublicTaxonomyRead,
+    admin_page_read,
+    admin_page_reads,
+    admin_post_read,
+    admin_post_reads,
     public_page_detail_read,
     public_post_detail_read,
     public_post_read,
@@ -226,6 +232,15 @@ class ContentService:
     async def list_posts(self, *, limit: int, offset: int) -> Sequence[Post]:
         return await self.repository.list_posts(limit=limit, offset=offset)
 
+    async def list_admin_posts(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> Sequence[AdminPostRead]:
+        posts = await self.repository.list_posts(limit=limit, offset=offset)
+        return admin_post_reads(posts)
+
     async def list_public_posts(
         self,
         *,
@@ -294,6 +309,12 @@ class ContentService:
         if post is None:
             raise ContentNotFoundError("post not found")
         return post
+
+    async def get_admin_post(self, post_id: int) -> AdminPostRead:
+        return admin_post_read(await self.get_post(post_id))
+
+    def admin_post_response(self, post: Post) -> AdminPostRead:
+        return admin_post_read(post)
 
     async def get_public_post_by_slug(self, slug: str) -> PublicPostDetailRead:
         post = await self.repository.get_public_post_by_slug(slug)
@@ -402,11 +423,26 @@ class ContentService:
     async def list_pages(self, *, limit: int, offset: int) -> Sequence[Page]:
         return await self.repository.list_pages(limit=limit, offset=offset)
 
+    async def list_admin_pages(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> Sequence[AdminPageRead]:
+        pages = await self.repository.list_pages(limit=limit, offset=offset)
+        return admin_page_reads(pages)
+
     async def get_page(self, page_id: int) -> Page:
         page = await self.repository.get_page(page_id)
         if page is None:
             raise ContentNotFoundError("page not found")
         return page
+
+    async def get_admin_page(self, page_id: int) -> AdminPageRead:
+        return admin_page_read(await self.get_page(page_id))
+
+    def admin_page_response(self, page: Page) -> AdminPageRead:
+        return admin_page_read(page)
 
     async def get_public_page_by_slug(self, slug: str) -> PublicPageDetailRead:
         page = await self.repository.get_public_page_by_slug(slug)

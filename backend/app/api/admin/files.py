@@ -74,7 +74,7 @@ async def list_files(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
-    files = await service.list_files(limit=limit, offset=offset)
+    files = await service.list_admin_files(limit=limit, offset=offset)
     return await _files_response(
         AdminFileListResponse(
             items=[AdminFileItem.model_validate(file) for file in files],
@@ -135,7 +135,7 @@ async def upload_file(
         after_json=_file_audit_payload(uploaded_file),
     )
     return await _files_response(
-        AdminFileItem.model_validate(uploaded_file),
+        AdminFileItem.model_validate(service.admin_file_response(uploaded_file)),
         request=request,
         encryption_manager=encryption_manager,
     )
@@ -169,7 +169,7 @@ async def delete_file(
         after_json=_file_audit_payload(file),
     )
     return await _files_response(
-        AdminFileItem.model_validate(file),
+        AdminFileItem.model_validate(service.admin_file_response(file)),
         request=request,
         encryption_manager=encryption_manager,
     )

@@ -53,4 +53,4 @@ class PublicSiteProfileResponse(BaseModel):
     musings: list[dict[str, str]]
     social_links: list[dict[str, str]]
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", from_attributes=True)

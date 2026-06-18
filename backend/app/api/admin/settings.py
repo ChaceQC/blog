@@ -102,7 +102,7 @@ async def update_setting(
         },
     )
     return await _settings_response(
-        AdminSettingItem.model_validate(setting),
+        AdminSettingItem.model_validate(service.admin_setting_response(setting)),
         request=request,
         encryption_manager=encryption_manager,
     )

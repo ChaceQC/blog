@@ -75,7 +75,7 @@ async def list_posts(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
-    posts = await service.list_posts(limit=limit, offset=offset)
+    posts = await service.list_admin_posts(limit=limit, offset=offset)
     return await _content_response(
         AdminPostListResponse(
             items=[AdminPostItem.model_validate(post) for post in posts],
@@ -135,7 +135,7 @@ async def create_post(
         after_json=_post_audit_payload(post),
     )
     return await _content_response(
-        AdminPostItem.model_validate(post),
+        AdminPostItem.model_validate(service.admin_post_response(post)),
         request=request,
         encryption_manager=encryption_manager,
     )
@@ -183,7 +183,7 @@ async def get_post(
     encryption_manager: EncryptionSessionManagerDependency,
 ) -> EncryptedApiResponse:
     try:
-        post = await service.get_post(post_id)
+        post = await service.get_admin_post(post_id)
     except ContentNotFoundError as exc:
         raise _not_found("post not found") from exc
 
@@ -236,7 +236,7 @@ async def update_post(
         },
     )
     return await _content_response(
-        AdminPostItem.model_validate(post),
+        AdminPostItem.model_validate(service.admin_post_response(post)),
         request=request,
         encryption_manager=encryption_manager,
     )
@@ -269,7 +269,7 @@ async def publish_post(
         after_json=_post_audit_payload(post),
     )
     return await _content_response(
-        AdminPostItem.model_validate(post),
+        AdminPostItem.model_validate(service.admin_post_response(post)),
         request=request,
         encryption_manager=encryption_manager,
     )
@@ -284,7 +284,7 @@ async def list_pages(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
-    pages = await service.list_pages(limit=limit, offset=offset)
+    pages = await service.list_admin_pages(limit=limit, offset=offset)
     return await _content_response(
         AdminPageListResponse(
             items=[AdminPageItem.model_validate(page) for page in pages],
@@ -336,7 +336,7 @@ async def create_page(
         after_json=_page_audit_payload(page),
     )
     return await _content_response(
-        AdminPageItem.model_validate(page),
+        AdminPageItem.model_validate(service.admin_page_response(page)),
         request=request,
         encryption_manager=encryption_manager,
     )
@@ -351,7 +351,7 @@ async def get_page(
     encryption_manager: EncryptionSessionManagerDependency,
 ) -> EncryptedApiResponse:
     try:
-        page = await service.get_page(page_id)
+        page = await service.get_admin_page(page_id)
     except ContentNotFoundError as exc:
         raise _not_found("page not found") from exc
 
@@ -402,7 +402,7 @@ async def update_page(
         },
     )
     return await _content_response(
-        AdminPageItem.model_validate(page),
+        AdminPageItem.model_validate(service.admin_page_response(page)),
         request=request,
         encryption_manager=encryption_manager,
     )

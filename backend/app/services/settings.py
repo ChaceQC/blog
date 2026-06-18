@@ -76,21 +76,47 @@ class VirtualSetting:
     updated_at: datetime | None
 
 
+@dataclass(frozen=True)
+class AdminSettingRead:
+    id: int | None
+    key_name: str
+    value_json: dict[str, Any]
+    group_name: str
+    is_public: bool
+    updated_by: int | None
+    updated_at: datetime | None
+
+
+@dataclass(frozen=True)
+class PublicSiteProfileRead:
+    title: str
+    owner: str
+    avatar_url: str
+    description: str
+    quote: str
+    musings: list[dict[str, str]]
+    social_links: list[dict[str, str]]
+
+
 class SettingService:
     def __init__(self, repository: SettingRepositoryProtocol) -> None:
         self.repository = repository
 
-    async def list_settings(self) -> list[Setting | VirtualSetting]:
+    async def list_settings(self) -> list[AdminSettingRead]:
         settings = list(await self.repository.list_settings())
         if not any(setting.key_name == SITE_PROFILE_KEY for setting in settings):
             settings.insert(0, self.default_site_profile())
-        return settings
+        return [self.admin_setting_response(setting) for setting in settings]
 
     async def get_site_profile(self) -> Setting | VirtualSetting:
         setting = await self.repository.get_setting(SITE_PROFILE_KEY)
         if setting is None or not setting.is_public:
             return self.default_site_profile()
         return setting
+
+    async def get_public_site_profile(self) -> PublicSiteProfileRead:
+        setting = await self.get_site_profile()
+        return self.public_site_profile_response(setting)
 
     async def update_setting(
         self,
@@ -113,6 +139,61 @@ class SettingService:
         await self.repository.commit()
         await self.repository.refresh(setting)
         return setting
+
+    def admin_setting_response(
+        self,
+        setting: Setting | VirtualSetting,
+    ) -> AdminSettingRead:
+        return AdminSettingRead(
+            id=setting.id,
+            key_name=setting.key_name,
+            value_json=dict(setting.value_json),
+            group_name=setting.group_name,
+            is_public=setting.is_public,
+            updated_by=setting.updated_by,
+            updated_at=setting.updated_at,
+        )
+
+    def public_site_profile_response(
+        self,
+        setting: Setting | VirtualSetting,
+    ) -> PublicSiteProfileRead:
+        value = setting.value_json
+        avatar_url = _site_profile_string(
+            value.get("avatar_url"),
+            DEFAULT_SITE_PROFILE["avatar_url"],
+            max_length=SITE_PROFILE_TEXT_LIMITS["avatar_url"],
+        )
+        try:
+            avatar_url = validate_public_image_src(avatar_url)
+        except ValueError:
+            avatar_url = str(DEFAULT_SITE_PROFILE["avatar_url"])
+
+        return PublicSiteProfileRead(
+            title=_site_profile_string(
+                value.get("title"),
+                DEFAULT_SITE_PROFILE["title"],
+                max_length=SITE_PROFILE_TEXT_LIMITS["title"],
+            ),
+            owner=_site_profile_string(
+                value.get("owner"),
+                DEFAULT_SITE_PROFILE["owner"],
+                max_length=SITE_PROFILE_TEXT_LIMITS["owner"],
+            ),
+            avatar_url=avatar_url,
+            description=_site_profile_string(
+                value.get("description"),
+                DEFAULT_SITE_PROFILE["description"],
+                max_length=SITE_PROFILE_TEXT_LIMITS["description"],
+            ),
+            quote=_site_profile_string(
+                value.get("quote"),
+                DEFAULT_SITE_PROFILE["quote"],
+                max_length=SITE_PROFILE_TEXT_LIMITS["quote"],
+            ),
+            musings=_site_profile_musings(value.get("musings")),
+            social_links=_site_profile_social_links(value.get("social_links")),
+        )
 
     def default_site_profile(self) -> VirtualSetting:
         return VirtualSetting(
@@ -158,6 +239,18 @@ def _normalized_text(value: object, *, fallback: object, max_length: int) -> str
     return value.strip()[:max_length]
 
 
+def _site_profile_string(
+    value: object,
+    fallback: object,
+    *,
+    max_length: int,
+) -> str:
+    selected = value if isinstance(value, str) and value else fallback
+    if not isinstance(selected, str):
+        return ""
+    return selected.strip()[:max_length]
+
+
 def _normalize_musings(value: list[object]) -> list[dict[str, str]]:
     musings: list[dict[str, str]] = []
     for item in value:
@@ -181,6 +274,12 @@ def _normalize_musings(value: list[object]) -> list[dict[str, str]]:
     return musings
 
 
+def _site_profile_musings(value: object) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    return _normalize_musings(value)
+
+
 def _normalize_social_links(value: list[object]) -> list[dict[str, str]]:
     links: list[dict[str, str]] = []
     for item in value:
@@ -198,7 +297,17 @@ def _normalize_social_links(value: list[object]) -> list[dict[str, str]]:
         )
         if not label or not raw_url:
             continue
-        links.append({"label": label, "url": validate_public_href(raw_url)})
+        try:
+            safe_url = validate_public_href(raw_url)
+        except ValueError:
+            continue
+        links.append({"label": label, "url": safe_url})
         if len(links) >= SITE_PROFILE_SOCIAL_LINK_LIMIT:
             break
     return links
+
+
+def _site_profile_social_links(value: object) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    return _normalize_social_links(value)

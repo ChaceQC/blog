@@ -29,6 +29,7 @@ from app.services.content_read_models import (
 from app.services.encryption import ActiveEncryptionSessionLimitExceeded
 from app.services.links import CreateFriendLinkCommand, SiteNavItemNotFoundError
 from app.services.rate_limit import RateLimitRule, RateLimitService
+from app.services.settings import SettingService
 
 
 class FakeEncryptionSessionManager:
@@ -389,6 +390,14 @@ class FakeSettingService:
                 ],
             },
         )
+
+    async def get_public_site_profile(self) -> object:
+        setting = await self.get_site_profile()
+        return _site_profile_response(setting)
+
+
+def _site_profile_response(setting: object) -> object:
+    return SettingService(repository=object()).public_site_profile_response(setting)
 
 
 def test_public_encryption_session_uses_public_scope() -> None:
@@ -930,6 +939,10 @@ def test_public_site_profile_filters_unsafe_social_href() -> None:
                 },
             )
 
+        async def get_public_site_profile(self) -> object:
+            setting = await self.get_site_profile()
+            return _site_profile_response(setting)
+
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()
     logs = FakeLogService()
@@ -974,6 +987,10 @@ def test_public_site_profile_bounds_legacy_oversized_values() -> None:
                     ],
                 },
             )
+
+        async def get_public_site_profile(self) -> object:
+            setting = await self.get_site_profile()
+            return _site_profile_response(setting)
 
     client = TestClient(app)
     manager = FakeEncryptionSessionManager()

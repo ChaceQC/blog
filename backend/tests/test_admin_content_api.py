@@ -17,6 +17,9 @@ from app.services.content import CreatePostCommand
 
 
 class FakeContentService:
+    async def list_admin_posts(self, *, limit: int, offset: int) -> list[object]:
+        return await self.list_posts(limit=limit, offset=offset)
+
     async def list_posts(self, *, limit: int, offset: int) -> list[object]:
         assert limit == 1
         assert offset == 0
@@ -66,6 +69,9 @@ class FakeContentService:
             created_at=datetime(2026, 6, 16, tzinfo=UTC),
             updated_at=datetime(2026, 6, 16, tzinfo=UTC),
         )
+
+    def admin_post_response(self, post: object) -> object:
+        return post
 
     def render_preview(self, content_md: str) -> str:
         assert content_md

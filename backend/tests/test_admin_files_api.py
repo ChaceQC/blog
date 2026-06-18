@@ -27,6 +27,9 @@ from app.services.files import (
 
 
 class FakeFileService:
+    async def list_admin_files(self, *, limit: int, offset: int) -> list[object]:
+        return await self.list_files(limit=limit, offset=offset)
+
     async def list_files(self, *, limit: int, offset: int) -> list[object]:
         assert limit == 1
         assert offset == 0
@@ -66,6 +69,9 @@ class FakeFileService:
     async def delete_file(self, file_id: int) -> object:
         assert file_id == 1
         return _file_item(status="deleted")
+
+    def admin_file_response(self, file: object) -> object:
+        return file
 
     async def create_temporary_access(
         self,

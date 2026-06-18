@@ -7,6 +7,45 @@ from app.providers.markdown import count_words
 
 
 @dataclass(frozen=True)
+class AdminPostRead:
+    id: int
+    title: str
+    slug: str
+    summary: str | None
+    content_md: str
+    content_html: str
+    status: str
+    visibility: str
+    cover_file_id: int | None
+    author_id: int
+    word_count: int
+    seo_title: str | None
+    seo_description: str | None
+    seo_keywords: str | None
+    category_names: list[str]
+    tag_names: list[str]
+    published_at: datetime | None
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
+@dataclass(frozen=True)
+class AdminPageRead:
+    id: int
+    title: str
+    slug: str
+    content_md: str
+    content_html: str
+    status: str
+    show_in_nav: bool
+    sort_order: int
+    seo_title: str | None
+    seo_description: str | None
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
+@dataclass(frozen=True)
 class PublicPostRead:
     id: int
     title: str
@@ -66,6 +105,34 @@ def public_post_read(post: Post) -> PublicPostRead:
     )
 
 
+def admin_post_read(post: Post) -> AdminPostRead:
+    return AdminPostRead(
+        id=post.id,
+        title=post.title,
+        slug=post.slug,
+        summary=post.summary,
+        content_md=post.content_md,
+        content_html=post.content_html,
+        status=post.status,
+        visibility=post.visibility,
+        cover_file_id=post.cover_file_id,
+        author_id=post.author_id,
+        word_count=max(post.word_count, count_words(post.content_md)),
+        seo_title=post.seo_title,
+        seo_description=post.seo_description,
+        seo_keywords=post.seo_keywords,
+        category_names=list(post.category_names),
+        tag_names=list(post.tag_names),
+        published_at=post.published_at,
+        created_at=post.created_at,
+        updated_at=post.updated_at,
+    )
+
+
+def admin_post_reads(posts: Sequence[Post]) -> list[AdminPostRead]:
+    return [admin_post_read(post) for post in posts]
+
+
 def public_post_detail_read(post: Post) -> PublicPostDetailRead:
     item = public_post_read(post)
     return PublicPostDetailRead(
@@ -97,6 +164,27 @@ def public_page_detail_read(page: Page) -> PublicPageDetailRead:
         seo_description=page.seo_description,
         updated_at=page.updated_at,
     )
+
+
+def admin_page_read(page: Page) -> AdminPageRead:
+    return AdminPageRead(
+        id=page.id,
+        title=page.title,
+        slug=page.slug,
+        content_md=page.content_md,
+        content_html=page.content_html,
+        status=page.status,
+        show_in_nav=page.show_in_nav,
+        sort_order=page.sort_order,
+        seo_title=page.seo_title,
+        seo_description=page.seo_description,
+        created_at=page.created_at,
+        updated_at=page.updated_at,
+    )
+
+
+def admin_page_reads(pages: Sequence[Page]) -> list[AdminPageRead]:
+    return [admin_page_read(page) for page in pages]
 
 
 def public_taxonomy_read(item: Mapping[str, object]) -> PublicTaxonomyRead:
