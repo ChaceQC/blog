@@ -29,11 +29,11 @@
 - 宿主机 Nginx 维护脚本补齐：`backup_mysql.sh`、`restore_mysql.sh` 和 `upgrade_backend_db.sh` 支持通过 `COMPOSE_EXTRA_FILES` 追加服务器本地覆盖文件，文档已同步 `deploy/docker-compose.local.yml` 示例。
 - 前端后台友链和站点导航编辑页的“打开链接”预览按钮新增协议白名单，只允许 `http/https/mailto/站内路径`，未保存的危险协议会降级为 `#`。
 - 修复公开 API 反向依赖后台模块的架构问题：新增 `backend/app/api/dependencies.py`、`backend/app/api/encrypted_response.py` 和 `backend/app/api/limits.py` 作为 admin/public 共享 API 层，公开路由不再从 `app.api.admin.*` 引入服务依赖、加密响应或限流工具；后台路由也改为直接引用共享层，`app.api.admin.dependencies` 仅保留后台认证、CSRF、权限和后台专属依赖。
+- 拆分公开路由职责：`backend/app/api/public/router.py` 缩减为子路由聚合器，新增 `common.py`、`taxonomy.py`、`posts.py`、`settings.py` 和 `links.py`，分别承载公开共享校验/日志、分类标签、文章页面、站点资料、友链与站点导航逻辑；公开 URL、响应模型和错误码保持不变。
 
 ### 待修复清单
 
 - P1：`FileService` 过度集中，职责过多。`backend/app/services/files.py` 同时承载上传校验、存储、清理、下载鉴权、缩略图、临时 token、文章图片 URL 签名和 HTML URL 重写；后续应拆分为 `FileUploadService`、`FileAccessService`、`ThumbnailService`、`FileCleanupService`、`FileTokenSigner` 和 `ArticleAssetUrlSigner` 等更小职责。
-- P1：公开路由文件过大，路由层承担了太多业务装配。`backend/app/api/public/router.py` 同时处理分类、标签、文章、页面、站点资料、友链、站点导航、访问日志、加密响应、DTO 转换和 URL 签名；后续应拆为 `public/posts.py`、`public/taxonomy.py`、`public/settings.py`、`public/links.py`，并把响应装配移动到 assembler/presenter 层。
 - P2：Service 返回 ORM 模型，API 层直接做 DTO 装配。`ContentService`、`FileService`、`LinkService` 等服务仍返回 SQLAlchemy 模型或带 ORM 透传包装对象，API 再调用 `model_validate`；后续应逐步引入 read model / domain DTO，至少先覆盖公开读取接口，降低 API、Service、Repository 对 ORM 的共同耦合。
 - P2：更新逻辑大量使用 `dict + setattr`，类型边界偏弱。`backend/app/services/content.py`、`backend/app/services/links.py` 和 `backend/app/services/link_groups.py` 的更新入口依赖 `changes: dict[...]` 与白名单 `setattr`；后续应改为明确的 `UpdatePostCommand`、`UpdateFriendLinkCommand`、`UpdateSiteNavItemCommand` 或 Service 层专用 DTO。
 - P2：后台链接路由 CRUD 模式重复明显。`backend/app/api/admin/links.py` 多次重复“解密、校验、调用 service、捕获异常、记录审计、加密响应”流程；后续应拆分路由文件，并抽取 admin encrypted command handler 或 use-case helper 统一横切流程。

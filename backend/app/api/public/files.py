@@ -10,12 +10,12 @@ from app.api.dependencies import (
     LogServiceDependency,
     SettingsDependency,
 )
-from app.api.encrypted_response import (
-    encrypted_response,
-    validate_encryption_session,
+from app.api.encrypted_response import encrypted_response
+from app.api.public.common import (
+    record_public_access,
+    validate_public_content_session,
 )
 from app.core.encryption import EncryptionProfile
-from app.core.request import client_ip
 from app.core.urls import public_file_download_url
 from app.schemas.encryption import EncryptedApiResponse
 from app.schemas.files import (
@@ -48,7 +48,7 @@ async def list_public_files(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
-    await _validate_public_content_session(request, encryption_manager)
+    await validate_public_content_session(request, encryption_manager)
     files = await service.list_public_files(limit=limit, offset=offset)
     total = await service.count_public_files()
     response = await encrypted_response(
@@ -88,7 +88,7 @@ async def create_public_file_temporary_url(
     settings: SettingsDependency,
     logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
-    await _validate_public_content_session(request, encryption_manager)
+    await validate_public_content_session(request, encryption_manager)
     try:
         access = await service.create_public_temporary_access(
             file_id=file_id,
@@ -373,18 +373,6 @@ async def thumbnail_post_file(
     )
 
 
-async def _validate_public_content_session(
-    request: Request,
-    encryption_manager: EncryptionSessionManagerDependency,
-) -> None:
-    await validate_encryption_session(
-        request,
-        manager=encryption_manager,
-        profile=EncryptionProfile.CONTENT,
-        scope="public",
-    )
-
-
 async def _record_file_access(
     logs: LogServiceDependency,
     *,
@@ -396,14 +384,12 @@ async def _record_file_access(
     entity_id: int | None = None,
     detail_json: dict[str, object] | None = None,
 ) -> None:
-    await logs.record_access_log(
+    await record_public_access(
+        logs,
+        request=request,
         access_type=access_type,
-        method=request.method,
-        path=str(request.url.path),
         status_code=status_code,
         entity_type=entity_type,
         entity_id=file_id if entity_id is None and file_id > 0 else entity_id,
-        ip=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
         detail_json=detail_json,
     )

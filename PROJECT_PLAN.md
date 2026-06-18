@@ -94,6 +94,12 @@ backend/
       encrypted_response.py
       limits.py
       public/
+        common.py
+        posts.py
+        taxonomy.py
+        settings.py
+        links.py
+        files.py
       admin/
     core/
       config.py
@@ -111,7 +117,7 @@ backend/
 
 分层说明：
 
-- `api`：只处理 HTTP 请求、响应、依赖注入和权限校验。`api/dependencies.py`、`api/encrypted_response.py` 和 `api/limits.py` 放置公开端与后台端共享的服务依赖、加密信封和限流入口；`api/admin` 只保留后台认证、CSRF、权限和后台路由，`api/public` 不反向依赖后台模块。
+- `api`：只处理 HTTP 请求、响应、依赖注入和权限校验。`api/dependencies.py`、`api/encrypted_response.py` 和 `api/limits.py` 放置公开端与后台端共享的服务依赖、加密信封和限流入口；`api/admin` 只保留后台认证、CSRF、权限和后台路由，`api/public` 不反向依赖后台模块。公开 API 按职责拆为 `posts.py`、`taxonomy.py`、`settings.py`、`links.py`、`files.py`，`router.py` 只负责聚合子路由和公开状态接口。
 - `schemas`：Pydantic v2 请求与响应模型。
 - `services`：业务规则，例如文章发布、文件引用、友链审核。
 - `repositories`：数据库读写封装，基于 SQLAlchemy。

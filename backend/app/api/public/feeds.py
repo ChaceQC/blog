@@ -13,7 +13,7 @@ from app.api.dependencies import (
     SettingsDependency,
     SettingServiceDependency,
 )
-from app.api.public.router import PublicContentServiceDependency
+from app.api.public.common import PublicContentServiceDependency
 from app.core.request import client_ip
 from app.models.content import Post
 
