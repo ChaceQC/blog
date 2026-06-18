@@ -37,11 +37,12 @@
 - 后台文章和页面编辑状态已从路由组件抽出：新增 `useAdminPostEditor` 和 `useAdminPageEditor`，将列表查询、分页、选中态、表单态、保存/发布 mutation、预览状态和缓存失效收敛到 feature hook，`AdminPostsPage` 与 `AdminPagesPage` 只保留页面编排和 JSX。
 - API 共享依赖缓存已从模块全局状态迁移到 `FastAPI app.state`：新增 `backend/app/api/state.py`，在 `create_app()` 初始化访问日志去重 backend 和限流服务，dependency 按配置签名从当前 app state 懒加载，避免多 app 实例、测试覆盖或热切换配置时复用错误全局实例。
 - 前端重复分页、查询页码和空字符串归一化已抽为共享工具：新增 `usePagedItems`、`useQueryPage` 和 `utils/formText.ts`，后台文件/日志/文章/页面/友链/站点导航与公开文件/友链/站点/文章归档复用统一分页和 page query 逻辑，移除多处局部 `parsePage`、`emptyToNull/nullableText` 和手写 `safeListPage + slice`。
+- 后台设置页状态和表单转换已从路由组件抽出：新增 `siteProfileForm.ts` 和 `useAdminSiteProfileEditor`，将站点资料加载、表单归一化、分区状态、保存 mutation 和缓存失效移入 settings feature；`AdminSettingsPage` 缩减为页面布局、表单 JSX 和预览渲染。
 
 ### 待修复清单
 
 - P2：后台管理读取链路仍有 ORM/record 到 API schema 的直接装配。公开读取接口已先覆盖 read model；后台 `ContentService`、`FileService` 的管理端列表/详情，以及日志/设置等接口仍直接在 API 层调用 `model_validate`，后续可结合后台路由拆分继续逐步引入管理端 read model。
-- P2：前端部分管理页仍偏“页面即应用”。后台文章/页面编辑状态已先抽出 hook；`frontend/src/routes/admin/AdminSettingsPage.tsx`、`frontend/src/features/links/AdminFriendLinksPanel.tsx` 和 `frontend/src/features/links/AdminSiteNavPanel.tsx` 仍同时处理列表、分页、选中态、表单态、权限、mutation、预览和 JSX；后续应继续抽出设置、友链和站点导航的 hook/component。
+- P2：前端部分管理页仍偏“页面即应用”。后台文章/页面和设置编辑状态已先抽出 hook；`frontend/src/features/links/AdminFriendLinksPanel.tsx` 和 `frontend/src/features/links/AdminSiteNavPanel.tsx` 仍同时处理列表、选中态、表单态、权限、mutation、预览和 JSX；后续应继续抽出友链和站点导航的 hook/component。
 - P2：前后端类型手写镜像，后续容易漂移。后端 Pydantic schema 与前端 `features/*/types.ts` 手写维护同一批字段、可空性和响应结构；后续应评估基于 OpenAPI 生成 TypeScript 类型，或至少补充 contract test。
 - P3：全局 CSS 已经过大。`frontend/src/index.css` 集中了基础样式、公开站点、后台布局、表单、弹窗、文章排版和响应式规则；后续应按 `base.css`、`public.css`、`admin.css`、`components.css`、`prose.css` 拆分，或逐步转为 CSS modules。
 ### 进行中
@@ -60,7 +61,7 @@
 
 ### 下一步
 
-- 继续拆分前端后台管理大页面，优先从后台设置页、友链和站点导航面板抽出 hook/component，降低页面文件承担的状态与表单职责。
+- 继续拆分前端后台管理大页面，优先从友链和站点导航面板抽出 hook/component，降低页面文件承担的状态与表单职责。
 
 ### 验证
 
@@ -100,6 +101,8 @@
 - API 共享依赖状态迁移后已运行 `uv run pytest tests/test_rate_limit.py tests/test_log_service.py tests/test_public_content_api.py tests/test_admin_encryption_api.py`，49 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run lint`，通过。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
+- 后台设置页状态抽取后已运行 `npm.cmd run lint`，通过。
+- 后台设置页状态抽取后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 
 ## 2026-06-18
 

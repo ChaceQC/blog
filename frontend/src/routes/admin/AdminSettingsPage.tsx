@@ -1,97 +1,30 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Save, SlidersHorizontal, Trash2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
 
-import { invalidateSiteProfileCaches } from '../../app/queryInvalidation.ts'
 import {
-  listAdminSettings,
-  SITE_PROFILE_SETTING_KEY,
-  updateAdminSetting,
-} from '../../features/settings/api.ts'
-import { siteSettings } from '../../features/settings/siteSettings.ts'
+  settingSectionLabels,
+  useAdminSiteProfileEditor,
+} from '../../features/settings/useAdminSiteProfileEditor.ts'
 import { useAuth } from '../../features/auth/useAuth.ts'
-import type {
-  SiteMusing,
-  SiteSocialLink,
-} from '../../features/settings/types.ts'
 
-type SiteSettingForm = {
-  title: string
-  owner: string
-  avatarUrl: string
-  description: string
-  quote: string
-  musings: SiteMusing[]
-  socialLinks: SiteSocialLink[]
-}
-type SettingSection = 'profile' | 'musings' | 'social'
-
-const settingSectionLabels = {
-  profile: '基础资料',
-  musings: '首页碎念',
-  social: '社交入口',
-} satisfies Record<SettingSection, string>
-
-const initialForm: SiteSettingForm = {
-  title: siteSettings.title,
-  owner: siteSettings.owner,
-  avatarUrl: siteSettings.avatarUrl,
-  description: siteSettings.description,
-  quote: siteSettings.quote,
-  musings: siteSettings.musings,
-  socialLinks: siteSettings.socialLinks,
-}
+import type { SettingSection } from '../../features/settings/useAdminSiteProfileEditor.ts'
 
 export function AdminSettingsPage() {
   const { session } = useAuth()
-  const queryClient = useQueryClient()
-  const [draftForm, setDraftForm] = useState<SiteSettingForm | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-  const [activeSection, setActiveSection] = useState<SettingSection>('profile')
-  const { data, isError, isLoading } = useQuery({
-    queryKey: ['admin-settings'],
-    queryFn: listAdminSettings,
-  })
-  const siteProfileSetting = useMemo(
-    () =>
-      data?.items.find(
-        (setting) => setting.key_name === SITE_PROFILE_SETTING_KEY,
-      ) ?? null,
-    [data],
-  )
-  const loadedForm = useMemo(
-    () =>
-      siteProfileSetting
-        ? settingToForm(siteProfileSetting.value_json)
-        : initialForm,
-    [siteProfileSetting],
-  )
-  const form = draftForm ?? loadedForm
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (!session) {
-        throw new Error('当前会话已失效')
-      }
-      return updateAdminSetting(
-        SITE_PROFILE_SETTING_KEY,
-        {
-          value_json: formToSettingValue(form),
-          group_name: 'site',
-          is_public: true,
-        },
-        session.csrfToken,
-      )
-    },
-    onSuccess: () => {
-      setDraftForm(null)
-      void invalidateSiteProfileCaches(queryClient)
-      setNotice('设置已保存')
-    },
-    onError: (error) => {
-      setNotice(error instanceof Error ? error.message : '保存失败')
-    },
-  })
+  const editor = useAdminSiteProfileEditor(session)
+  const {
+    activeSection,
+    addSocialLink,
+    form,
+    isError,
+    isLoading,
+    notice,
+    removeSocialLink,
+    saveMutation,
+    setActiveSection,
+    updateForm,
+    updateMusing,
+    updateSocialLink,
+  } = editor
 
   return (
     <div className="admin-flow">
@@ -294,139 +227,4 @@ export function AdminSettingsPage() {
 
     </div>
   )
-
-  function updateForm<Key extends keyof SiteSettingForm>(
-    key: Key,
-    value: SiteSettingForm[Key],
-  ) {
-    setDraftForm((current) => ({ ...(current ?? form), [key]: value }))
-  }
-
-  function updateMusing(
-    index: number,
-    key: keyof SiteMusing,
-    value: string,
-  ) {
-    setDraftForm((current) => {
-      const nextForm = current ?? form
-      const musings = [...nextForm.musings]
-      musings[index] = { ...musings[index], [key]: value }
-      return { ...nextForm, musings }
-    })
-  }
-
-  function updateSocialLink(
-    index: number,
-    key: keyof SiteSocialLink,
-    value: string,
-  ) {
-    setDraftForm((current) => {
-      const nextForm = current ?? form
-      const socialLinks = [...nextForm.socialLinks]
-      socialLinks[index] = { ...socialLinks[index], [key]: value }
-      return { ...nextForm, socialLinks }
-    })
-  }
-
-  function addSocialLink() {
-    setDraftForm((current) => {
-      const nextForm = current ?? form
-      return {
-        ...nextForm,
-        socialLinks: [...nextForm.socialLinks, { label: '', url: '' }],
-      }
-    })
-  }
-
-  function removeSocialLink(index: number) {
-    setDraftForm((current) => {
-      const nextForm = current ?? form
-      return {
-        ...nextForm,
-        socialLinks: nextForm.socialLinks.filter((_, itemIndex) => itemIndex !== index),
-      }
-    })
-  }
-}
-
-function settingToForm(value: Record<string, unknown>): SiteSettingForm {
-  return {
-    title: stringValue(value.title, initialForm.title),
-    owner: stringValue(value.owner, initialForm.owner),
-    avatarUrl: stringValue(value.avatar_url, initialForm.avatarUrl),
-    description: stringValue(value.description, initialForm.description),
-    quote: stringValue(value.quote, initialForm.quote),
-    musings: musingsValue(value.musings),
-    socialLinks: socialLinksValue(value.social_links),
-  }
-}
-
-function formToSettingValue(form: SiteSettingForm): Record<string, unknown> {
-  return {
-    title: form.title,
-    owner: form.owner,
-    avatar_url: form.avatarUrl,
-    description: form.description,
-    quote: form.quote,
-    musings: form.musings
-      .map((musing) => ({
-        content: musing.content.trim(),
-        date: musing.date.trim(),
-      }))
-      .filter((musing) => musing.content.length > 0),
-    social_links: form.socialLinks
-      .map((link) => ({
-        label: link.label.trim(),
-        url: link.url.trim(),
-      }))
-      .filter((link) => link.label.length > 0 && link.url.length > 0)
-      .slice(0, 12),
-  }
-}
-
-function stringValue(value: unknown, fallback: string): string {
-  return typeof value === 'string' ? value : fallback
-}
-
-function musingsValue(value: unknown): SiteMusing[] {
-  if (!Array.isArray(value)) {
-    return initialForm.musings
-  }
-
-  const musings = value
-    .filter(
-      (item): item is Record<string, unknown> =>
-        typeof item === 'object' && item !== null,
-    )
-    .map((item) => ({
-      content: stringValue(item.content, ''),
-      date: stringValue(item.date, ''),
-    }))
-    .filter((musing) => musing.content.trim().length > 0)
-    .slice(0, 2)
-
-  while (musings.length < 2) {
-    musings.push({ content: '', date: '' })
-  }
-  return musings
-}
-
-function socialLinksValue(value: unknown): SiteSocialLink[] {
-  if (!Array.isArray(value)) {
-    return initialForm.socialLinks
-  }
-
-  const socialLinks = value
-    .filter(
-      (item): item is Record<string, unknown> =>
-        typeof item === 'object' && item !== null,
-    )
-    .map((item) => ({
-      label: stringValue(item.label, ''),
-      url: stringValue(item.url, ''),
-    }))
-    .filter((link) => link.label.trim().length > 0 && link.url.trim().length > 0)
-    .slice(0, 12)
-
-  return socialLinks.length > 0 ? socialLinks : initialForm.socialLinks
 }
