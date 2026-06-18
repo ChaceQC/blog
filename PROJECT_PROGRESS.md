@@ -18,7 +18,7 @@
 - 修复 `asyncmy 0.2.11` 依赖级风险：后端运行依赖切换为 `aiomysql`，`uv.lock`、本地/部署环境示例、Alembic 示例连接串和 README 均改为 `mysql+aiomysql://`；配置层会临时把旧 `mysql+asyncmy://` 前缀归一化到 `aiomysql`，避免本地遗留 `.env` 直接导致启动失败。
 - 公开 `content-v1` 加密 GET 已增加业务查询前置会话校验：公开分类、标签、文章、页面、站点资料、友链、站点目录和公开文件列表/短链接口会先验证 public scope 加密会话，缺少或无效 `X-Encryption-Session` 时不再先触发数据库列表、详情或总数查询。
 - `client_ip()` 已改为仅信任配置内反向代理：新增 `BLOG_TRUSTED_PROXY_HOSTS`，支持 IP 和 CIDR，只有直接连接来源属于可信代理时才读取 `X-Forwarded-For` / `X-Real-IP`；后端直连会使用连接 IP，降低伪造代理头绕过限流或污染日志的风险。
-- 公开访问日志压力已收敛：新增 `BLOG_ACCESS_LOG_SKIP_TYPES`，默认跳过公开内容、公开文件、文章图片和缩略图等高频成功访问的应用层 `access_logs` 写入；错误访问、RSS/sitemap/robots、公开友链申请、公开站点跳转、后台短时链接和后台下载仍记录。
+- 公开访问日志压力已收敛：原先按类型跳过高频成功访问的策略已调整为 `BLOG_ACCESS_LOG_DEDUPE_SECONDS` 短时去重；同一 IP 在窗口内重复 `GET/HEAD` 同一 path 只写入第一条 `access_logs`，不把 query、临时 token 或签名参数纳入去重 key，生产 Redis 可用时使用 Redis `SET NX EX`，否则回落进程内缓存；错误访问、公开友链申请、公开站点跳转、后台短时链接和后台下载仍记录。
 - 公开和后台列表分页已增加统一 `offset` 业务上限：新增 `PAGE_OFFSET_MAX = 10000` 并接入公开内容、公开文件、后台内容、后台文件、后台友链/导航和后台日志列表接口，避免超大 offset 造成深分页压力。
 - 按最新部署决策删除仓库内 `deploy/docker-compose.host-nginx.yml`；宿主机 Nginx 场景改为使用服务器本地 `deploy/docker-compose.local.yml` 覆盖文件绑定后端回环端口，避免把机器特定端口策略提交进仓库。
 - 继续全量审计后补充管理员刷新令牌边界：`POST /api/admin/auth/refresh` 不再接受 JSON body 中的 `refresh_token`，只读取 HttpOnly Cookie，减少刷新令牌进入前端 JS/请求体日志的兼容面。
@@ -39,16 +39,17 @@
 
 ### 阻塞与风险
 
-- 今日早些时候新增的 `encryption_sessions.client_ip` 需要生产库执行 Alembic 迁移到 head；本次继续全量审计的新增修复没有再新增或修改数据库字段、索引、约束或默认值，因此不需要新的迁移脚本。
+- 今日早些时候新增的 `encryption_sessions.client_ip` 需要生产库执行 Alembic 迁移到 head；本次访问日志去重策略调整没有新增或修改数据库字段、索引、约束或默认值，因此不需要新的迁移脚本。
 - 上传上限已从 30MB 收敛到 20MB，服务器上的后端环境变量需要同步为 `BLOG_UPLOAD_MAX_SIZE_BYTES=20971520`，否则会与 Nginx 配置不一致。
 - 本次依赖切换需要服务器真实 `deploy/env/backend.env` 同步改为 `BLOG_DATABASE_URL=mysql+aiomysql://...`；代码会临时兼容旧 `mysql+asyncmy://` 前缀，但不建议生产长期保留旧写法。
 - 宿主机 Nginx 反代场景需要设置 `BLOG_TRUSTED_PROXY_HOSTS` 为后端看到的宿主机/网关直连 IP 或 CIDR；示例值 `["127.0.0.1"]` 仅适用于后端直连来源确实是本机回环的部署。
 - 生产环境现在会强制校验 `BLOG_PUBLIC_BASE_URL` 为 `https://` 绝对地址；服务器真实 `backend.env` 不能再使用 `http://`、相对路径或占位值。
+- 访问日志去重窗口可通过 `BLOG_ACCESS_LOG_DEDUPE_SECONDS=60` 显式配置；不配置时默认 60 秒，生产 Redis 已启用时会复用 `BLOG_REDIS_URL`。
 - 本机 ignored 的 `deploy/env/backend.env` 仍可能保留旧连接串，`docker compose config` 只能证明配置展开语法有效；生产发布前必须按上面的真实 env 项显式更新。
 
 ### 下一步
 
-- 提交并推送 `dev`，再快进合并到 `main`；生产发布后用实际后端连接来源校准 `BLOG_TRUSTED_PROXY_HOSTS`，并复测公开加密会话、缺 session 公开 GET、超大 offset、上传超限和访问日志降噪行为。
+- 提交并推送 `dev`，再快进合并到 `main`；生产发布后用实际后端连接来源校准 `BLOG_TRUSTED_PROXY_HOSTS`，并复测公开加密会话、缺 session 公开 GET、超大 offset、上传超限和访问日志短时去重行为。
 
 ### 验证
 
@@ -71,6 +72,9 @@
 - 继续全量审计新增修复后已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
 - 继续全量审计新增修复后已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过；仓库内 host-nginx 覆盖文件已删除，不再作为提交内容验证。
 - 继续尝试运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml build nginx`，本机 Docker Desktop 仍未运行，无法连接 `dockerDesktopLinuxEngine`；服务器或 Docker 正常运行环境仍需执行构建并复制静态文件。
+- 访问日志短时去重调整后已运行 `uv run ruff check .`，通过。
+- 访问日志短时去重调整后已运行 `uv run pytest tests/test_log_service.py tests/test_public_content_api.py tests/test_admin_files_api.py`，51 个测试通过；仍存在 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 状态常量的上游弃用警告。
+- 访问日志短时去重调整后已运行 `uv run pytest`，154 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 7 个 FastAPI/Starlette 上游弃用警告。
 
 ## 2026-06-18
 

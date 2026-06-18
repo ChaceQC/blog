@@ -1,13 +1,19 @@
 import asyncio
-
-import pytest
+from datetime import UTC, datetime, timedelta
 
 import app.services.logs as logs_module
-from app.services.logs import LogService
+from app.services.logs import (
+    AccessLogDedupeRule,
+    InMemoryAccessLogDedupeBackend,
+    LogService,
+    RedisAccessLogDedupeBackend,
+    build_access_log_dedupe_key,
+)
 
 
 class FakeSettings:
-    access_log_skip_types = ["public_posts_list"]
+    access_log_dedupe_seconds = 60
+    access_log_skip_types: list[str] = []
 
 
 class FakeLogRepository:
@@ -22,28 +28,66 @@ class FakeLogRepository:
         self.commit_count += 1
 
 
-@pytest.mark.parametrize("status_code", [200, 302])
-def test_record_access_log_skips_configured_success_types(
-    monkeypatch,
-    status_code: int,
-) -> None:
+def test_record_access_log_dedupes_same_ip_method_and_path(monkeypatch) -> None:
     monkeypatch.setattr(logs_module, "get_settings", lambda: FakeSettings())
     repository = FakeLogRepository()
     service = LogService(repository=repository)
 
-    asyncio.run(
-        service.record_access_log(
+    async def run() -> None:
+        await service.record_access_log(
             access_type="public_posts_list",
             method="GET",
             path="/api/public/posts",
-            status_code=status_code,
+            status_code=200,
             ip="127.0.0.1",
             user_agent="pytest",
-        ),
-    )
+        )
+        await service.record_access_log(
+            access_type="public_posts_list",
+            method="GET",
+            path="/api/public/posts",
+            status_code=200,
+            ip="127.0.0.1",
+            user_agent="pytest",
+        )
 
-    assert repository.items == []
-    assert repository.commit_count == 0
+    asyncio.run(run())
+
+    assert len(repository.items) == 1
+    assert repository.items[0]["path"] == "/api/public/posts"
+    assert repository.commit_count == 1
+
+
+def test_record_access_log_keeps_different_paths(monkeypatch) -> None:
+    monkeypatch.setattr(logs_module, "get_settings", lambda: FakeSettings())
+    repository = FakeLogRepository()
+    service = LogService(repository=repository)
+
+    async def run() -> None:
+        await service.record_access_log(
+            access_type="public_posts_list",
+            method="GET",
+            path="/api/public/posts",
+            status_code=200,
+            ip="127.0.0.1",
+            user_agent="pytest",
+        )
+        await service.record_access_log(
+            access_type="public_post_detail",
+            method="GET",
+            path="/api/public/posts/example",
+            status_code=200,
+            ip="127.0.0.1",
+            user_agent="pytest",
+        )
+
+    asyncio.run(run())
+
+    assert [item["path"] for item in repository.items] == [
+        "/api/public/posts",
+        "/api/public/posts/example",
+    ]
+    assert repository.commit_count == 2
 
 
 def test_record_access_log_keeps_configured_error_types(monkeypatch) -> None:
@@ -64,3 +108,87 @@ def test_record_access_log_keeps_configured_error_types(monkeypatch) -> None:
 
     assert repository.items[0]["status_code"] == 404
     assert repository.commit_count == 1
+
+
+def test_record_access_log_keeps_post_operations(monkeypatch) -> None:
+    monkeypatch.setattr(logs_module, "get_settings", lambda: FakeSettings())
+    repository = FakeLogRepository()
+    service = LogService(repository=repository)
+
+    async def run() -> None:
+        await service.record_access_log(
+            access_type="public_friend_link_application",
+            method="POST",
+            path="/api/public/friend-links/applications",
+            status_code=200,
+            ip="127.0.0.1",
+            user_agent="pytest",
+        )
+        await service.record_access_log(
+            access_type="public_friend_link_application",
+            method="POST",
+            path="/api/public/friend-links/applications",
+            status_code=200,
+            ip="127.0.0.1",
+            user_agent="pytest",
+        )
+
+    asyncio.run(run())
+
+    assert len(repository.items) == 2
+    assert repository.commit_count == 2
+
+
+def test_in_memory_access_log_dedupe_allows_after_window() -> None:
+    backend = InMemoryAccessLogDedupeBackend()
+    rule = AccessLogDedupeRule(window_seconds=60)
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=UTC)
+
+    assert backend.should_record(
+        key="127.0.0.1:GET:/api/public/posts",
+        rule=rule,
+        now=now,
+    )
+    assert not backend.should_record(
+        key="127.0.0.1:GET:/api/public/posts",
+        rule=rule,
+        now=now + timedelta(seconds=30),
+    )
+    assert backend.should_record(
+        key="127.0.0.1:GET:/api/public/posts",
+        rule=rule,
+        now=now + timedelta(seconds=60),
+    )
+
+
+def test_redis_access_log_dedupe_uses_set_nx_ex() -> None:
+    backend = RedisAccessLogDedupeBackend(
+        redis_client=FakeRedis(),
+        key_prefix="blog:test",
+    )
+    rule = AccessLogDedupeRule(window_seconds=60)
+
+    assert backend.should_record(key="127.0.0.1:GET:/api/public/posts", rule=rule)
+    assert not backend.should_record(key="127.0.0.1:GET:/api/public/posts", rule=rule)
+
+
+def test_build_access_log_dedupe_key_ignores_query_values() -> None:
+    assert build_access_log_dedupe_key(
+        ip="127.0.0.1",
+        method="get",
+        path="/api/public/posts",
+    ) == "127.0.0.1:GET:/api/public/posts"
+
+
+class FakeRedis:
+    def __init__(self) -> None:
+        self.keys: set[str] = set()
+
+    def set(self, key: str, value: str, *, ex: int, nx: bool) -> bool:
+        assert value == "1"
+        assert ex == 60
+        assert nx is True
+        if key in self.keys:
+            return False
+        self.keys.add(key)
+        return True

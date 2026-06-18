@@ -612,7 +612,8 @@ def test_public_posts_returns_published_post_list() -> None:
         "/api/public/posts/public-post/files/1/thumbnail?expires="
         in str(manager.payload["items"][0]["cover_image_url"])
     )
-    assert logs.items == []
+    assert logs.items[0]["access_type"] == "public_posts_list"
+    assert logs.items[0]["path"] == "/api/public/posts"
 
 
 def test_public_posts_validate_session_before_query() -> None:
@@ -668,7 +669,8 @@ def test_public_posts_accept_category_and_tag_filters() -> None:
     assert manager.payload is not None
     assert manager.payload["total"] == 1
     assert manager.payload["items"][0]["slug"] == "public-post"
-    assert logs.items == []
+    assert logs.items[0]["access_type"] == "public_posts_list"
+    assert logs.items[0]["path"] == "/api/public/posts"
 
 
 def test_public_categories_return_encrypted_list() -> None:
@@ -698,7 +700,8 @@ def test_public_categories_return_encrypted_list() -> None:
         "slug": "category-a",
         "post_count": 3,
     }
-    assert logs.items == []
+    assert logs.items[0]["access_type"] == "public_categories_list"
+    assert logs.items[0]["path"] == "/api/public/categories"
 
 
 def test_public_category_detail_returns_encrypted_item() -> None:
@@ -727,7 +730,8 @@ def test_public_category_detail_returns_encrypted_item() -> None:
         "slug": "category-a",
         "post_count": 3,
     }
-    assert logs.items == []
+    assert logs.items[0]["access_type"] == "public_category_detail"
+    assert logs.items[0]["path"] == "/api/public/categories/category-a"
 
 
 def test_public_category_detail_returns_404_for_missing_category() -> None:
@@ -780,7 +784,8 @@ def test_public_tags_return_encrypted_list() -> None:
         "slug": "fastapi",
         "post_count": 2,
     }
-    assert logs.items == []
+    assert logs.items[0]["access_type"] == "public_tags_list"
+    assert logs.items[0]["path"] == "/api/public/tags"
 
 
 def test_public_tag_detail_returns_encrypted_item() -> None:
@@ -809,7 +814,8 @@ def test_public_tag_detail_returns_encrypted_item() -> None:
         "slug": "fastapi",
         "post_count": 2,
     }
-    assert logs.items == []
+    assert logs.items[0]["access_type"] == "public_tag_detail"
+    assert logs.items[0]["path"] == "/api/public/tags/fastapi"
 
 
 def test_public_tag_detail_returns_404_for_missing_tag() -> None:
@@ -869,7 +875,8 @@ def test_public_post_detail_returns_html_content() -> None:
     assert manager.payload["category_names"] == ["技术"]
     assert manager.payload["tag_names"] == ["FastAPI", "React"]
     assert "token=" in str(manager.payload["content_html"])
-    assert logs.items == []
+    assert logs.items[0]["access_type"] == "public_post_detail"
+    assert logs.items[0]["path"] == "/api/public/posts/public-post"
 
 
 def test_public_site_profile_returns_encrypted_setting() -> None:
@@ -895,7 +902,8 @@ def test_public_site_profile_returns_encrypted_setting() -> None:
     assert manager.payload["owner"] == "恬妡"
     assert manager.payload["musings"][0]["content"] == "后台碎念"
     assert manager.payload["social_links"][0]["label"] == "GitHub"
-    assert logs.items == []
+    assert logs.items[0]["access_type"] == "public_site_profile"
+    assert logs.items[0]["path"] == "/api/public/settings/site-profile"
 
 
 def test_public_site_profile_filters_unsafe_social_href() -> None:
@@ -1040,7 +1048,8 @@ def test_public_page_detail_returns_html_content() -> None:
         "seo_description": "关于这个长期写作空间",
         "updated_at": "2026-06-17T00:00:00Z",
     }
-    assert logs.items == []
+    assert logs.items[0]["access_type"] == "public_page_detail"
+    assert logs.items[0]["path"] == "/api/public/pages/about"
 
 
 def test_public_page_detail_returns_404_for_missing_page() -> None:
@@ -1088,7 +1097,8 @@ def test_public_friend_links_return_encrypted_list() -> None:
     assert manager.payload is not None
     assert manager.payload["total"] == 1
     assert manager.payload["items"][0]["name"] == "ChaceQC"
-    assert logs.items == []
+    assert logs.items[0]["access_type"] == "public_friend_links_list"
+    assert logs.items[0]["path"] == "/api/public/friend-links"
 
 
 def test_public_friend_link_application_decrypts_content_request() -> None:
@@ -1151,7 +1161,8 @@ def test_public_site_items_return_encrypted_list() -> None:
     assert manager.payload is not None
     assert manager.payload["total"] == 1
     assert manager.payload["items"][0]["title"] == "GitHub 仓库"
-    assert logs.items == []
+    assert logs.items[0]["access_type"] == "public_site_items_list"
+    assert logs.items[0]["path"] == "/api/public/site-items"
 
 
 def test_public_site_item_visit_records_click_and_redirects() -> None:

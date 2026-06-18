@@ -33,7 +33,6 @@ from app.services.files import (
     ManagedFileNotFoundError,
     verify_article_render_token,
 )
-from app.services.logs import should_skip_access_log
 
 router = APIRouter(tags=["public-files"])
 TemporaryFileToken = Annotated[str, Query(min_length=16)]
@@ -409,8 +408,6 @@ async def _record_file_access(
     entity_id: int | None = None,
     detail_json: dict[str, object] | None = None,
 ) -> None:
-    if should_skip_access_log(access_type=access_type, status_code=status_code):
-        return
     await logs.record_access_log(
         access_type=access_type,
         method=request.method,

@@ -180,7 +180,7 @@ npm.cmd run build
 - `BLOG_REDIS_URL`：Redis 连接串，生产示例为 `redis://redis:6379/0`。
 - `BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`：公开加密会话单 IP 活跃数量上限，默认 `10`。
 - `BLOG_TRUSTED_PROXY_HOSTS`：可信反向代理直连后端的 IP 或 CIDR 列表；只有这些来源的 `X-Forwarded-For` / `X-Real-IP` 会被用于应用层限流和日志。
-- `BLOG_ACCESS_LOG_SKIP_TYPES`：成功访问时跳过写入 `access_logs` 的高频公开访问类型；错误、后台下载、友链申请和站点跳转仍保留日志。
+- `BLOG_ACCESS_LOG_DEDUPE_SECONDS`：成功 `GET/HEAD` 访问日志短时去重窗口，默认 `60`；同一 IP 在窗口内重复访问同一 path 只写入第一条，错误和写操作仍逐条记录。
 
 后端所有响应都会设置 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 和 `Permissions-Policy`；生产环境额外设置 HSTS 与 Content Security Policy，Nginx 仍保留同等安全响应头作为公网入口兜底。
 
@@ -354,6 +354,7 @@ BLOG_TRUSTED_PROXY_HOSTS=["127.0.0.1"]
 BLOG_UPLOAD_ROOT=/data/blog/uploads
 BLOG_UPLOAD_MAX_SIZE_BYTES=20971520
 BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP=10
+BLOG_ACCESS_LOG_DEDUPE_SECONDS=60
 ```
 
 `BLOG_DATABASE_URL` 应使用 `mysql+aiomysql://`。后端会临时兼容旧的 `mysql+asyncmy://` 前缀并在运行时映射到 `aiomysql`，但生产服务器的真实 `deploy/env/backend.env` 仍建议显式改为 `mysql+aiomysql://...`，避免继续依赖已命中 advisory 的旧驱动前缀。若使用宿主机 Nginx 反代到 Docker 后端，请把 `BLOG_TRUSTED_PROXY_HOSTS` 改成后端看到的宿主机/网关直连 IP 或 CIDR；后端绑定 `127.0.0.1:18080` 时可填 `["127.0.0.1"]`，经 Docker 网关访问时可填实际网关 IP 或如 `["172.16.0.0/12"]` 这类内网 CIDR。填错时功能仍可用，但应用层限流会按代理 IP 而不是真实访客 IP 计数。

@@ -28,7 +28,11 @@ from app.services.encryption import EncryptionSessionManager
 from app.services.files import FileService
 from app.services.link_groups import LinkGroupService
 from app.services.links import LinkService
-from app.services.logs import LogService
+from app.services.logs import (
+    AccessLogDedupeBackend,
+    LogService,
+    create_access_log_dedupe_backend,
+)
 from app.services.rate_limit import RateLimitService, create_rate_limit_service
 from app.services.settings import SettingService
 
@@ -106,8 +110,42 @@ EncryptionSessionManagerDependency = Annotated[
 ]
 
 
-def get_log_service(session: SessionDependency) -> LogService:
-    return LogService(repository=LogRepository(session))
+_access_log_dedupe_backend: AccessLogDedupeBackend | None = None
+_access_log_dedupe_signature: tuple[str, str | None, str] | None = None
+
+
+def get_access_log_dedupe_backend(
+    settings: SettingsDependency,
+) -> AccessLogDedupeBackend:
+    global _access_log_dedupe_backend, _access_log_dedupe_signature
+    signature = (
+        settings.rate_limit_backend,
+        settings.redis_url,
+        settings.redis_key_prefix,
+    )
+    if (
+        _access_log_dedupe_backend is None
+        or _access_log_dedupe_signature != signature
+    ):
+        _access_log_dedupe_backend = create_access_log_dedupe_backend(settings)
+        _access_log_dedupe_signature = signature
+    return _access_log_dedupe_backend
+
+
+AccessLogDedupeDependency = Annotated[
+    AccessLogDedupeBackend,
+    Depends(get_access_log_dedupe_backend),
+]
+
+
+def get_log_service(
+    session: SessionDependency,
+    dedupe_backend: AccessLogDedupeDependency,
+) -> LogService:
+    return LogService(
+        repository=LogRepository(session),
+        dedupe_backend=dedupe_backend,
+    )
 
 
 LogServiceDependency = Annotated[LogService, Depends(get_log_service)]

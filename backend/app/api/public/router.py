@@ -55,7 +55,6 @@ from app.services.links import (
     LinkService,
     SiteNavItemNotFoundError,
 )
-from app.services.logs import should_skip_access_log
 from app.services.rate_limit import RateLimitRule
 
 router = APIRouter(tags=["public"])
@@ -840,8 +839,6 @@ async def _record_public_access(
     entity_id: int | None = None,
     detail_json: dict[str, object] | None = None,
 ) -> None:
-    if should_skip_access_log(access_type=access_type, status_code=status_code):
-        return
     await logs.record_access_log(
         access_type=access_type,
         method=request.method,
