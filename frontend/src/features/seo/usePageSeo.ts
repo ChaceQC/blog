@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 
+import { getPublicSiteProfile } from '../settings/api.ts'
 import { siteSettings } from '../settings/siteSettings.ts'
 
 type PageSeoOptions = {
@@ -18,25 +20,37 @@ export function usePageSeo({
   path,
   keywords,
   imageUrl,
-  siteName = siteSettings.title,
+  siteName,
   type = 'website',
 }: PageSeoOptions) {
+  const { data: siteProfile } = useQuery({
+    queryKey: ['public-site-profile'],
+    queryFn: getPublicSiteProfile,
+  })
+  const effectiveSiteName = siteName ?? siteProfile?.title ?? siteSettings.title
+
   useEffect(() => {
-    const fullTitle = title === siteName ? title : `${title} | ${siteName}`
+    const fullTitle =
+      title === effectiveSiteName ? title : `${title} | ${effectiveSiteName}`
     const canonicalUrl = absoluteUrl(path)
     const absoluteImageUrl = imageUrl ? absoluteUrl(imageUrl) : null
 
+    document.documentElement.dataset.pageSeo = 'active'
     document.title = fullTitle
     setMeta('name', 'description', description)
     setMeta('name', 'keywords', keywords ?? null)
     setCanonical(canonicalUrl)
-    setMeta('property', 'og:site_name', siteName)
+    setMeta('property', 'og:site_name', effectiveSiteName)
     setMeta('property', 'og:type', type)
     setMeta('property', 'og:title', title)
     setMeta('property', 'og:description', description)
     setMeta('property', 'og:url', canonicalUrl)
     setMeta('property', 'og:image', absoluteImageUrl)
-  }, [description, imageUrl, keywords, path, siteName, title, type])
+
+    return () => {
+      delete document.documentElement.dataset.pageSeo
+    }
+  }, [description, effectiveSiteName, imageUrl, keywords, path, title, type])
 }
 
 function absoluteUrl(value: string): string {

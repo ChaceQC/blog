@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
 import { MathHtml } from '../../components/MathHtml.tsx'
+import { invalidatePostCaches } from '../../app/queryInvalidation.ts'
 import {
   createAdminPost,
   listAdminPosts,
@@ -126,7 +127,7 @@ export function AdminPostsPage() {
       return createAdminPost(payload, session.csrfToken)
     },
     onSuccess: (post) => {
-      queryClient.invalidateQueries({ queryKey: ['admin-posts'] })
+      void invalidatePostCaches(queryClient)
       setSelectedId(post.id)
       setForm(postToForm(post))
       setPreviewInput(postToPreviewInput(post))
@@ -144,7 +145,7 @@ export function AdminPostsPage() {
       return publishAdminPost(selectedPost.id, session.csrfToken)
     },
     onSuccess: (post) => {
-      queryClient.invalidateQueries({ queryKey: ['admin-posts'] })
+      void invalidatePostCaches(queryClient)
       setSelectedId(post.id)
       setForm(postToForm(post))
       setPreviewInput(postToPreviewInput(post))

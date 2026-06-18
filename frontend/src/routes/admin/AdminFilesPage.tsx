@@ -3,6 +3,7 @@ import { LockKeyhole, Search, UploadCloud } from 'lucide-react'
 import { useMemo, useState, type ChangeEvent } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
+import { invalidateFileCaches } from '../../app/queryInvalidation.ts'
 import {
   deleteAdminFile,
   getAdminFileTemporaryUrl,
@@ -98,7 +99,7 @@ export function AdminFilesPage() {
       )
     },
     onSuccess: (file) => {
-      queryClient.invalidateQueries({ queryKey: ['admin-files'] })
+      void invalidateFileCaches(queryClient)
       setSelectedId(file.id)
       setUploadFile(null)
       setAltText('')
@@ -118,7 +119,7 @@ export function AdminFilesPage() {
       return deleteAdminFile(selectedFile.id, session.csrfToken)
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-files'] })
+      void invalidateFileCaches(queryClient)
       setSelectedId(null)
       setNotice('文件已移入清理队列')
     },

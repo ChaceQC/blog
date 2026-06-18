@@ -12,6 +12,10 @@ export function SiteTitle() {
   const title = data?.title ?? siteSettings.title
 
   useEffect(() => {
+    if (document.documentElement.dataset.pageSeo === 'active') {
+      return
+    }
+
     document.title = title
   }, [title])
 

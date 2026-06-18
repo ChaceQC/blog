@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigation, Save } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import { invalidateSiteNavCaches } from '../../app/queryInvalidation.ts'
 import { ListPager } from '../../components/ListPager.tsx'
 import {
   siteNavTagsPayload,
@@ -104,7 +105,7 @@ export function AdminSiteNavPanel() {
     onSuccess: (site) => {
       setSelectedSiteId(site.id)
       setSiteDraftForm(null)
-      queryClient.invalidateQueries({ queryKey: ['admin-site-nav-items'] })
+      void invalidateSiteNavCaches(queryClient)
       setSiteNotice(isCreatingSite ? '导航已创建' : '导航已保存')
     },
     onError: (error) => {

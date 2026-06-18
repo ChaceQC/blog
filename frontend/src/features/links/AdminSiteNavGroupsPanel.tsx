@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { FolderPlus, Save } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import { invalidateSiteNavCaches } from '../../app/queryInvalidation.ts'
 import { createAdminSiteNavGroup, updateAdminSiteNavGroup } from './api.ts'
 import { useAuth } from '../auth/useAuth.ts'
 
@@ -66,8 +67,7 @@ export function AdminSiteNavGroupsPanel({
     onSuccess: (group) => {
       setSelectedGroupId(group.id)
       setDraftForm(null)
-      queryClient.invalidateQueries({ queryKey: ['admin-site-nav-groups'] })
-      queryClient.invalidateQueries({ queryKey: ['admin-site-nav-items'] })
+      void invalidateSiteNavCaches(queryClient)
       setNotice(isCreating ? '分组已创建' : '分组已保存')
     },
     onError: (error) => {

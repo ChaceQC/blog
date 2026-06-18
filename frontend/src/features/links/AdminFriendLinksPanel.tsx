@@ -10,6 +10,7 @@ import { useMemo, useState } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
 import { StatusBadge } from '../../components/StatusBadge.tsx'
+import { invalidateFriendLinkCaches } from '../../app/queryInvalidation.ts'
 import { useAuth } from '../auth/useAuth.ts'
 import { AdminFriendLinkGroupsPanel } from './AdminFriendLinkGroupsPanel.tsx'
 import {
@@ -84,7 +85,7 @@ export function AdminFriendLinksPanel() {
     },
     onSuccess: (link) => {
       setSelectedLinkId(link.id)
-      queryClient.invalidateQueries({ queryKey: ['admin-friend-links'] })
+      void invalidateFriendLinkCaches(queryClient)
       setNotice('审核状态已更新')
     },
     onError: (error) => {
@@ -105,7 +106,7 @@ export function AdminFriendLinksPanel() {
     onSuccess: (link) => {
       setSelectedLinkId(link.id)
       setDraftForm(null)
-      queryClient.invalidateQueries({ queryKey: ['admin-friend-links'] })
+      void invalidateFriendLinkCaches(queryClient)
       setNotice(isCreating ? '友链已创建' : '友链已保存')
     },
     onError: (error) => {

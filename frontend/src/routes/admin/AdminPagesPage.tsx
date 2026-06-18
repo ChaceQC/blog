@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
 import { MathHtml } from '../../components/MathHtml.tsx'
+import { invalidatePageCaches } from '../../app/queryInvalidation.ts'
 import {
   createAdminPage,
   listAdminPages,
@@ -70,7 +71,7 @@ export function AdminPagesPage() {
       return createAdminPage(payload, session.csrfToken)
     },
     onSuccess: (page) => {
-      queryClient.invalidateQueries({ queryKey: ['admin-pages'] })
+      void invalidatePageCaches(queryClient)
       setSelectedId(page.id)
       setForm(pageToForm(page))
       setNotice('页面已保存')

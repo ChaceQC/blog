@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { FolderPlus, Save } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import { invalidateFriendLinkCaches } from '../../app/queryInvalidation.ts'
 import {
   createAdminFriendLinkGroup,
   updateAdminFriendLinkGroup,
@@ -68,8 +69,7 @@ export function AdminFriendLinkGroupsPanel({
     onSuccess: (group) => {
       setSelectedGroupId(group.id)
       setDraftForm(null)
-      queryClient.invalidateQueries({ queryKey: ['admin-friend-link-groups'] })
-      queryClient.invalidateQueries({ queryKey: ['admin-friend-links'] })
+      void invalidateFriendLinkCaches(queryClient)
       setNotice(isCreating ? '分组已创建' : '分组已保存')
     },
     onError: (error) => {

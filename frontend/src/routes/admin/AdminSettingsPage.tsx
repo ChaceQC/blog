@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Save, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import { invalidateSiteProfileCaches } from '../../app/queryInvalidation.ts'
 import {
   listAdminSettings,
   SITE_PROFILE_SETTING_KEY,
@@ -84,8 +85,7 @@ export function AdminSettingsPage() {
     },
     onSuccess: () => {
       setDraftForm(null)
-      queryClient.invalidateQueries({ queryKey: ['admin-settings'] })
-      queryClient.invalidateQueries({ queryKey: ['public-site-profile'] })
+      void invalidateSiteProfileCaches(queryClient)
       setNotice('设置已保存')
     },
     onError: (error) => {
