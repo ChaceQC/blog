@@ -32,6 +32,7 @@ import { hasAdminPermission } from '../../features/auth/permissions.ts'
 import { useAuth } from '../../features/auth/useAuth.ts'
 
 import type {
+  AdminPostListResponse,
   AdminPostItem,
   ContentStatus,
   PostFormPayload,
@@ -83,6 +84,7 @@ export function AdminPostsPage() {
     session !== null && hasAdminPermission(session.user, 'post:publish')
   const hasUnsavedChanges =
     savedForm === null || postFormSignature(currentForm) !== postFormSignature(savedForm)
+  const canSaveDraft = canWrite && (selectedPost === null || hasUnsavedChanges)
   const isPublishStatusLocked =
     currentForm.status === 'published' || currentForm.status === 'scheduled'
   const canSubmitPublish =
@@ -144,6 +146,10 @@ export function AdminPostsPage() {
       return createAdminPost(payload, session.csrfToken)
     },
     onSuccess: (post) => {
+      queryClient.setQueryData<AdminPostListResponse>(
+        ['admin-posts'],
+        (current) => upsertPostListItem(current, post),
+      )
       void invalidatePostCaches(queryClient)
       setSelectedId(post.id)
       setForm(postToForm(post))
@@ -411,7 +417,7 @@ export function AdminPostsPage() {
             <div className="form-actions">
               <button
                 className="text-button"
-                disabled={!canWrite || saveMutation.isPending}
+                disabled={!canSaveDraft || saveMutation.isPending}
                 type="submit"
               >
                 <Save size={17} strokeWidth={1.8} aria-hidden="true" />
@@ -470,6 +476,9 @@ export function AdminPostsPage() {
   }
 
   function saveAsDraft() {
+    if (!canSaveDraft || saveMutation.isPending) {
+      return
+    }
     const draftForm: PostFormPayload = {
       ...currentForm,
       status: 'draft',
@@ -514,4 +523,21 @@ function postFormSignature(form: PostFormPayload): string {
     category_names: [...form.category_names],
     tag_names: [...form.tag_names],
   })
+}
+
+function upsertPostListItem(
+  current: AdminPostListResponse | undefined,
+  post: AdminPostItem,
+): AdminPostListResponse {
+  if (!current) {
+    return { items: [post] }
+  }
+  const existingIndex = current.items.findIndex((item) => item.id === post.id)
+  if (existingIndex === -1) {
+    return { ...current, items: [post, ...current.items] }
+  }
+  return {
+    ...current,
+    items: current.items.map((item) => (item.id === post.id ? post : item)),
+  }
 }

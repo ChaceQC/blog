@@ -31,10 +31,15 @@ import {
   parseOptionalId,
 } from './friendLinkForm.ts'
 
-import type { AdminFriendLinkStatus } from './types.ts'
+import type {
+  AdminFriendLink,
+  AdminFriendLinkListResponse,
+  AdminFriendLinkStatus,
+} from './types.ts'
 import type { FriendLinkForm } from './friendLinkForm.ts'
 
 const LIST_PAGE_SIZE = 8
+type ReviewedFriendLinkStatus = Exclude<AdminFriendLinkStatus, 'pending'>
 
 export function AdminFriendLinksPanel() {
   const { session } = useAuth()
@@ -74,22 +79,43 @@ export function AdminFriendLinksPanel() {
     () => (selectedLink ? linkToForm(selectedLink) : emptyFriendLinkForm),
     [selectedLink],
   )
+  const savedForm = selectedLink ? loadedForm : null
   const form = draftForm ?? loadedForm
   const isCreating = selectedLinkId === null && draftForm !== null
-  const reviewMutation = useMutation({
-    mutationFn: async (status: AdminFriendLinkStatus) => {
+  const hasUnsavedChanges =
+    savedForm === null ||
+    friendLinkFormSignature(form) !== friendLinkFormSignature(savedForm)
+  const isPendingReview = Boolean(
+    !isCreating && selectedLink && selectedLink.status === 'pending',
+  )
+  const isReviewedLink = Boolean(
+    !isCreating && selectedLink && selectedLink.status !== 'pending',
+  )
+  const canSaveForm = Boolean(session) && form.name.trim() !== ''
+  const reviewAndSaveMutation = useMutation({
+    mutationFn: async (status: ReviewedFriendLinkStatus) => {
       if (!session || !selectedLink) {
         throw new Error('当前会话已失效')
       }
+      await updateAdminFriendLink(
+        selectedLink.id,
+        formToPayload({ ...form, status }),
+        session.csrfToken,
+      )
       return reviewAdminFriendLink(selectedLink.id, { status }, session.csrfToken)
     },
     onSuccess: (link) => {
+      queryClient.setQueryData<AdminFriendLinkListResponse>(
+        ['admin-friend-links'],
+        (current) => upsertFriendLinkListItem(current, link),
+      )
       setSelectedLinkId(link.id)
+      setDraftForm(null)
       void invalidateFriendLinkCaches(queryClient)
-      setNotice('审核状态已更新')
+      setNotice('友链已审核并保存')
     },
     onError: (error) => {
-      setNotice(error instanceof Error ? error.message : '审核更新失败')
+      setNotice(error instanceof Error ? error.message : '审核保存失败')
     },
   })
   const saveMutation = useMutation({
@@ -104,6 +130,10 @@ export function AdminFriendLinksPanel() {
       return updateAdminFriendLink(selectedLink.id, payload, session.csrfToken)
     },
     onSuccess: (link) => {
+      queryClient.setQueryData<AdminFriendLinkListResponse>(
+        ['admin-friend-links'],
+        (current) => upsertFriendLinkListItem(current, link),
+      )
       setSelectedLinkId(link.id)
       setDraftForm(null)
       void invalidateFriendLinkCaches(queryClient)
@@ -116,59 +146,68 @@ export function AdminFriendLinksPanel() {
 
   return (
     <>
-      <section className="admin-panel admin-panel--list">
-        <div className="section-heading">
-          <span>友链审核</span>
-          <small>{linksQuery.isLoading ? '加载中' : `共 ${links.length} 条`}</small>
-          <button
-            className="text-button text-button--muted"
-            onClick={() => {
-              setSelectedLinkId(null)
-              setDraftForm(emptyFriendLinkForm)
-              setNotice('正在新建友链')
-            }}
-            type="button"
-          >
-            <Link2 size={14} strokeWidth={1.8} aria-hidden="true" />
-            新建友链
-          </button>
-        </div>
-        {linksQuery.isError ? <p className="form-error">友链列表加载失败</p> : null}
-        <div className="content-list">
-          {visibleLinks.map((link) => (
+      <div className="admin-list-column">
+        <section className="admin-panel admin-panel--list">
+          <div className="section-heading">
+            <span>友链审核</span>
+            <small>{linksQuery.isLoading ? '加载中' : `共 ${links.length} 条`}</small>
             <button
-              className={
-                link.id === selectedLink?.id ? 'content-row active' : 'content-row'
-              }
-              key={link.id}
+              className="text-button text-button--muted"
               onClick={() => {
-                setSelectedLinkId(link.id)
-                setDraftForm(null)
-                setNotice(null)
+                setSelectedLinkId(null)
+                setDraftForm(emptyFriendLinkForm)
+                setNotice('正在新建友链')
               }}
               type="button"
             >
-              <span>
-                <strong>{link.name}</strong>
-                <small>{link.url}</small>
-                <small>{formatFriendLinkCheck(link)}</small>
-              </span>
-              <StatusBadge tone={link.status}>{linkStatusLabels[link.status]}</StatusBadge>
+              <Link2 size={14} strokeWidth={1.8} aria-hidden="true" />
+              新建友链
             </button>
-          ))}
-        </div>
-        <ListPager
-          page={safeListPage}
-          pageSize={LIST_PAGE_SIZE}
-          totalItems={links.length}
-          isLoading={linksQuery.isLoading}
-          variant="admin"
-          onPageChange={setListPage}
-        />
-        {!linksQuery.isLoading && links.length === 0 ? (
-          <p className="empty-state">还没有待管理的友链。</p>
-        ) : null}
-      </section>
+          </div>
+          {linksQuery.isError ? <p className="form-error">友链列表加载失败</p> : null}
+          <div className="content-list">
+            {visibleLinks.map((link) => (
+              <button
+                className={
+                  link.id === selectedLink?.id ? 'content-row active' : 'content-row'
+                }
+                key={link.id}
+                onClick={() => {
+                  setSelectedLinkId(link.id)
+                  setDraftForm(null)
+                  setNotice(null)
+                }}
+                type="button"
+              >
+                <span>
+                  <strong>{link.name}</strong>
+                  <small>{link.url}</small>
+                  <small>{formatFriendLinkCheck(link)}</small>
+                </span>
+                <StatusBadge tone={link.status}>{linkStatusLabels[link.status]}</StatusBadge>
+              </button>
+            ))}
+          </div>
+          <ListPager
+            page={safeListPage}
+            pageSize={LIST_PAGE_SIZE}
+            totalItems={links.length}
+            isLoading={linksQuery.isLoading}
+            variant="admin"
+            onPageChange={setListPage}
+          />
+          {!linksQuery.isLoading && links.length === 0 ? (
+            <p className="empty-state">还没有待管理的友链。</p>
+          ) : null}
+        </section>
+
+        <section className="admin-panel admin-panel--groups">
+          <AdminFriendLinkGroupsPanel
+            groups={groups}
+            isLoading={groupsQuery.isLoading}
+          />
+        </section>
+      </div>
 
       <section className="admin-panel admin-panel--editor">
         <div className="section-heading">
@@ -195,22 +234,23 @@ export function AdminFriendLinksPanel() {
                     value={form.name}
                   />
                 </label>
-                <label>
-                  状态
-                  <select
-                    onChange={(event) =>
-                      updateForm(
-                        'status',
-                        event.target.value as AdminFriendLinkStatus,
-                      )
-                    }
-                    value={form.status}
-                  >
-                    <option value="pending">待审核</option>
-                    <option value="healthy">通过</option>
-                    <option value="rejected">已拒绝</option>
-                  </select>
-                </label>
+                {isReviewedLink ? (
+                  <label>
+                    状态
+                    <select
+                      onChange={(event) =>
+                        updateForm(
+                          'status',
+                          event.target.value as ReviewedFriendLinkStatus,
+                        )
+                      }
+                      value={form.status}
+                    >
+                      <option value="healthy">通过</option>
+                      <option value="rejected">已拒绝</option>
+                    </select>
+                  </label>
+                ) : null}
                 <label>
                   分组
                   <select
@@ -284,38 +324,41 @@ export function AdminFriendLinksPanel() {
               </dl>
             ) : null}
             <div className="form-actions">
-              <button
-                className="text-button"
-                disabled={!session || saveMutation.isPending || form.name === ''}
-                onClick={() => saveMutation.mutate()}
-                type="button"
-              >
-                <Save size={17} strokeWidth={1.8} aria-hidden="true" />
-                {saveMutation.isPending ? '保存中' : '保存'}
-              </button>
-              <button
-                className="text-button"
-                disabled={!session || !selectedLink || reviewMutation.isPending}
-                onClick={() => reviewMutation.mutate('healthy')}
-                type="button"
-              >
-                <CheckCircle2 size={17} strokeWidth={1.8} aria-hidden="true" />
-                通过
-              </button>
-              <button
-                className="text-button text-button--muted"
-                disabled={!session || !selectedLink || reviewMutation.isPending}
-                onClick={() => reviewMutation.mutate('rejected')}
-                type="button"
-              >
-                <XCircle size={17} strokeWidth={1.8} aria-hidden="true" />
-                拒绝
-              </button>
+              {isPendingReview ? (
+                <>
+                  <button
+                    className="text-button"
+                    disabled={!canSaveForm || reviewAndSaveMutation.isPending}
+                    onClick={() => reviewAndSaveMutation.mutate('healthy')}
+                    type="button"
+                  >
+                    <CheckCircle2 size={17} strokeWidth={1.8} aria-hidden="true" />
+                    {reviewAndSaveMutation.isPending ? '保存中' : '通过'}
+                  </button>
+                  <button
+                    className="text-button text-button--muted"
+                    disabled={!canSaveForm || reviewAndSaveMutation.isPending}
+                    onClick={() => reviewAndSaveMutation.mutate('rejected')}
+                    type="button"
+                  >
+                    <XCircle size={17} strokeWidth={1.8} aria-hidden="true" />
+                    拒绝
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="text-button"
+                  disabled={
+                    !canSaveForm || !hasUnsavedChanges || saveMutation.isPending
+                  }
+                  onClick={() => saveMutation.mutate()}
+                  type="button"
+                >
+                  <Save size={17} strokeWidth={1.8} aria-hidden="true" />
+                  {saveMutation.isPending ? '保存中' : '保存'}
+                </button>
+              )}
             </div>
-            <AdminFriendLinkGroupsPanel
-              groups={groups}
-              isLoading={groupsQuery.isLoading}
-            />
           </div>
         ) : (
           <p className="empty-state">没有选中的友链。</p>
@@ -329,5 +372,26 @@ export function AdminFriendLinksPanel() {
     value: FriendLinkForm[Key],
   ) {
     setDraftForm((current) => ({ ...(current ?? form), [key]: value }))
+  }
+}
+
+function friendLinkFormSignature(form: FriendLinkForm): string {
+  return JSON.stringify(form)
+}
+
+function upsertFriendLinkListItem(
+  current: AdminFriendLinkListResponse | undefined,
+  link: AdminFriendLink,
+): AdminFriendLinkListResponse {
+  if (!current) {
+    return { items: [link] }
+  }
+  const existingIndex = current.items.findIndex((item) => item.id === link.id)
+  if (existingIndex === -1) {
+    return { ...current, items: [link, ...current.items] }
+  }
+  return {
+    ...current,
+    items: current.items.map((item) => (item.id === link.id ? link : item)),
   }
 }

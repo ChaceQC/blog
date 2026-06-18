@@ -10,6 +10,7 @@ import { AdminLogsPage } from '../routes/admin/AdminLogsPage.tsx'
 import { AdminPagesPage } from '../routes/admin/AdminPagesPage.tsx'
 import { AdminPostsPage } from '../routes/admin/AdminPostsPage.tsx'
 import { AdminSettingsPage } from '../routes/admin/AdminSettingsPage.tsx'
+import { AdminSiteNavPage } from '../routes/admin/AdminSiteNavPage.tsx'
 import { adminAccess } from '../routes/admin/adminAccess.ts'
 import { RequireAdminAuth } from '../routes/admin/RequireAdminAuth.tsx'
 import { RequireAdminPermission } from '../routes/admin/RequireAdminPermission.tsx'
@@ -87,6 +88,14 @@ export const router = createBrowserRouter([
                 element: (
                   <RequireAdminPermission permissions={adminAccess.links}>
                     <AdminLinksPage />
+                  </RequireAdminPermission>
+                ),
+              },
+              {
+                path: 'site-nav',
+                element: (
+                  <RequireAdminPermission permissions={adminAccess.siteNav}>
+                    <AdminSiteNavPage />
                   </RequireAdminPermission>
                 ),
               },

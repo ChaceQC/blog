@@ -4,6 +4,7 @@ import {
   FolderOpen,
   Link as LinkIcon,
   LogOut,
+  Navigation,
   Newspaper,
   ScrollText,
   Settings,
@@ -24,6 +25,7 @@ const adminLinks = [
   { to: '/admin/pages', label: '页面', icon: Files, permissions: adminAccess.pages },
   { to: '/admin/files', label: '文件', icon: FolderOpen, permissions: adminAccess.files },
   { to: '/admin/links', label: '友链', icon: LinkIcon, permissions: adminAccess.links },
+  { to: '/admin/site-nav', label: '导航', icon: Navigation, permissions: adminAccess.siteNav },
   { to: '/admin/logs', label: '日志', icon: ScrollText, permissions: adminAccess.logs },
   { to: '/admin/settings', label: '设置', icon: Settings, permissions: adminAccess.settings },
 ]
