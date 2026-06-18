@@ -63,7 +63,7 @@
 
 ### 下一步
 
-- 执行全量验证：后端 ruff/pytest/Alembic SQL、前端 lint/build、Docker Compose 配置展开和 Git 空白检查；通过后将 `dev` 合并到 `main` 并推送。
+- 将 `dev` 快进合并到 `main` 并推送，然后汇总生产服务器需要同步的环境变量、迁移和宿主机 Nginx 部署注意事项。
 
 ### 验证
 
@@ -114,6 +114,14 @@
 - CSS 拆分后已用脚本确认 7 个样式分层按导入顺序拼接后，忽略空白与原 `frontend/src/index.css` 规则内容一致。
 - CSS 拆分后已运行 `npm.cmd run lint`，通过。
 - CSS 拆分后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
+- 全部待修复项完成后已运行 `uv run ruff check .`，通过。
+- 全部待修复项完成后已运行 `uv run pytest`，177 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 7 个 FastAPI/Starlette 上游弃用警告。
+- 全部待修复项完成后已运行 `uv run alembic upgrade head --sql`，可正常生成从空库到 `20260619_0007` 的 MySQL 迁移 SQL。
+- 全部待修复项完成后已运行 `npm.cmd run lint`，通过。
+- 全部待修复项完成后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
+- 全部待修复项完成后已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
+- 全部待修复项完成后已运行 `git diff --check`，未发现空白或行尾问题。
+- 尝试运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml build nginx` 时，本机 Docker Desktop 未运行，无法连接 `dockerDesktopLinuxEngine`；服务器或 Docker 正常运行环境仍需执行构建并复制静态文件。
 
 ## 2026-06-18
 
