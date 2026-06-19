@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -7,6 +7,8 @@ ContentStatus = Literal["draft", "published", "scheduled", "archived"]
 PostVisibility = Literal["public", "hidden", "private"]
 SLUG_PATTERN = r"^[a-z0-9][a-z0-9_-]*$"
 CONTENT_MD_MAX_LENGTH = 200_000
+TAXONOMY_NAME_MAX_LENGTH = 64
+TaxonomyName = Annotated[str, Field(min_length=1, max_length=TAXONOMY_NAME_MAX_LENGTH)]
 
 
 class PostCreateRequest(BaseModel):
@@ -20,8 +22,8 @@ class PostCreateRequest(BaseModel):
     seo_title: str | None = Field(default=None, max_length=255)
     seo_description: str | None = Field(default=None, max_length=500)
     seo_keywords: str | None = Field(default=None, max_length=500)
-    category_names: list[str] = Field(default_factory=list, max_length=8)
-    tag_names: list[str] = Field(default_factory=list, max_length=20)
+    category_names: list[TaxonomyName] = Field(default_factory=list, max_length=8)
+    tag_names: list[TaxonomyName] = Field(default_factory=list, max_length=20)
     published_at: datetime | None = None
 
     model_config = ConfigDict(extra="forbid")
@@ -47,8 +49,8 @@ class PostUpdateRequest(BaseModel):
     seo_title: str | None = Field(default=None, max_length=255)
     seo_description: str | None = Field(default=None, max_length=500)
     seo_keywords: str | None = Field(default=None, max_length=500)
-    category_names: list[str] | None = Field(default=None, max_length=8)
-    tag_names: list[str] | None = Field(default=None, max_length=20)
+    category_names: list[TaxonomyName] | None = Field(default=None, max_length=8)
+    tag_names: list[TaxonomyName] | None = Field(default=None, max_length=20)
     published_at: datetime | None = None
 
     model_config = ConfigDict(extra="forbid")

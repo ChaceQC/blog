@@ -5,7 +5,12 @@ from app.core.url_validation import (
     validate_public_href,
     validate_public_image_src,
 )
-from app.schemas.content import CONTENT_MD_MAX_LENGTH, PostCreateRequest
+from app.schemas.content import (
+    CONTENT_MD_MAX_LENGTH,
+    TAXONOMY_NAME_MAX_LENGTH,
+    PostCreateRequest,
+    PostUpdateRequest,
+)
 from app.schemas.encryption import ENCRYPTION_CIPHERTEXT_MAX_LENGTH, EncryptedApiRequest
 from app.schemas.links import (
     FriendLinkCreateRequest,
@@ -111,3 +116,15 @@ def test_markdown_content_rejects_oversized_body() -> None:
             slug="long-post",
             content_md="字" * (CONTENT_MD_MAX_LENGTH + 1),
         )
+
+
+def test_post_taxonomy_names_reject_oversized_items() -> None:
+    with pytest.raises(ValueError):
+        PostCreateRequest(
+            title="长分类",
+            slug="long-category",
+            content_md="正文",
+            category_names=["分" * (TAXONOMY_NAME_MAX_LENGTH + 1)],
+        )
+    with pytest.raises(ValueError):
+        PostUpdateRequest(tag_names=["标" * (TAXONOMY_NAME_MAX_LENGTH + 1)])

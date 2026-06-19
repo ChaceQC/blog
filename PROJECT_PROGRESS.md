@@ -81,16 +81,16 @@
 - P3 WebP 上传阶段尺寸读取已补齐：`read_image_size()` 对 `image/webp` 使用 Pillow 在 warning-as-error 模式下读取宽高，并复用现有单边和总像素限制；无效 WebP 或解压炸弹警告会在上传校验阶段转为文件类型错误。该修复不涉及数据库迁移或服务器配置。
 - P3 站点导航 `icon_url` 校验边界已修复：`SiteNavItemCreateRequest` 和 `SiteNavItemUpdateRequest` 的 `url` 继续使用公开 href validator，`icon_url` 改用公开图片源 validator，只允许 `http/https/站内公开路径`，不再允许 `mailto:` 进入前端 `<img src>`。该修复不涉及数据库迁移或服务器配置。
 - P3 前端公开非文章查询取消链路已补齐：底层 `apiGet` / `apiPost` 会把 `AbortSignal` 传入 fetch，加密会话协商 fetch 也接收 signal；公开文件、友链、站点目录、站点资料 API 以及对应页面/SEO/标题查询会透传 React Query 的 signal，切换页面时可取消仍在等待的公开请求。该修复不涉及数据库迁移或服务器配置。
+- P4 文章分类/标签请求单项长度上限已补齐：`category_names` 和 `tag_names` 的数组元素在 Pydantic schema 层限制为 1 到 64 字符，和 Service/Repository 的 taxonomy 名称归一化上限保持一致，避免超长单项进入业务层。该修复不涉及数据库迁移或服务器配置。
 
 ### 待修复清单
 
-- P4：文章分类/标签请求缺少单项字符串长度上限。`category_names` 和 `tag_names` 只限制数组长度，Service/Repository 会在后续 normalize 时截断到 64 字符；建议在 Pydantic schema 层就限制每个名称长度，避免无意义的大字符串进入业务层。
 - P4：FastAPI 根路径在后端直连时会返回 `environment`。正常部署由 Nginx 静态首页接管 `/`，后端不暴露公网；但若后端端口被误暴露，该字段会形成轻微信息泄露。建议生产环境根路径只返回最小健康信息，或移除 `environment`。
 - P4：前端部分页面和面板仍接近继续拆分阈值。当前无 400 行以上源码文件，但 `AdminPostsPage.tsx`、`AdminFilesPage.tsx`、`AdminLogsPage.tsx`、`AdminFriendLinksPanel.tsx`、`FileDetail.tsx`、`useAdminPostEditor.ts` 等已在 250-333 行区间；后续新增功能时应优先抽出表单块、列表块或 hook，避免重新回到大页面。
 
 ### 进行中
 
-- 正在按待修复清单逐项推进；下一项处理文章分类/标签请求的单项字符串长度上限。
+- 正在按待修复清单逐项推进；下一项处理 FastAPI 根路径的环境信息最小化。
 
 ### 阻塞与风险
 
@@ -111,7 +111,7 @@
 
 - 在已部署服务器上按最新 `main` 发布后端和前端静态产物，并执行 Alembic 迁移到 `20260619_0009_friend_link_status_index.py`。
 - 服务器重新拉取最新 `main` 后，重新执行 `docker compose ... build nginx`，确认 Linux 镜像内 `npm ci` 不再缺少 `@emnapi/core` / `@emnapi/runtime`。
-- 处理 P4 文章分类/标签单项字符串长度 schema 上限；该项预计不涉及数据库迁移或服务器配置。
+- 处理 P4 FastAPI 根路径 environment 字段最小化；该项预计不涉及数据库迁移或服务器配置。
 
 ### 验证
 
@@ -138,6 +138,8 @@
 - 前端公开查询取消链路修复后已运行 `npm.cmd run lint`，通过。
 - 前端公开查询取消链路修复后已运行 `npm.cmd test`，3 个测试文件 6 个测试通过。
 - 前端公开查询取消链路修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
+- 文章分类/标签单项长度修复后已运行 `uv run ruff check app/schemas/content.py tests/test_url_validation.py tests/test_content_service.py tests/test_admin_content_api.py`，通过。
+- 文章分类/标签单项长度修复后已运行 `uv run pytest tests/test_url_validation.py tests/test_content_service.py tests/test_admin_content_api.py`，30 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - P1 上传静态暴露修复后已运行文本检查，确认 `deploy/nginx/templates/blog.conf.template`、`deploy/docker-compose.yml` 和 `deploy/nginx/Dockerfile` 不再包含 `/uploads/` 静态 location、上传目录挂载或 nginx 镜像内上传目录创建。
 - 已运行 `uv run ruff check .`，通过。
 - 已运行 `uv run pytest tests/test_public_content_api.py tests/test_admin_files_api.py tests/test_request_client_ip.py tests/test_log_service.py tests/test_admin_logs_api.py`，53 个测试通过；仍存在 FastAPI/Starlette TestClient 与 per-request cookies 的上游弃用警告。
