@@ -47,6 +47,11 @@ def validate_url(
         raise ValueError("url scheme is not allowed")
     if scheme in HTTP_URL_SCHEMES and not parsed.netloc:
         raise ValueError("http url must include host")
+    if scheme in HTTP_URL_SCHEMES:
+        try:
+            _ = parsed.port
+        except ValueError as exc:
+            raise ValueError("http url port is invalid") from exc
     if scheme == "mailto" and not parsed.path:
         raise ValueError("mailto url must include address")
     return url

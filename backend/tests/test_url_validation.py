@@ -31,6 +31,14 @@ def test_public_friend_application_rejects_private_protocol() -> None:
         PublicFriendLinkApplicationRequest(name="坏链接", url="file:///etc/passwd")
 
 
+def test_public_friend_application_rejects_invalid_http_port() -> None:
+    with pytest.raises(ValueError):
+        PublicFriendLinkApplicationRequest(
+            name="坏端口",
+            url="https://example.test:bad",
+        )
+
+
 def test_site_nav_item_allows_site_path_and_mailto_but_rejects_script() -> None:
     item = SiteNavItemCreateRequest(
         title="站内入口",

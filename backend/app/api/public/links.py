@@ -30,6 +30,8 @@ from app.schemas.links import (
 from app.schemas.pagination import PAGE_OFFSET_MAX
 from app.services.links import (
     CreateFriendLinkCommand,
+    DuplicateFriendLinkApplicationError,
+    FriendLinkApplicationLimitExceededError,
     SiteNavItemNotFoundError,
 )
 from app.services.logs import AccessLogDedupeBackend, AccessLogDedupeRule
@@ -109,18 +111,29 @@ async def create_public_friend_link_application(
         PublicFriendLinkApplicationRequest,
         decrypted_payload,
     )
-    link = await service.create_friend_link(
-        CreateFriendLinkCommand(
-            group_id=None,
-            name=application.name,
-            url=application.url,
-            avatar_url=application.avatar_url,
-            description=application.description,
-            rss_url=application.rss_url,
-            status="pending",
-            sort_order=1000,
-        ),
-    )
+    try:
+        link = await service.create_public_friend_link_application(
+            CreateFriendLinkCommand(
+                group_id=None,
+                name=application.name,
+                url=application.url,
+                avatar_url=application.avatar_url,
+                description=application.description,
+                rss_url=application.rss_url,
+                status="pending",
+                sort_order=1000,
+            ),
+        )
+    except DuplicateFriendLinkApplicationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="friend link application already exists",
+        ) from exc
+    except FriendLinkApplicationLimitExceededError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="too many pending friend link applications",
+        ) from exc
     response = await encrypted_response(
         PublicFriendLinkApplicationResponse(id=link.id, status="pending"),
         request=request,
@@ -135,7 +148,6 @@ async def create_public_friend_link_application(
         status_code=status.HTTP_200_OK,
         entity_type="friend_link",
         entity_id=link.id,
-        detail_json={"name": application.name, "url": application.url},
     )
     return response
 

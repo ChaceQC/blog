@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from app.core.site_nav_tags import normalize_site_nav_tags_json
 from app.models.link import FriendLink
@@ -12,6 +13,9 @@ FriendLinkStatus = str
 ALLOWED_FRIEND_LINK_STATUSES = {"pending", "healthy", "rejected"}
 ALLOWED_SITE_NAV_OPEN_TARGETS = {"blank", "self"}
 ALLOWED_SITE_NAV_VISIBILITIES = {"public", "hidden", "private"}
+PUBLIC_FRIEND_LINK_PENDING_LIMIT = 100
+PUBLIC_FRIEND_LINK_PENDING_DOMAIN_LIMIT = 5
+PUBLIC_FRIEND_LINK_DUPLICATE_SCAN_LIMIT = 5000
 
 
 class LinkNotFoundError(Exception):
@@ -27,6 +31,14 @@ class SiteNavItemNotFoundError(Exception):
 
 
 class InvalidSiteNavItemValueError(Exception):
+    pass
+
+
+class DuplicateFriendLinkApplicationError(Exception):
+    pass
+
+
+class FriendLinkApplicationLimitExceededError(Exception):
     pass
 
 
@@ -46,6 +58,15 @@ class LinkRepositoryProtocol(Protocol):
     ) -> Sequence[tuple[FriendLink, str | None]]: ...
 
     async def count_public_friend_links(self) -> int: ...
+
+    async def list_friend_links_by_statuses(
+        self,
+        *,
+        statuses: set[str],
+        limit: int,
+    ) -> Sequence[FriendLink]: ...
+
+    async def count_friend_links_by_status(self, *, status: str) -> int: ...
 
     async def get_friend_link(self, link_id: int) -> FriendLink | None: ...
 
@@ -266,6 +287,56 @@ class LinkService:
         await self.repository.commit()
         await self.repository.refresh(link)
         return self._friend_link_record(link=link, group_name=None)
+
+    async def create_public_friend_link_application(
+        self,
+        command: CreateFriendLinkCommand,
+    ) -> AdminFriendLinkRecord:
+        self._ensure_valid_status(command.status)
+        if command.status != "pending":
+            raise InvalidFriendLinkStatusError("public application must be pending")
+
+        normalized_url = normalize_friend_link_url(command.url)
+        domain = friend_link_domain(normalized_url)
+        pending_count = await self.repository.count_friend_links_by_status(
+            status="pending",
+        )
+        if pending_count >= PUBLIC_FRIEND_LINK_PENDING_LIMIT:
+            raise FriendLinkApplicationLimitExceededError(
+                "too many pending friend link applications",
+            )
+
+        related_links = await self.repository.list_friend_links_by_statuses(
+            statuses={"pending", "healthy"},
+            limit=PUBLIC_FRIEND_LINK_DUPLICATE_SCAN_LIMIT,
+        )
+        pending_domain_count = 0
+        for link in related_links:
+            existing_url = normalize_friend_link_url(link.url)
+            if existing_url == normalized_url:
+                raise DuplicateFriendLinkApplicationError(
+                    "friend link url already exists",
+                )
+            if link.status == "pending" and friend_link_domain(existing_url) == domain:
+                pending_domain_count += 1
+
+        if pending_domain_count >= PUBLIC_FRIEND_LINK_PENDING_DOMAIN_LIMIT:
+            raise FriendLinkApplicationLimitExceededError(
+                "too many pending friend link applications for this domain",
+            )
+
+        return await self.create_friend_link(
+            CreateFriendLinkCommand(
+                group_id=command.group_id,
+                name=command.name,
+                url=normalized_url,
+                avatar_url=command.avatar_url,
+                description=command.description,
+                rss_url=command.rss_url,
+                status=command.status,
+                sort_order=command.sort_order,
+            ),
+        )
 
     async def update_friend_link(
         self,
@@ -495,3 +566,24 @@ class LinkService:
             created_at=item.created_at,
             updated_at=item.updated_at,
         )
+
+
+def normalize_friend_link_url(url: str) -> str:
+    parsed = urlparse(url.strip())
+    scheme = parsed.scheme.lower()
+    hostname = (parsed.hostname or "").lower()
+    port = parsed.port
+    netloc = hostname
+    if port is not None and not (
+        (scheme == "http" and port == 80)
+        or (scheme == "https" and port == 443)
+    ):
+        netloc = f"{hostname}:{port}"
+
+    path = parsed.path or "/"
+    query = urlencode(sorted(parse_qsl(parsed.query, keep_blank_values=True)))
+    return urlunparse((scheme, netloc, path, "", query, ""))
+
+
+def friend_link_domain(url: str) -> str:
+    return (urlparse(url).hostname or "").lower()

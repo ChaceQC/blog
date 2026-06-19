@@ -49,6 +49,26 @@ class LinkRepository:
         )
         return int(result.scalar_one())
 
+    async def list_friend_links_by_statuses(
+        self,
+        *,
+        statuses: set[str],
+        limit: int,
+    ) -> Sequence[FriendLink]:
+        result = await self.session.execute(
+            select(FriendLink)
+            .where(FriendLink.status.in_(statuses))
+            .order_by(FriendLink.id.desc())
+            .limit(limit),
+        )
+        return result.scalars().all()
+
+    async def count_friend_links_by_status(self, *, status: str) -> int:
+        result = await self.session.execute(
+            select(func.count(FriendLink.id)).where(FriendLink.status == status),
+        )
+        return int(result.scalar_one())
+
     async def list_healthy_friend_links_for_check(
         self,
         *,

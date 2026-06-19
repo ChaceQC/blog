@@ -28,7 +28,12 @@ from app.services.content_read_models import (
     PublicTaxonomyRead,
 )
 from app.services.encryption import ActiveEncryptionSessionLimitExceeded
-from app.services.links import CreateFriendLinkCommand, SiteNavItemNotFoundError
+from app.services.links import (
+    CreateFriendLinkCommand,
+    DuplicateFriendLinkApplicationError,
+    FriendLinkApplicationLimitExceededError,
+    SiteNavItemNotFoundError,
+)
 from app.services.logs import InMemoryAccessLogDedupeBackend
 from app.services.rate_limit import RateLimitRule, RateLimitService
 from app.services.settings import SettingService
@@ -306,8 +311,15 @@ class ExplodingFeedContentService:
 
 
 class FakePublicLinkService:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        duplicate_application: bool = False,
+        application_limit_exceeded: bool = False,
+    ) -> None:
         self.site_nav_click_count = 0
+        self.duplicate_application = duplicate_application
+        self.application_limit_exceeded = application_limit_exceeded
 
     async def list_public_friend_links(
         self,
@@ -382,12 +394,19 @@ class FakePublicLinkService:
         self.site_nav_click_count += 1
         return await self.get_public_site_nav_item(item_id=item_id)
 
-    async def create_friend_link(self, command: CreateFriendLinkCommand) -> object:
+    async def create_public_friend_link_application(
+        self,
+        command: CreateFriendLinkCommand,
+    ) -> object:
         assert command.group_id is None
         assert command.name == "新朋友"
         assert command.url == "https://friend.example.test"
         assert command.status == "pending"
         assert command.sort_order == 1000
+        if self.duplicate_application:
+            raise DuplicateFriendLinkApplicationError("duplicate")
+        if self.application_limit_exceeded:
+            raise FriendLinkApplicationLimitExceededError("too many pending")
         return SimpleNamespace(
             id=2,
             status=command.status,
@@ -1240,6 +1259,73 @@ def test_public_friend_link_application_decrypts_content_request() -> None:
     assert manager.payload["status"] == "pending"
     assert logs.items[0]["access_type"] == "public_friend_link_application"
     assert logs.items[0]["entity_id"] == 2
+    assert logs.items[0]["detail_json"] is None
+
+
+def test_public_friend_link_application_rejects_duplicate_url() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager(
+        decrypted_payload={
+            "name": "新朋友",
+            "url": "https://friend.example.test",
+        },
+    )
+    app.dependency_overrides[get_link_service] = lambda: FakePublicLinkService(
+        duplicate_application=True,
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
+
+    try:
+        response = client.post(
+            "/api/public/friend-links/applications",
+            headers={"X-Encryption-Session": "public-session"},
+            json={
+                "session_id": "public-session",
+                "profile": "content-v1",
+                "nonce": "test-nonce",
+                "ciphertext": "test-ciphertext",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "friend link application already exists"
+
+
+def test_public_friend_link_application_rejects_pending_overflow() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager(
+        decrypted_payload={
+            "name": "新朋友",
+            "url": "https://friend.example.test",
+        },
+    )
+    app.dependency_overrides[get_link_service] = lambda: FakePublicLinkService(
+        application_limit_exceeded=True,
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
+
+    try:
+        response = client.post(
+            "/api/public/friend-links/applications",
+            headers={"X-Encryption-Session": "public-session"},
+            json={
+                "session_id": "public-session",
+                "profile": "content-v1",
+                "nonce": "test-nonce",
+                "ciphertext": "test-ciphertext",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "too many pending friend link applications"
 
 
 def test_public_site_items_return_encrypted_list() -> None:

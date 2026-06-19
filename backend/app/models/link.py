@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Integer, String, func
+from sqlalchemy import ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import BIGINT_UNSIGNED, DATETIME_6, Base, TimestampMixin, pk_column
@@ -22,6 +22,7 @@ class FriendLinkGroup(Base):
 
 class FriendLink(TimestampMixin, Base):
     __tablename__ = "friend_links"
+    __table_args__ = (Index("idx_friend_links_status", "status"),)
 
     id: Mapped[int] = pk_column()
     group_id: Mapped[int | None] = mapped_column(
