@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import (
+    get_access_log_dedupe_backend,
     get_content_service,
     get_encryption_session_manager,
     get_link_service,
@@ -28,6 +29,7 @@ from app.services.content_read_models import (
 )
 from app.services.encryption import ActiveEncryptionSessionLimitExceeded
 from app.services.links import CreateFriendLinkCommand, SiteNavItemNotFoundError
+from app.services.logs import InMemoryAccessLogDedupeBackend
 from app.services.rate_limit import RateLimitRule, RateLimitService
 from app.services.settings import SettingService
 
@@ -304,6 +306,9 @@ class ExplodingFeedContentService:
 
 
 class FakePublicLinkService:
+    def __init__(self) -> None:
+        self.site_nav_click_count = 0
+
     async def list_public_friend_links(
         self,
         *,
@@ -353,7 +358,7 @@ class FakePublicLinkService:
     async def count_public_site_nav_items(self) -> int:
         return 1
 
-    async def record_public_site_nav_click(self, *, item_id: int) -> object:
+    async def get_public_site_nav_item(self, *, item_id: int) -> object:
         if item_id != 1:
             raise SiteNavItemNotFoundError("site nav item not found")
         return SimpleNamespace(
@@ -367,11 +372,15 @@ class FakePublicLinkService:
             tags_json={"tags": ["blog"]},
             open_target="blank",
             visibility="public",
-            click_count=8,
+            click_count=8 + self.site_nav_click_count,
             sort_order=0,
             created_at=datetime(2026, 6, 16, tzinfo=UTC),
             updated_at=datetime(2026, 6, 16, tzinfo=UTC),
         )
+
+    async def record_public_site_nav_click(self, *, item_id: int) -> object:
+        self.site_nav_click_count += 1
+        return await self.get_public_site_nav_item(item_id=item_id)
 
     async def create_friend_link(self, command: CreateFriendLinkCommand) -> object:
         assert command.group_id is None
@@ -1261,8 +1270,12 @@ def test_public_site_items_return_encrypted_list() -> None:
 def test_public_site_item_visit_records_click_and_redirects() -> None:
     client = TestClient(app)
     logs = FakeLogService()
-    app.dependency_overrides[get_link_service] = lambda: FakePublicLinkService()
+    link_service = FakePublicLinkService()
+    app.dependency_overrides[get_link_service] = lambda: link_service
     app.dependency_overrides[get_log_service] = lambda: logs
+    app.dependency_overrides[get_access_log_dedupe_backend] = (
+        lambda: InMemoryAccessLogDedupeBackend()
+    )
 
     try:
         response = client.get("/api/public/site-items/1/visit", follow_redirects=False)
@@ -1271,12 +1284,33 @@ def test_public_site_item_visit_records_click_and_redirects() -> None:
 
     assert response.status_code == 302
     assert response.headers["location"] == "https://github.com/ChaceQC/blog"
+    assert link_service.site_nav_click_count == 1
     assert logs.items[0]["access_type"] == "public_site_item_visit"
     assert logs.items[0]["entity_id"] == 1
-    assert logs.items[0]["detail_json"] == {
-        "click_count": 8,
-        "open_target": "blank",
-    }
+    assert logs.items[0]["detail_json"] is None
+
+
+def test_public_site_item_visit_dedupes_repeated_click_and_log() -> None:
+    client = TestClient(app)
+    logs = FakeLogService()
+    link_service = FakePublicLinkService()
+    dedupe_backend = InMemoryAccessLogDedupeBackend()
+    app.dependency_overrides[get_link_service] = lambda: link_service
+    app.dependency_overrides[get_log_service] = lambda: logs
+    app.dependency_overrides[get_access_log_dedupe_backend] = lambda: dedupe_backend
+
+    try:
+        first = client.get("/api/public/site-items/1/visit", follow_redirects=False)
+        second = client.get("/api/public/site-items/1/visit", follow_redirects=False)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert first.status_code == 302
+    assert second.status_code == 302
+    assert first.headers["location"] == "https://github.com/ChaceQC/blog"
+    assert second.headers["location"] == "https://github.com/ChaceQC/blog"
+    assert link_service.site_nav_click_count == 1
+    assert len(logs.items) == 1
 
 
 def test_public_site_item_visit_returns_404_for_missing_item() -> None:

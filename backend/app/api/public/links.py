@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 
 from app.api.dependencies import (
+    AccessLogDedupeDependency,
     EncryptionSessionManagerDependency,
     LogServiceDependency,
     RateLimitServiceDependency,
@@ -31,6 +32,7 @@ from app.services.links import (
     CreateFriendLinkCommand,
     SiteNavItemNotFoundError,
 )
+from app.services.logs import AccessLogDedupeBackend, AccessLogDedupeRule
 from app.services.rate_limit import RateLimitRule
 
 router = APIRouter(tags=["public-links"])
@@ -182,9 +184,11 @@ async def visit_public_site_item(
     request: Request,
     service: PublicLinkServiceDependency,
     logs: LogServiceDependency,
+    dedupe_backend: AccessLogDedupeDependency,
+    settings: SettingsDependency,
 ) -> RedirectResponse:
     try:
-        item = await service.record_public_site_nav_click(item_id=item_id)
+        item = await service.get_public_site_nav_item(item_id=item_id)
     except SiteNavItemNotFoundError as exc:
         await record_public_access(
             logs,
@@ -199,16 +203,35 @@ async def visit_public_site_item(
             detail="site nav item not found",
         ) from exc
 
-    await record_public_access(
-        logs,
+    should_record_visit = _should_record_site_item_visit(
         request=request,
-        access_type="public_site_item_visit",
-        status_code=status.HTTP_302_FOUND,
-        entity_type="site_nav_item",
-        entity_id=item.id,
-        detail_json={
-            "click_count": item.click_count,
-            "open_target": item.open_target,
-        },
+        item_id=item.id,
+        dedupe_backend=dedupe_backend,
+        window_seconds=settings.access_log_dedupe_seconds,
     )
+    if should_record_visit:
+        item = await service.record_public_site_nav_click(item_id=item_id)
+        await record_public_access(
+            logs,
+            request=request,
+            access_type="public_site_item_visit",
+            status_code=status.HTTP_302_FOUND,
+            entity_type="site_nav_item",
+            entity_id=item.id,
+        )
     return RedirectResponse(url=item.url, status_code=status.HTTP_302_FOUND)
+
+
+def _should_record_site_item_visit(
+    *,
+    request: Request,
+    item_id: int,
+    dedupe_backend: AccessLogDedupeBackend,
+    window_seconds: int,
+) -> bool:
+    if window_seconds <= 0:
+        return True
+    return dedupe_backend.should_record(
+        key=f"public-site-item-visit:{client_ip(request) or 'unknown'}:{item_id}",
+        rule=AccessLogDedupeRule(window_seconds=window_seconds),
+    )

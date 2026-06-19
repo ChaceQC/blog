@@ -143,6 +143,14 @@ class LinkRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_public_site_nav_item(self, item_id: int) -> SiteNavItem | None:
+        result = await self.session.execute(
+            select(SiteNavItem)
+            .where(SiteNavItem.id == item_id)
+            .where(SiteNavItem.visibility == "public"),
+        )
+        return result.scalar_one_or_none()
+
     async def increment_public_site_nav_click(
         self,
         item_id: int,
