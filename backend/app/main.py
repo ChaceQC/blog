@@ -36,7 +36,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {
             "service": settings.app_name,
             "version": settings.version,
-            "environment": settings.environment,
         }
 
     return app

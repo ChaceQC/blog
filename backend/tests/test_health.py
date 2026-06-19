@@ -12,6 +12,17 @@ def test_healthz_returns_service_status() -> None:
     assert response.json()["status"] == "ok"
 
 
+def test_root_omits_environment_details() -> None:
+    client = TestClient(app)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "service" in response.json()
+    assert "version" in response.json()
+    assert "environment" not in response.json()
+
+
 def test_public_status_endpoint_is_mounted() -> None:
     client = TestClient(app)
 
