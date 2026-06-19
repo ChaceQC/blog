@@ -118,11 +118,6 @@ export function SelectionHighlight() {
   const [rects, setRects] = useState<BrushRect[]>([])
 
   useEffect(() => {
-    const pointerFine = window.matchMedia('(pointer: fine)')
-    if (!pointerFine.matches) {
-      return undefined
-    }
-
     let frame = 0
     const update = () => {
       window.cancelAnimationFrame(frame)
@@ -134,21 +129,31 @@ export function SelectionHighlight() {
       })
     }
 
+    document.documentElement.classList.add('selection-brush-enabled')
     document.addEventListener('selectionchange', update)
     document.addEventListener('scroll', update, true)
     window.addEventListener('resize', update)
     window.addEventListener('keyup', update)
     window.addEventListener('pointerup', update)
+    window.addEventListener('touchend', update)
+    window.addEventListener('touchcancel', update)
+    window.visualViewport?.addEventListener('scroll', update)
+    window.visualViewport?.addEventListener('resize', update)
 
     update()
 
     return () => {
       window.cancelAnimationFrame(frame)
+      document.documentElement.classList.remove('selection-brush-enabled')
       document.removeEventListener('selectionchange', update)
       document.removeEventListener('scroll', update, true)
       window.removeEventListener('resize', update)
       window.removeEventListener('keyup', update)
       window.removeEventListener('pointerup', update)
+      window.removeEventListener('touchend', update)
+      window.removeEventListener('touchcancel', update)
+      window.visualViewport?.removeEventListener('scroll', update)
+      window.visualViewport?.removeEventListener('resize', update)
     }
   }, [])
 

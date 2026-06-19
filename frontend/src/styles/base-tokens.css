@@ -55,40 +55,60 @@
   text-shadow: none;
 }
 
-@media (pointer: fine) {
-  .public-shell ::selection,
-  .content-preview ::selection,
-  :where(.post-prose, .content-preview) *::selection {
-    background: transparent;
-  }
+.selection-brush-enabled .public-shell ::selection,
+.selection-brush-enabled .content-preview ::selection,
+.selection-brush-enabled :where(.post-prose, .content-preview) *::selection {
+  background: transparent;
+}
 
-  .public-shell ::-moz-selection,
-  .content-preview ::-moz-selection,
-  :where(.post-prose, .content-preview) *::-moz-selection {
-    background: transparent;
-  }
+.selection-brush-enabled .public-shell ::-moz-selection,
+.selection-brush-enabled .content-preview ::-moz-selection,
+.selection-brush-enabled :where(.post-prose, .content-preview) *::-moz-selection {
+  background: transparent;
+}
 
+.selection-brush-enabled
+  :is(.public-shell, .post-prose, .content-preview)
   :where(
-      input,
-      textarea,
-      select,
-      [contenteditable="true"],
-      .sr-only,
-      [aria-hidden="true"]
-    )::selection {
-    background: var(--selection-bg);
-  }
-
+    input,
+    textarea,
+    select,
+    [contenteditable="true"],
+    .sr-only,
+    [aria-hidden="true"]
+  )::selection,
+.selection-brush-enabled
   :where(
-      input,
-      textarea,
-      select,
-      [contenteditable="true"],
-      .sr-only,
-      [aria-hidden="true"]
-    )::-moz-selection {
-    background: var(--selection-bg);
-  }
+    input,
+    textarea,
+    select,
+    [contenteditable="true"],
+    .sr-only,
+    [aria-hidden="true"]
+  )::selection {
+  background: var(--selection-bg);
+}
+
+.selection-brush-enabled
+  :is(.public-shell, .post-prose, .content-preview)
+  :where(
+    input,
+    textarea,
+    select,
+    [contenteditable="true"],
+    .sr-only,
+    [aria-hidden="true"]
+  )::-moz-selection,
+.selection-brush-enabled
+  :where(
+    input,
+    textarea,
+    select,
+    [contenteditable="true"],
+    .sr-only,
+    [aria-hidden="true"]
+  )::-moz-selection {
+  background: var(--selection-bg);
 }
 
 .selection-brush-layer {

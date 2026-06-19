@@ -72,6 +72,7 @@
 - 修复生产 Linux 镜像 `npm ci` 锁文件缺口：`frontend/package-lock.json` 补齐 `@napi-rs/wasm-runtime` 在 Linux/optional 依赖解析时需要的顶层 `@emnapi/core@1.11.1` 和 `@emnapi/runtime@1.11.1` 条目；同时在 `AGENT.md` 明确后续前端依赖变更必须考虑 Linux 镜像内 `npm ci`，避免 Windows 本地通过但 Docker 构建失败。
 - 修复后台日志分页总页数显示：四类后台日志列表接口现在返回真实 `total`，前端日志页改为每页请求 10 条并使用真实总数计算“第 X / Y 页”；日志页即使只有一页也会显示分页条，且当日志清理导致当前页越界时会自动回到最后一页。该修复不涉及数据库迁移或服务器配置。
 - 优化后台文件上传选择控件：文件上传表单不再展示浏览器默认 `input[type=file]` 框，改为与后台表单系统一致的自定义选择区域，包含上传图标、选择/重新选择操作、文件名、大小和 MIME 摘要，并补充窄屏换行样式。该修复不涉及数据库迁移或服务器配置。
+- 修复移动端笔刷选区效果：`SelectionHighlight` 不再因 `(pointer: fine)` 只在桌面启用，移动端触摸选区会通过 `selectionchange`、`touchend/touchcancel` 和 `visualViewport` 滚动/缩放事件重新计算笔刷覆盖层；选区透明样式也改为组件启用时全端生效，同时保留输入框、文本域和隐藏元素的原生选区背景。该修复不涉及数据库迁移或服务器配置。
 
 ### 待修复清单
 
@@ -79,7 +80,7 @@
 
 ### 进行中
 
-- 无。后台文件上传选择控件视觉修复已完成并通过提交前验证。
+- 无。移动端笔刷选区效果修复已完成并通过提交前验证。
 
 ### 阻塞与风险
 
@@ -129,6 +130,8 @@
 - 后台日志分页总页数修复后已运行 `npm.cmd test`，6 个测试通过。
 - 后台文件上传选择控件视觉修复后已运行 `npm.cmd run lint`，通过；npm 仅提示可升级小版本。
 - 后台文件上传选择控件视觉修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警，npm 仅提示可升级小版本。
+- 移动端笔刷选区效果修复后已运行 `npm.cmd run lint`，通过；npm 仅提示可升级小版本。
+- 移动端笔刷选区效果修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警，npm 仅提示可升级小版本。
 - Linux `npm ci` 锁文件缺口修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - 尝试使用 Docker 验证 `node:24-alpine` 时，本机 Docker Desktop 未运行，无法连接 `dockerDesktopLinuxEngine`；Linux 容器内 `npm ci` 需在服务器或 Docker 可用环境复核。
 - 继续全量审计新增修复后已运行 `uv run alembic upgrade head --sql`，可正常生成从空库到 `20260619_0007` 的 MySQL 迁移 SQL；本轮新增修复未产生新迁移文件。
