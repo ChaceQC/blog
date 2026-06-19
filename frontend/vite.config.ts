@@ -1,3 +1,5 @@
+/// <reference types="vitest" />
+
 import react from '@vitejs/plugin-react'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -34,5 +36,8 @@ export default defineConfig(({ command }) => ({
     host: developmentConfig.devHost,
     port: developmentConfig.devPort,
     strictPort: true,
+  },
+  test: {
+    environment: 'jsdom',
   },
 }))

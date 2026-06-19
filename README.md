@@ -158,6 +158,7 @@ npm run dev
 
 ```powershell
 cd frontend
+npm.cmd test
 npm.cmd run lint
 npm.cmd run build
 ```
@@ -226,6 +227,7 @@ uv run pytest
 
 ```powershell
 cd frontend
+npm.cmd test
 npm.cmd run lint
 npm.cmd run build
 ```

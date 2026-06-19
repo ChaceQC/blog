@@ -57,11 +57,11 @@
 - P3 访问日志和审计日志 payload 已最小化：公开访问日志不再写入列表数量、limit/offset、slug、文件名、MIME 或临时链接过期时间；后台审计日志会在写入和读取时按 allowlist 清洗，只保留状态类摘要与 `changed_fields`，过滤标题、slug、URL、文件名、MIME、完整设置值和旧历史 payload 中的敏感字段；登录限流安全事件不再记录具体用户名。该修复不涉及数据库迁移或新增服务器配置。
 - P4 后台日志页已改为后端真分页：前端不再固定拉每类前 50 条后本地分页，而是按当前 tab 和页码请求 `limit=pageSize+1`、`offset=page*pageSize`，用额外一条探测是否还有下一页；日志超过 50 条时可继续翻页。该修复不涉及数据库迁移或服务器配置。
 - P4 文件服务返回边界已显式化：删除 `FileWithUsage.__getattr__` 动态代理，文件列表、上传和删除用例直接返回 `AdminFileRead`，API 层不再依赖“半 ORM、半 DTO”的隐式属性透传。该修复不涉及数据库迁移或服务器配置。
+- P4 前端自动化测试基础已补齐：新增 Vitest、Testing Library 和 jsdom，提供 `npm.cmd test`，并补充 URL 白名单、分页纯函数和后台日志 API `limit/offset` 参数测试，先覆盖本轮安全与分页回归点。该修复不涉及数据库迁移或服务器配置。
 
 ### 待修复清单
 
 - P4：仍有多个源码文件超过项目单文件体量建议，后续维护和安全回归成本偏高。当前统计中 `frontend/src/styles/public.css` 约 1010 行，`forms.css` 约 570 行，`backend/app/services/files.py` 约 568 行，`backend/app/services/content.py` 约 513 行，`frontend/src/styles/admin.css` 约 499 行，`backend/app/api/admin/content.py` 约 477 行，`backend/app/repositories/content.py`、`backend/app/services/links.py`、`backend/app/services/logs.py` 等也超过 400 行或接近 400 行。建议继续按职责拆分 CSS 分层、内容用例、日志保留/查询、文件下载/预览和内容 repository 查询。
-- P4：前端缺少自动化组件/单元测试。`frontend/package.json` 只有 `dev/build/lint/preview`，未配置 test，仓库内也未发现 Vitest/Testing Library 用例。前端加密 client、刷新会话、分页 hook、日志页、上传页、URL safePreviewHref 和 MathHtml 都主要依赖 lint/build/人工联调，后续重构容易漏掉行为回归。建议引入 Vitest + React Testing Library，优先覆盖加密 API client、auth refresh、分页 hook、URL 白名单、日志分页和文件上传状态。
 
 ### 进行中
 
@@ -157,6 +157,9 @@
 - 后台日志真分页修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - 文件服务返回边界显式化后已运行 `uv run pytest tests/test_admin_files_api.py tests/test_file_cleanup.py`，26 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 文件服务返回边界显式化后已运行 `uv run ruff check app/services/files.py app/api/admin/files.py tests/test_admin_files_api.py tests/test_file_cleanup.py`，通过。
+- 前端测试基础补齐后已运行 `npm.cmd test`，3 个测试文件、6 个测试通过。
+- 前端测试基础补齐后已运行 `npm.cmd run lint`，通过。
+- 前端测试基础补齐后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - API 共享依赖状态迁移后已运行 `uv run pytest tests/test_rate_limit.py tests/test_log_service.py tests/test_public_content_api.py tests/test_admin_encryption_api.py`，49 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run lint`，通过。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
