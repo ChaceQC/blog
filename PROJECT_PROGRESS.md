@@ -42,6 +42,7 @@
 - 后端管理端读取边界已收敛到 Service read model：内容与文件服务新增管理端 DTO/read 方法，日志服务返回只读日志 DTO，设置服务新增后台设置 DTO 和公开站点资料 DTO；后台内容、文件、日志、设置 API 不再直接从 ORM/record 自行扫字段，公开站点资料清洗也从路由搬入 `SettingService`。
 - 前后端类型手写镜像已补充契约测试：新增 `backend/tests/test_frontend_contract.py`，按字段名、可空性、数组和对象形状校验后端 Pydantic 响应 schema 与前端 `features/*/types.ts` 的主要响应类型，降低后续手写类型漂移风险。
 - 全局 CSS 已按职责拆分：`frontend/src/index.css` 改为聚合导入，新增 `frontend/src/styles/base.css`、`public.css`、`prose.css`、`components.css`、`admin.css`、`forms.css` 和 `responsive.css`，保持原有规则顺序和视觉行为不变。
+- 修复宿主机 Nginx + Docker 后端场景下访问日志 IP 易显示为 Docker 网关的问题：`client_ip()` 在可信代理连接下会从 `X-Forwarded-For` 右侧开始跳过可信代理，取第一个非可信客户端 IP，避免简单取最左值被伪造头污染；部署示例将 `BLOG_TRUSTED_PROXY_HOSTS` 调整为 Docker bridge CIDR 示例，并补充 `172.23.0.1` 类网关地址的配置说明。
 
 ### 待修复清单
 
@@ -56,14 +57,14 @@
 - 今日早些时候新增的 `encryption_sessions.client_ip` 需要生产库执行 Alembic 迁移到 head；本次访问日志去重策略调整没有新增或修改数据库字段、索引、约束或默认值，因此不需要新的迁移脚本。
 - 上传上限已从 30MB 收敛到 20MB，服务器上的后端环境变量需要同步为 `BLOG_UPLOAD_MAX_SIZE_BYTES=20971520`，否则会与 Nginx 配置不一致。
 - 本次依赖切换需要服务器真实 `deploy/env/backend.env` 同步改为 `BLOG_DATABASE_URL=mysql+aiomysql://...`；代码会临时兼容旧 `mysql+asyncmy://` 前缀，但不建议生产长期保留旧写法。
-- 宿主机 Nginx 反代场景需要设置 `BLOG_TRUSTED_PROXY_HOSTS` 为后端看到的宿主机/网关直连 IP 或 CIDR；示例值 `["127.0.0.1"]` 仅适用于后端直连来源确实是本机回环的部署。
+- 宿主机 Nginx 反代场景需要设置 `BLOG_TRUSTED_PROXY_HOSTS` 为后端看到的宿主机/网关直连 IP 或 CIDR；若日志里显示 `172.23.0.1` 这类 Docker 网关地址，服务器真实 `backend.env` 可填 `BLOG_TRUSTED_PROXY_HOSTS=["172.16.0.0/12"]` 或只填实际网关 IP。
 - 生产环境现在会强制校验 `BLOG_PUBLIC_BASE_URL` 为 `https://` 绝对地址；服务器真实 `backend.env` 不能再使用 `http://`、相对路径或占位值。
 - 访问日志去重窗口可通过 `BLOG_ACCESS_LOG_DEDUPE_SECONDS=60` 显式配置；不配置时默认 60 秒，生产 Redis 已启用时会复用 `BLOG_REDIS_URL`。
 - 本机 ignored 的 `deploy/env/backend.env` 仍可能保留旧连接串，`docker compose config` 只能证明配置展开语法有效；生产发布前必须按上面的真实 env 项显式更新。
 
 ### 下一步
 
-- 将 `dev` 快进合并到 `main` 并推送，然后汇总生产服务器需要同步的环境变量、迁移和宿主机 Nginx 部署注意事项。
+- 推送日志 IP 修复到 `dev`，验证后快进合并到 `main`，并提示服务器同步 `BLOG_TRUSTED_PROXY_HOSTS` 后重启后端容器。
 
 ### 验证
 
@@ -122,6 +123,8 @@
 - 全部待修复项完成后已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
 - 全部待修复项完成后已运行 `git diff --check`，未发现空白或行尾问题。
 - 尝试运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml build nginx` 时，本机 Docker Desktop 未运行，无法连接 `dockerDesktopLinuxEngine`；服务器或 Docker 正常运行环境仍需执行构建并复制静态文件。
+- 日志 IP 修复后已运行 `uv run ruff check app/core/request.py tests/test_request_client_ip.py`，通过。
+- 日志 IP 修复后已运行 `uv run pytest tests/test_request_client_ip.py`，6 个测试通过。
 
 ## 2026-06-18
 

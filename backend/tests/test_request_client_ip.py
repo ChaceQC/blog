@@ -26,7 +26,7 @@ class FakeCidrSettings:
     trusted_proxy_hosts = ["172.23.0.0/24"]
 
 
-def test_client_ip_prefers_first_forwarded_for_address_for_trusted_proxy(
+def test_client_ip_uses_forwarded_for_address_for_trusted_proxy(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(request_module, "get_settings", lambda: FakeSettings())
@@ -39,6 +39,35 @@ def test_client_ip_prefers_first_forwarded_for_address_for_trusted_proxy(
             (b"x-real-ip", b"198.51.100.7"),
         ],
     )
+
+    assert client_ip(request) == "203.0.113.9"
+
+
+def test_client_ip_ignores_untrusted_leftmost_forwarded_for_spoof(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(request_module, "get_settings", lambda: FakeSettings())
+    request = make_request(
+        [
+            (
+                b"x-forwarded-for",
+                b"198.51.100.99, 203.0.113.9, 172.23.0.1",
+            ),
+        ],
+    )
+
+    assert client_ip(request) == "203.0.113.9"
+
+
+def test_client_ip_uses_docker_gateway_forwarded_for_when_gateway_is_trusted(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        request_module,
+        "get_settings",
+        lambda: type("Settings", (), {"trusted_proxy_hosts": ["172.16.0.0/12"]})(),
+    )
+    request = make_request([(b"x-forwarded-for", b"203.0.113.9")])
 
     assert client_ip(request) == "203.0.113.9"
 

@@ -57,6 +57,20 @@ services:
       - "127.0.0.1:18080:8000"
 ```
 
+此时后端容器看到的连接来源常是 Docker 网关地址，例如 `172.23.0.1`。为了让访问日志、登录日志和限流使用真实访客 IP，`deploy/env/backend.env` 的 `BLOG_TRUSTED_PROXY_HOSTS` 应包含该网关 IP 或 Docker bridge CIDR，例如：
+
+```dotenv
+BLOG_TRUSTED_PROXY_HOSTS=["172.16.0.0/12"]
+```
+
+宿主机 Nginx 的站点配置也必须向后端传递代理头：
+
+```nginx
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
 启动命令：
 
 ```bash

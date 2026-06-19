@@ -351,14 +351,14 @@ BLOG_DEBUG=false
 BLOG_DOCS_ENABLED=false
 BLOG_RATE_LIMIT_BACKEND=redis
 BLOG_REDIS_URL=redis://redis:6379/0
-BLOG_TRUSTED_PROXY_HOSTS=["127.0.0.1"]
+BLOG_TRUSTED_PROXY_HOSTS=["172.16.0.0/12"]
 BLOG_UPLOAD_ROOT=/data/blog/uploads
 BLOG_UPLOAD_MAX_SIZE_BYTES=20971520
 BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP=10
 BLOG_ACCESS_LOG_DEDUPE_SECONDS=60
 ```
 
-`BLOG_DATABASE_URL` 应使用 `mysql+aiomysql://`。后端会临时兼容旧的 `mysql+asyncmy://` 前缀并在运行时映射到 `aiomysql`，但生产服务器的真实 `deploy/env/backend.env` 仍建议显式改为 `mysql+aiomysql://...`，避免继续依赖已命中 advisory 的旧驱动前缀。若使用宿主机 Nginx 反代到 Docker 后端，请把 `BLOG_TRUSTED_PROXY_HOSTS` 改成后端看到的宿主机/网关直连 IP 或 CIDR；后端绑定 `127.0.0.1:18080` 时可填 `["127.0.0.1"]`，经 Docker 网关访问时可填实际网关 IP 或如 `["172.16.0.0/12"]` 这类内网 CIDR。填错时功能仍可用，但应用层限流会按代理 IP 而不是真实访客 IP 计数。
+`BLOG_DATABASE_URL` 应使用 `mysql+aiomysql://`。后端会临时兼容旧的 `mysql+asyncmy://` 前缀并在运行时映射到 `aiomysql`，但生产服务器的真实 `deploy/env/backend.env` 仍建议显式改为 `mysql+aiomysql://...`，避免继续依赖已命中 advisory 的旧驱动前缀。若使用宿主机 Nginx 反代到 Docker 后端，请把 `BLOG_TRUSTED_PROXY_HOSTS` 改成后端看到的宿主机/网关直连 IP 或 CIDR；如果日志里看到 `172.23.0.1` 这类 Docker 网关地址，通常可填 `["172.16.0.0/12"]`，或只填实际网关 IP。后端直接绑定并由宿主机回环访问时才填 `["127.0.0.1"]`。填错时功能仍可用，但应用层限流和访问日志会按代理 IP 而不是真实访客 IP 计数。
 
 编辑 `deploy/env/nginx.env`：
 
@@ -379,6 +379,14 @@ services:
   backend:
     ports:
       - "127.0.0.1:18080:8000"
+```
+
+此时后端容器看到的连接来源常是 Docker 网关地址，例如 `172.23.0.1`。为了让访问日志、登录日志和限流使用真实访客 IP，`deploy/env/backend.env` 里的 `BLOG_TRUSTED_PROXY_HOSTS` 应包含该网关 IP 或 Docker bridge CIDR，例如 `["172.16.0.0/12"]`。宿主机 Nginx 的站点配置也必须向后端传递代理头：
+
+```nginx
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
 ```
 
 宿主机 Nginx 场景下，仍需单独构建 nginx 镜像来产出最新 React 静态文件，再复制到宿主机站点目录：
