@@ -1,220 +1,33 @@
-from collections.abc import Sequence
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Any, Protocol
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
-
 from app.core.site_nav_tags import normalize_site_nav_tags_json
 from app.models.link import FriendLink
 from app.models.site import SiteNavItem
-from app.services.update_commands import UNSET, UnsetType, is_set
-
-FriendLinkStatus = str
-ALLOWED_FRIEND_LINK_STATUSES = {"pending", "healthy", "rejected"}
-ALLOWED_SITE_NAV_OPEN_TARGETS = {"blank", "self"}
-ALLOWED_SITE_NAV_VISIBILITIES = {"public", "hidden", "private"}
-PUBLIC_FRIEND_LINK_PENDING_LIMIT = 100
-PUBLIC_FRIEND_LINK_PENDING_DOMAIN_LIMIT = 5
-PUBLIC_FRIEND_LINK_DUPLICATE_SCAN_LIMIT = 5000
-
-
-class LinkNotFoundError(Exception):
-    pass
-
-
-class InvalidFriendLinkStatusError(Exception):
-    pass
-
-
-class SiteNavItemNotFoundError(Exception):
-    pass
-
-
-class InvalidSiteNavItemValueError(Exception):
-    pass
-
-
-class DuplicateFriendLinkApplicationError(Exception):
-    pass
-
-
-class FriendLinkApplicationLimitExceededError(Exception):
-    pass
-
-
-class LinkRepositoryProtocol(Protocol):
-    async def list_friend_links(
-        self,
-        *,
-        limit: int,
-        offset: int,
-    ) -> Sequence[tuple[FriendLink, str | None]]: ...
-
-    async def list_public_friend_links(
-        self,
-        *,
-        limit: int,
-        offset: int,
-    ) -> Sequence[tuple[FriendLink, str | None]]: ...
-
-    async def count_public_friend_links(self) -> int: ...
-
-    async def list_friend_links_by_statuses(
-        self,
-        *,
-        statuses: set[str],
-        limit: int,
-    ) -> Sequence[FriendLink]: ...
-
-    async def count_friend_links_by_status(self, *, status: str) -> int: ...
-
-    async def get_friend_link(self, link_id: int) -> FriendLink | None: ...
-
-    async def create_friend_link(
-        self,
-        *,
-        group_id: int | None,
-        name: str,
-        url: str,
-        avatar_url: str | None,
-        description: str | None,
-        rss_url: str | None,
-        status: str,
-        sort_order: int,
-    ) -> FriendLink: ...
-
-    async def list_site_nav_items(
-        self,
-        *,
-        limit: int,
-        offset: int,
-    ) -> Sequence[tuple[SiteNavItem, str | None, str | None]]: ...
-
-    async def list_public_site_nav_items(
-        self,
-        *,
-        limit: int,
-        offset: int,
-    ) -> Sequence[tuple[SiteNavItem, str | None, str | None]]: ...
-
-    async def count_public_site_nav_items(self) -> int: ...
-
-    async def get_site_nav_item(self, item_id: int) -> SiteNavItem | None: ...
-
-    async def get_public_site_nav_item(
-        self,
-        item_id: int,
-    ) -> SiteNavItem | None: ...
-
-    async def increment_public_site_nav_click(
-        self,
-        item_id: int,
-    ) -> SiteNavItem | None: ...
-
-    async def create_site_nav_item(
-        self,
-        *,
-        group_id: int | None,
-        title: str,
-        url: str,
-        icon_url: str | None,
-        description: str | None,
-        tags_json: dict[str, Any] | None,
-        open_target: str,
-        visibility: str,
-        sort_order: int,
-    ) -> SiteNavItem: ...
-
-    async def commit(self) -> None: ...
-
-    async def refresh(self, instance: object) -> None: ...
-
-
-@dataclass(frozen=True)
-class AdminFriendLinkRecord:
-    id: int
-    group_id: int | None
-    group_name: str | None
-    name: str
-    url: str
-    avatar_url: str | None
-    description: str | None
-    rss_url: str | None
-    status: str
-    sort_order: int
-    last_checked_at: datetime | None
-    last_status_code: int | None
-    created_at: datetime | None
-    updated_at: datetime | None
-
-
-@dataclass(frozen=True)
-class AdminSiteNavItemRecord:
-    id: int
-    group_id: int | None
-    group_name: str | None
-    group_slug: str | None
-    title: str
-    url: str
-    icon_url: str | None
-    description: str | None
-    tags_json: dict[str, Any] | None
-    open_target: str
-    visibility: str
-    click_count: int
-    sort_order: int
-    created_at: datetime | None
-    updated_at: datetime | None
-
-
-@dataclass(frozen=True)
-class CreateFriendLinkCommand:
-    group_id: int | None
-    name: str
-    url: str
-    avatar_url: str | None
-    description: str | None
-    rss_url: str | None
-    status: str
-    sort_order: int
-
-
-@dataclass(frozen=True)
-class CreateSiteNavItemCommand:
-    group_id: int | None
-    title: str
-    url: str
-    icon_url: str | None
-    description: str | None
-    tags_json: dict[str, Any] | None
-    open_target: str
-    visibility: str
-    sort_order: int
-
-
-@dataclass(frozen=True)
-class UpdateFriendLinkCommand:
-    group_id: int | None | UnsetType = UNSET
-    name: str | UnsetType = UNSET
-    url: str | UnsetType = UNSET
-    avatar_url: str | None | UnsetType = UNSET
-    description: str | None | UnsetType = UNSET
-    rss_url: str | None | UnsetType = UNSET
-    status: str | UnsetType = UNSET
-    sort_order: int | UnsetType = UNSET
-
-
-@dataclass(frozen=True)
-class UpdateSiteNavItemCommand:
-    group_id: int | None | UnsetType = UNSET
-    title: str | UnsetType = UNSET
-    url: str | UnsetType = UNSET
-    icon_url: str | None | UnsetType = UNSET
-    description: str | None | UnsetType = UNSET
-    tags_json: dict[str, Any] | None | UnsetType = UNSET
-    open_target: str | UnsetType = UNSET
-    visibility: str | UnsetType = UNSET
-    sort_order: int | UnsetType = UNSET
+from app.services.link_commands import (
+    CreateFriendLinkCommand,
+    CreateSiteNavItemCommand,
+    UpdateFriendLinkCommand,
+    UpdateSiteNavItemCommand,
+)
+from app.services.link_constants import (
+    ALLOWED_FRIEND_LINK_STATUSES,
+    ALLOWED_SITE_NAV_OPEN_TARGETS,
+    ALLOWED_SITE_NAV_VISIBILITIES,
+    PUBLIC_FRIEND_LINK_DUPLICATE_SCAN_LIMIT,
+    PUBLIC_FRIEND_LINK_PENDING_DOMAIN_LIMIT,
+    PUBLIC_FRIEND_LINK_PENDING_LIMIT,
+    FriendLinkStatus,
+)
+from app.services.link_errors import (
+    DuplicateFriendLinkApplicationError,
+    FriendLinkApplicationLimitExceededError,
+    InvalidFriendLinkStatusError,
+    InvalidSiteNavItemValueError,
+    LinkNotFoundError,
+    SiteNavItemNotFoundError,
+)
+from app.services.link_protocols import LinkRepositoryProtocol
+from app.services.link_records import AdminFriendLinkRecord, AdminSiteNavItemRecord
+from app.services.link_url import friend_link_domain, normalize_friend_link_url
+from app.services.update_commands import is_set
 
 
 class LinkService:
@@ -566,24 +379,3 @@ class LinkService:
             created_at=item.created_at,
             updated_at=item.updated_at,
         )
-
-
-def normalize_friend_link_url(url: str) -> str:
-    parsed = urlparse(url.strip())
-    scheme = parsed.scheme.lower()
-    hostname = (parsed.hostname or "").lower()
-    port = parsed.port
-    netloc = hostname
-    if port is not None and not (
-        (scheme == "http" and port == 80)
-        or (scheme == "https" and port == 443)
-    ):
-        netloc = f"{hostname}:{port}"
-
-    path = parsed.path or "/"
-    query = urlencode(sorted(parse_qsl(parsed.query, keep_blank_values=True)))
-    return urlunparse((scheme, netloc, path, "", query, ""))
-
-
-def friend_link_domain(url: str) -> str:
-    return (urlparse(url).hostname or "").lower()
