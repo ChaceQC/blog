@@ -67,14 +67,15 @@
 - P4 内容 Repository 已按查询职责拆分：新增 `content_public.py` 承载公开文章、公开页面、feed、分类和标签查询 mixin，新增 `content_helpers.py` 承载标签归一化、slug 生成、公开文章过滤和 taxonomy 映射 helper；`content.py` 降到 247 行，Repository 对外方法签名和返回形状保持不变。该修复不涉及数据库迁移或服务器配置。
 - P4 RSS/sitemap 路由已按职责拆分：`feeds.py` 缩减为公开端点编排，新增 `feed_cache.py` 承载短时缓存、ETag 和 Cache-Control 响应，新增 `feed_renderers.py` 承载 RSS、sitemap、robots.txt XML/文本渲染；公开 URL、缓存头、304 短路和访问日志策略保持不变。该修复不涉及数据库迁移或服务器配置。
 - P4 `FileService` 剩余体量已继续收敛：新增 `file_access.py` 承载临时文件访问 DTO，新增 `file_protocols.py` 承载文件 Repository 协议；`files.py` 降到 352 行，旧的 `app.services.files` 具名导入保持兼容。该修复不涉及数据库迁移或服务器配置。
+- P4 前台文章归档页已按展示职责拆分：新增 `TaxonomyFilters.tsx` 承载分类/标签筛选与更多弹窗，新增 `archiveHelpers.ts` 承载归档标题、SEO path 和筛选文案 helper；`PublicPostArchivePage.tsx` 降到 153 行，只保留数据查询、SEO 和页面编排。该修复不涉及数据库迁移或服务器配置。
 
 ### 待修复清单
 
-- P4：仍有少数源码文件接近项目单文件体量建议，后续维护和安全回归成本偏高。当前统计中 `backend/app/api/admin/files.py` 约 398 行，`frontend/src/features/posts/PublicPostArchivePage.tsx` 约 394 行，`backend/app/services/links.py` 约 381 行，`backend/app/services/content.py` 约 380 行。需要最后复核这些文件是否职责单一；若职责已清晰且低于 400 行，可关闭本轮大文件待修复。
+- P4：仍有少数源码文件接近项目单文件体量建议，后续维护和安全回归成本偏高。当前统计中 `backend/app/api/admin/files.py` 约 398 行，`backend/app/services/links.py` 约 381 行，`backend/app/services/content.py` 约 380 行，`backend/app/api/public/files.py` 约 374 行，`backend/app/services/logs.py` 约 368 行。需要最后复核这些文件是否职责单一；若职责已清晰且低于 400 行，可关闭本轮大文件待修复。
 
 ### 进行中
 
-- 正在处理 P4 大文件拆分收尾；下一步复核接近 400 行的文件是否仍有明显职责混杂。
+- 正在处理 P4 大文件拆分收尾；下一步复核后台文件路由是否仍需按下载/预览子路由继续拆分。
 
 ### 阻塞与风险
 
@@ -90,7 +91,7 @@
 
 ### 下一步
 
-- 复核 `backend/app/api/admin/files.py`、`frontend/src/features/posts/PublicPostArchivePage.tsx`、`backend/app/services/links.py` 和 `backend/app/services/content.py` 的职责边界；若无需继续拆分，清空 P4 待修复并执行全量验证。
+- 复核 `backend/app/api/admin/files.py` 的职责边界；若继续拆分收益明确，则拆成聚合器和子路由，否则清空 P4 待修复并执行全量验证。
 
 ### 验证
 
@@ -131,6 +132,9 @@
 - RSS/sitemap 路由拆分后已运行 `uv run pytest tests/test_public_content_api.py`，34 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - `FileService` 剩余体量收敛后已运行 `uv run ruff check app/services/files.py app/services/file_access.py app/services/file_protocols.py`，通过。
 - `FileService` 剩余体量收敛后已运行 `uv run pytest tests/test_admin_files_api.py tests/test_file_cleanup.py tests/test_public_content_api.py`，60 个测试通过；仍存在 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 状态常量上游弃用警告。
+- 前台文章归档页拆分后已运行 `npm.cmd run lint`，通过。
+- 前台文章归档页拆分后已运行 `npm.cmd test`，3 个测试文件 6 个测试通过。
+- 前台文章归档页拆分后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - `FileService` 拆分后已运行 `uv run ruff check app/services/file_errors.py app/services/file_tokens.py app/services/file_uploads.py app/services/file_storage.py app/services/files.py tests/test_admin_files_api.py tests/test_file_cleanup.py`，通过。
 - `FileService` 拆分后已运行 `uv run pytest tests/test_admin_files_api.py tests/test_file_cleanup.py tests/test_public_content_api.py tests/test_content_service.py`，60 个测试通过；仍存在 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 状态常量的上游弃用警告。
 - 公开读取 read model 边界调整后已运行 `uv run ruff check app/schemas/content.py app/services/content_read_models.py app/services/file_read_models.py app/services/content.py app/services/files.py app/api/public tests/test_public_content_api.py tests/test_content_service.py tests/test_admin_files_api.py`，通过。
