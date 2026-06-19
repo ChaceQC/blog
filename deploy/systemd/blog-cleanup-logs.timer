@@ -1,0 +1,11 @@
+[Unit]
+Description=Run blog old database log cleanup daily
+
+[Timer]
+OnCalendar=*-*-* 03:50:00
+Persistent=true
+RandomizedDelaySec=20m
+Unit=blog-cleanup-logs.service
+
+[Install]
+WantedBy=timers.target

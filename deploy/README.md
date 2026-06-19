@@ -163,6 +163,7 @@ sudo systemctl enable --now blog-backup-mysql.timer
 sudo systemctl enable --now blog-backup-uploads.timer
 sudo systemctl enable --now blog-cleanup-encryption-sessions.timer
 sudo systemctl enable --now blog-cleanup-deleted-files.timer
+sudo systemctl enable --now blog-cleanup-logs.timer
 sudo systemctl enable --now blog-scan-orphan-files.timer
 sudo systemctl enable --now blog-check-friend-links.timer
 systemctl list-timers 'blog-*'
@@ -174,6 +175,7 @@ systemctl list-timers 'blog-*'
 - `blog-backup-uploads.timer`：每天备份上传文件目录。
 - `blog-cleanup-encryption-sessions.timer`：每小时清理过期加密会话。
 - `blog-cleanup-deleted-files.timer`：每天清理超过保留期、无引用且路径安全的软删除文件。
+- `blog-cleanup-logs.timer`：每天按保留天数清理数据库日志，默认访问日志 30 天，审计/登录/安全事件 180 天。
 - `blog-scan-orphan-files.timer`：每周 dry-run 扫描孤儿文件，只输出汇总和示例。
 - `blog-check-friend-links.timer`：每天检查已通过友链的 HTTP 状态，不自动改变人工审核状态。
 

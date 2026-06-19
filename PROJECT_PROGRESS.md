@@ -48,10 +48,10 @@
 - 文章资源临时 token 已支持浏览器缓存复用：文章正文图片、封面缩略图和后台预览图片的签名 URL 会在半个有效期时间窗内保持稳定，响应增加 `Cache-Control: private, max-age=..., immutable`、`ETag` 和 `X-Content-Type-Options: nosniff`；同一文件在时间窗内重复访问可命中浏览器缓存，过期后仍会自动换签名。
 - P2 RSS/sitemap 高成本 GET 已收敛：最近渲染的 RSS 和 sitemap 会短时缓存在应用进程内，缓存未过期时可在业务查询和 XML 渲染前处理 `If-None-Match` 并直接返回 `304`；缓存命中 `200` 仍保留访问日志，缓存命中 `304` 继续跳过访问日志。
 - P2 公开站点跳转写放大已收敛：`/api/public/site-items/{item_id}/visit` 会先只读确认公开站点项，再用现有 Redis/内存去重后端按 `IP + item_id` 和 `BLOG_ACCESS_LOG_DEDUPE_SECONDS` 短窗口判断是否递增点击计数、写访问日志；窗口内重复访问仍正常返回 `302`，但不重复写 `click_count` 和 `access_logs`，访问日志不再记录 `click_count/open_target` 明细。
+- P2 日志保留清理任务已补齐：新增 `cleanup-logs` CLI、`blog-cleanup-logs.service/timer`、日志保留 Service 和四张日志表按 `created_at` 批量删除能力；默认访问日志保留 30 天，审计/登录/安全事件保留 180 天，每张表单次最多删除 5000 条，天数传 `0` 可跳过对应表。新增 Alembic 迁移 `20260619_0008_log_retention_indexes.py`，为 `audit_logs`、`login_logs` 和 `security_events` 补 `created_at` 索引，`access_logs` 已有索引。
 
 ### 待修复清单
 
-- P2：日志表缺少保留和清理任务，长期有数据库增长风险。`access_logs`、`audit_logs`、`login_logs`、`security_events` 目前有 list/insert 路径，但 `backend/app/repositories/logs.py` 没有 delete/retention，`deploy/systemd` 也只有加密会话和文件清理 timer。访问日志虽已短时去重，但错误请求、登录失败、限流安全事件、公开站点跳转和后台审计仍会持续增长。建议新增按天数/条数保留的 CLI 和 systemd timer，必要时先导出归档再删除。
 - P2：公开友链申请只按 IP 限流，没有 URL/域名维度的去重或待审上限。`backend/app/api/public/links.py` 的申请入口会创建 `pending` 记录，`friend_links.url` 当前没有唯一约束；攻击者可在限流窗口外反复提交同一 URL 或同域 URL，堆积待审核数据和后台审计负担。建议增加规范化 URL/域名维度的短期去重、待审数量上限，或对重复 URL 建唯一约束；如果改数据库约束，需要同步 Alembic 迁移并先评估历史重复数据。
 - P3：访问日志和审计日志的 detail/after payload 仍不够最小化。公开日志仍记录列表 limit/offset/count/total、文章/分类/标签 slug、文件名、media_type、友链申请 name/url、站点跳转 click_count/open_target；后台审计仍记录友链 URL、站点 URL/icon/tags、内容 title/slug/status、文件 original_name/mime/visibility/status 等实体摘要。日志只在后台可读，但一旦日志泄露或被误导出，会暴露内容结构、URL、文件名和管理操作摘要。建议公开访问日志只保留 type/status/entity_id/path/IP/UA/时间，audit 只保留 changed_fields、状态类摘要或哈希，避免记录正文、URL、文件名等可复原业务信息。
 - P3：后台 `/api/admin/auth/me` 仍未在依赖查询前校验加密会话有效性。`backend/app/api/admin/auth.py` 先解析当前用户/JWT 并触发认证查询，函数内只调用 `require_encryption_session()` 检查 header 是否存在，真正 session scope/profile 有效性在 `encrypted_response()` 时才校验。无有效 session 不会泄露数据，但拒绝太晚，已登录请求可在无效加密会话下白白触发认证和权限查询。建议像 public 加密 GET 一样增加前置 `validate_encryption_session(profile=SENSITIVE, scope=admin)` dependency，并确保顺序早于业务查询。
@@ -69,7 +69,7 @@
 
 ### 阻塞与风险
 
-- 今日早些时候新增的 `encryption_sessions.client_ip` 需要生产库执行 Alembic 迁移到 head；本次访问日志去重策略调整没有新增或修改数据库字段、索引、约束或默认值，因此不需要新的迁移脚本。
+- 今日新增的 `encryption_sessions.client_ip` 与日志保留索引需要生产库执行 Alembic 迁移到 head；当前最新迁移为 `20260619_0008_log_retention_indexes.py`。
 - 上传上限已从 30MB 收敛到 20MB，服务器上的后端环境变量需要同步为 `BLOG_UPLOAD_MAX_SIZE_BYTES=20971520`，否则会与 Nginx 配置不一致。
 - 本次依赖切换需要服务器真实 `deploy/env/backend.env` 同步改为 `BLOG_DATABASE_URL=mysql+aiomysql://...`；代码会临时兼容旧 `mysql+asyncmy://` 前缀，但不建议生产长期保留旧写法。
 - 宿主机 Nginx 反代场景需要设置 `BLOG_TRUSTED_PROXY_HOSTS` 为后端看到的宿主机/网关直连 IP 或 CIDR；若日志里显示 `172.23.0.1` 这类 Docker 网关地址，服务器真实 `backend.env` 可填 `BLOG_TRUSTED_PROXY_HOSTS=["172.16.0.0/12"]` 或只填实际网关 IP。
@@ -81,7 +81,7 @@
 
 ### 下一步
 
-- 继续修复 P2 日志保留清理任务和公开友链申请 URL/域名维度去重或待审上限；涉及数据库唯一约束、日志保留索引或字段变更时同步补充 Alembic 迁移。
+- 继续修复 P2 公开友链申请 URL/域名维度去重或待审上限；涉及数据库唯一约束、日志保留索引或字段变更时同步补充 Alembic 迁移。
 
 ### 验证
 
@@ -132,6 +132,10 @@
 - 公开站点跳转短时去重修复后已运行 `uv run pytest tests/test_public_content_api.py -k "site_item_visit"`，3 个测试通过、29 个未选中；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 公开站点跳转短时去重修复后已运行 `uv run pytest tests/test_public_content_api.py`，32 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 公开站点跳转短时去重修复后已运行 `uv run ruff check app/api/public/links.py app/services/links.py app/repositories/links.py tests/test_public_content_api.py`，通过。
+- 日志保留清理任务新增后已运行 `uv run pytest tests/test_log_service.py tests/test_admin_logs_api.py`，14 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- 日志保留清理任务新增后已运行 `uv run ruff check app/models/log.py app/repositories/logs.py app/services/log_retention.py app/tasks/logs.py app/cli.py tests/test_log_service.py`，通过。
+- 日志保留清理任务新增后已运行 `uv run python -m app.cli cleanup-logs --help`，CLI 子命令可正常加载。
+- 日志保留清理任务新增后已运行 `uv run alembic upgrade head --sql`，可正常生成从空库到 `20260619_0008` 的 MySQL 迁移 SQL。
 - API 共享依赖状态迁移后已运行 `uv run pytest tests/test_rate_limit.py tests/test_log_service.py tests/test_public_content_api.py tests/test_admin_encryption_api.py`，49 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run lint`，通过。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。

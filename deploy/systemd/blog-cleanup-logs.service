@@ -1,0 +1,9 @@
+[Unit]
+Description=Blog cleanup old database logs
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/blog
+ExecStart=/usr/bin/docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml exec -T backend uv run python -m app.cli cleanup-logs --access-days 30 --audit-days 180 --login-days 180 --security-days 180 --limit 5000

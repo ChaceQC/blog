@@ -2,6 +2,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 
 import app.services.logs as logs_module
+from app.services.log_retention import LogRetentionService
 from app.services.logs import (
     AccessLogDedupeRule,
     InMemoryAccessLogDedupeBackend,
@@ -23,6 +24,69 @@ class FakeLogRepository:
 
     async def record_access_log(self, **kwargs: object) -> None:
         self.items.append(dict(kwargs))
+
+    async def commit(self) -> None:
+        self.commit_count += 1
+
+
+class FakeLogRetentionRepository:
+    def __init__(
+        self,
+        *,
+        access_logs: int = 0,
+        audit_logs: int = 0,
+        login_logs: int = 0,
+        security_events: int = 0,
+    ) -> None:
+        self.deleted = {
+            "access": access_logs,
+            "audit": audit_logs,
+            "login": login_logs,
+            "security": security_events,
+        }
+        self.cutoffs: dict[str, datetime] = {}
+        self.limits: list[int] = []
+        self.commit_count = 0
+
+    async def delete_access_logs_before(
+        self,
+        *,
+        created_before: datetime,
+        limit: int,
+    ) -> int:
+        self.cutoffs["access"] = created_before
+        self.limits.append(limit)
+        return self.deleted["access"]
+
+    async def delete_audit_logs_before(
+        self,
+        *,
+        created_before: datetime,
+        limit: int,
+    ) -> int:
+        self.cutoffs["audit"] = created_before
+        self.limits.append(limit)
+        return self.deleted["audit"]
+
+    async def delete_login_logs_before(
+        self,
+        *,
+        created_before: datetime,
+        limit: int,
+    ) -> int:
+        self.cutoffs["login"] = created_before
+        self.limits.append(limit)
+        return self.deleted["login"]
+
+    async def delete_security_events_before(
+        self,
+        *,
+        created_before: datetime,
+        limit: int,
+    ) -> int:
+        self.cutoffs["security"] = created_before
+        self.limits.append(limit)
+        return self.deleted["security"]
 
     async def commit(self) -> None:
         self.commit_count += 1
@@ -178,6 +242,63 @@ def test_build_access_log_dedupe_key_ignores_query_values() -> None:
         method="get",
         path="/api/public/posts",
     ) == "127.0.0.1:GET:/api/public/posts"
+
+
+def test_log_retention_cleans_each_log_table_and_commits_once() -> None:
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=UTC)
+    repository = FakeLogRetentionRepository(
+        access_logs=3,
+        audit_logs=2,
+        login_logs=1,
+        security_events=4,
+    )
+    service = LogRetentionService(repository)
+
+    result = asyncio.run(
+        service.cleanup_old_logs(
+            now=now,
+            access_days=30,
+            audit_days=180,
+            login_days=90,
+            security_days=365,
+            limit=5000,
+        ),
+    )
+
+    assert result.access_logs == 3
+    assert result.audit_logs == 2
+    assert result.login_logs == 1
+    assert result.security_events == 4
+    assert result.total_deleted == 10
+    assert repository.commit_count == 1
+    assert repository.cutoffs == {
+        "access": now - timedelta(days=30),
+        "audit": now - timedelta(days=180),
+        "login": now - timedelta(days=90),
+        "security": now - timedelta(days=365),
+    }
+    assert repository.limits == [5000, 5000, 5000, 5000]
+
+
+def test_log_retention_skips_zero_day_policy_and_empty_commit() -> None:
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=UTC)
+    repository = FakeLogRetentionRepository()
+    service = LogRetentionService(repository)
+
+    result = asyncio.run(
+        service.cleanup_old_logs(
+            now=now,
+            access_days=0,
+            audit_days=0,
+            login_days=0,
+            security_days=0,
+            limit=5000,
+        ),
+    )
+
+    assert result.total_deleted == 0
+    assert repository.cutoffs == {}
+    assert repository.commit_count == 0
 
 
 class FakeRedis:

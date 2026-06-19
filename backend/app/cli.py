@@ -17,6 +17,7 @@ from app.tasks.files import (
     cleanup_orphan_files,
 )
 from app.tasks.links import FriendLinkHealthCheckCommand, check_friend_links
+from app.tasks.logs import LogCleanupCommand, cleanup_logs
 
 
 def main() -> None:
@@ -37,6 +38,9 @@ def main() -> None:
         return
     if args.command == "check-friend-links":
         asyncio.run(_check_friend_links(args))
+        return
+    if args.command == "cleanup-logs":
+        asyncio.run(_cleanup_logs(args))
         return
 
     parser.print_help()
@@ -107,6 +111,40 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_positive_float,
         default=5.0,
         help="单个友链请求超时时间，默认 5 秒",
+    )
+    cleanup_logs_parser = subparsers.add_parser(
+        "cleanup-logs",
+        help="按保留天数清理访问、审计、登录和安全事件日志",
+    )
+    cleanup_logs_parser.add_argument(
+        "--access-days",
+        type=_non_negative_int,
+        default=30,
+        help="访问日志保留天数，0 表示跳过，默认 30 天",
+    )
+    cleanup_logs_parser.add_argument(
+        "--audit-days",
+        type=_non_negative_int,
+        default=180,
+        help="审计日志保留天数，0 表示跳过，默认 180 天",
+    )
+    cleanup_logs_parser.add_argument(
+        "--login-days",
+        type=_non_negative_int,
+        default=180,
+        help="登录日志保留天数，0 表示跳过，默认 180 天",
+    )
+    cleanup_logs_parser.add_argument(
+        "--security-days",
+        type=_non_negative_int,
+        default=180,
+        help="安全事件保留天数，0 表示跳过，默认 180 天",
+    )
+    cleanup_logs_parser.add_argument(
+        "--limit",
+        type=_positive_int,
+        default=5000,
+        help="每张表单次最多删除的日志数量，默认 5000",
     )
     return parser
 
@@ -187,6 +225,26 @@ async def _check_friend_links(args: argparse.Namespace) -> None:
         f"正常 {result.healthy_links} 条，"
         f"异常 {result.unhealthy_links} 条，"
         f"访问失败 {result.failed_links} 条",
+    )
+
+
+async def _cleanup_logs(args: argparse.Namespace) -> None:
+    result = await cleanup_logs(
+        LogCleanupCommand(
+            access_days=args.access_days,
+            audit_days=args.audit_days,
+            login_days=args.login_days,
+            security_days=args.security_days,
+            limit=args.limit,
+        ),
+    )
+    print(
+        "已清理历史日志："
+        f"访问日志 {result.access_logs} 条，"
+        f"审计日志 {result.audit_logs} 条，"
+        f"登录日志 {result.login_logs} 条，"
+        f"安全事件 {result.security_events} 条，"
+        f"合计 {result.total_deleted} 条",
     )
 
 

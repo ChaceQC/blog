@@ -1,7 +1,8 @@
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.log import AccessLog, AuditLog, LoginLog, SecurityEvent
@@ -132,5 +133,73 @@ class LogRepository:
             ),
         )
 
+    async def delete_access_logs_before(
+        self,
+        *,
+        created_before: datetime,
+        limit: int,
+    ) -> int:
+        return await self._delete_logs_before(
+            AccessLog,
+            created_before=created_before,
+            limit=limit,
+        )
+
+    async def delete_audit_logs_before(
+        self,
+        *,
+        created_before: datetime,
+        limit: int,
+    ) -> int:
+        return await self._delete_logs_before(
+            AuditLog,
+            created_before=created_before,
+            limit=limit,
+        )
+
+    async def delete_login_logs_before(
+        self,
+        *,
+        created_before: datetime,
+        limit: int,
+    ) -> int:
+        return await self._delete_logs_before(
+            LoginLog,
+            created_before=created_before,
+            limit=limit,
+        )
+
+    async def delete_security_events_before(
+        self,
+        *,
+        created_before: datetime,
+        limit: int,
+    ) -> int:
+        return await self._delete_logs_before(
+            SecurityEvent,
+            created_before=created_before,
+            limit=limit,
+        )
+
     async def commit(self) -> None:
         await self.session.commit()
+
+    async def _delete_logs_before(
+        self,
+        model: type[AccessLog] | type[AuditLog] | type[LoginLog] | type[SecurityEvent],
+        *,
+        created_before: datetime,
+        limit: int,
+    ) -> int:
+        result = await self.session.execute(
+            select(model.id)
+            .where(model.created_at < created_before)
+            .order_by(model.created_at.asc(), model.id.asc())
+            .limit(limit),
+        )
+        ids = list(result.scalars().all())
+        if not ids:
+            return 0
+
+        await self.session.execute(delete(model).where(model.id.in_(ids)))
+        return len(ids)

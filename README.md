@@ -508,9 +508,10 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml ex
 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml exec -T backend uv run python -m app.cli cleanup-deleted-files --older-than-days 7 --limit 100
 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml exec -T backend uv run python -m app.cli cleanup-orphan-files --limit 1000
 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml exec -T backend uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml exec -T backend uv run python -m app.cli cleanup-logs --access-days 30 --audit-days 180 --login-days 180 --security-days 180 --limit 5000
 ```
 
-`cleanup-orphan-files` 默认只 dry-run。确认输出后，才可显式追加 `--delete` 删除孤儿文件。
+`cleanup-orphan-files` 默认只 dry-run。确认输出后，才可显式追加 `--delete` 删除孤儿文件。`cleanup-logs` 默认保留 30 天访问日志、180 天审计/登录/安全事件日志；某类天数传 `0` 可跳过对应表。
 
 systemd timer 示例位于 `deploy/systemd/`，默认假设项目路径为 `/opt/blog`：
 
@@ -519,6 +520,7 @@ sudo cp deploy/systemd/*.service deploy/systemd/*.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now blog-cleanup-encryption-sessions.timer
 sudo systemctl enable --now blog-cleanup-deleted-files.timer
+sudo systemctl enable --now blog-cleanup-logs.timer
 sudo systemctl enable --now blog-scan-orphan-files.timer
 sudo systemctl enable --now blog-check-friend-links.timer
 systemctl list-timers 'blog-*'

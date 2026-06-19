@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, ForeignKey, String, func
+from sqlalchemy import JSON, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import BIGINT_UNSIGNED, DATETIME_6, Base, pk_column
@@ -9,6 +9,7 @@ from app.models.base import BIGINT_UNSIGNED, DATETIME_6, Base, pk_column
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
+    __table_args__ = (Index("idx_audit_logs_created_at", "created_at"),)
 
     id: Mapped[int] = pk_column()
     actor_id: Mapped[int | None] = mapped_column(
@@ -32,6 +33,7 @@ class AuditLog(Base):
 
 class LoginLog(Base):
     __tablename__ = "login_logs"
+    __table_args__ = (Index("idx_login_logs_created_at", "created_at"),)
 
     id: Mapped[int] = pk_column()
     user_id: Mapped[int | None] = mapped_column(
@@ -53,6 +55,7 @@ class LoginLog(Base):
 
 class SecurityEvent(Base):
     __tablename__ = "security_events"
+    __table_args__ = (Index("idx_security_events_created_at", "created_at"),)
 
     id: Mapped[int] = pk_column()
     event_type: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -75,6 +78,7 @@ class SecurityEvent(Base):
 
 class AccessLog(Base):
     __tablename__ = "access_logs"
+    __table_args__ = (Index("idx_access_logs_created_at", "created_at"),)
 
     id: Mapped[int] = pk_column()
     access_type: Mapped[str] = mapped_column(String(64), nullable=False)
