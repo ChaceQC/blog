@@ -1,35 +1,40 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
-from hashlib import sha256
-from threading import Lock
+from datetime import datetime
 from typing import Any, Protocol
 
-from redis import Redis
-from redis.exceptions import RedisError
-
-from app.core.config import Settings, get_settings
+from app.core.config import get_settings
 from app.models.log import AccessLog, AuditLog, LoginLog, SecurityEvent
-
-AUDIT_PAYLOAD_ALLOWED_KEYS = frozenset(
-    {
-        "changed_fields",
-        "status",
-        "visibility",
-        "public_listed",
-        "show_in_nav",
-        "published",
-        "published_at_set",
-        "review_status",
-        "is_public",
-    },
+from app.services.access_log_dedupe import (
+    AccessLogDedupeBackend,
+    AccessLogDedupeRule,
+    InMemoryAccessLogDedupeBackend,
+    RedisAccessLogDedupeBackend,
+    build_access_log_dedupe_key,
+    create_access_log_dedupe_backend,
 )
-SECURITY_EVENT_DETAIL_ALLOWED_KEYS = frozenset({"scope", "profile", "credential"})
+from app.services.log_sanitizers import (
+    sanitize_access_log_detail,
+    sanitize_audit_log_payload,
+    sanitize_security_event_detail,
+)
 
-
-@dataclass(frozen=True)
-class AccessLogDedupeRule:
-    window_seconds: int
+__all__ = (
+    "AccessLogDedupeBackend",
+    "AccessLogDedupeRule",
+    "AccessLogRead",
+    "AuditLogRead",
+    "InMemoryAccessLogDedupeBackend",
+    "LoginLogRead",
+    "LogService",
+    "RedisAccessLogDedupeBackend",
+    "SecurityEventRead",
+    "build_access_log_dedupe_key",
+    "create_access_log_dedupe_backend",
+    "sanitize_access_log_detail",
+    "sanitize_audit_log_payload",
+    "sanitize_security_event_detail",
+)
 
 
 @dataclass(frozen=True)
@@ -84,16 +89,6 @@ class SecurityEventRead:
     path: str | None
     detail_json: dict[str, Any] | None
     created_at: datetime
-
-
-class AccessLogDedupeBackend(Protocol):
-    def should_record(
-        self,
-        *,
-        key: str,
-        rule: AccessLogDedupeRule,
-        now: datetime | None = None,
-    ) -> bool: ...
 
 
 class LogRepositoryProtocol(Protocol):
@@ -315,17 +310,6 @@ class LogService:
         )
 
 
-def build_access_log_dedupe_key(
-    *,
-    ip: str | None,
-    method: str,
-    path: str,
-) -> str:
-    normalized_ip = ip or "unknown"
-    normalized_method = method.upper()
-    return f"{normalized_ip}:{normalized_method}:{path}"
-
-
 def audit_log_read(log: AuditLog) -> AuditLogRead:
     return AuditLogRead(
         id=log.id,
@@ -381,148 +365,4 @@ def security_event_read(event: SecurityEvent) -> SecurityEventRead:
         path=event.path,
         detail_json=sanitize_security_event_detail(event.detail_json),
         created_at=event.created_at,
-    )
-
-
-def sanitize_audit_log_payload(
-    payload: dict[str, Any] | None,
-) -> dict[str, Any] | None:
-    return _sanitize_json_payload(payload, AUDIT_PAYLOAD_ALLOWED_KEYS)
-
-
-def sanitize_access_log_detail(_: dict[str, Any] | None) -> None:
-    return None
-
-
-def sanitize_security_event_detail(
-    payload: dict[str, Any] | None,
-) -> dict[str, Any] | None:
-    return _sanitize_json_payload(payload, SECURITY_EVENT_DETAIL_ALLOWED_KEYS)
-
-
-def _sanitize_json_payload(
-    payload: dict[str, Any] | None,
-    allowed_keys: frozenset[str],
-) -> dict[str, Any] | None:
-    if payload is None:
-        return None
-
-    sanitized: dict[str, Any] = {}
-    for key, value in payload.items():
-        if key not in allowed_keys:
-            continue
-        safe_value = _safe_json_value(key=key, value=value)
-        if safe_value is not None:
-            sanitized[key] = safe_value
-    return sanitized or None
-
-
-def _safe_json_value(*, key: str, value: Any) -> Any:
-    if key == "changed_fields":
-        if not isinstance(value, (list, tuple, set)):
-            return None
-        fields = sorted(
-            str(item)
-            for item in value
-            if isinstance(item, str) and item.strip()
-        )
-        return fields[:64] if fields else None
-    if isinstance(value, (str, bool, int, float)):
-        return value
-    return None
-
-
-class InMemoryAccessLogDedupeBackend:
-    def __init__(self) -> None:
-        self._expires_at: dict[str, datetime] = {}
-        self._lock = Lock()
-
-    def should_record(
-        self,
-        *,
-        key: str,
-        rule: AccessLogDedupeRule,
-        now: datetime | None = None,
-    ) -> bool:
-        if rule.window_seconds <= 0:
-            return True
-
-        current_time = now or datetime.now(UTC)
-        expires_at = current_time + timedelta(seconds=rule.window_seconds)
-        with self._lock:
-            existing_expires_at = self._expires_at.get(key)
-            if (
-                existing_expires_at is not None
-                and existing_expires_at > current_time
-            ):
-                return False
-
-            self._expires_at[key] = expires_at
-            self._cleanup_expired(current_time)
-            return True
-
-    def _cleanup_expired(self, current_time: datetime) -> None:
-        expired_keys = [
-            key
-            for key, expires_at in self._expires_at.items()
-            if expires_at <= current_time
-        ]
-        for key in expired_keys:
-            self._expires_at.pop(key, None)
-
-
-class RedisAccessLogDedupeBackend:
-    def __init__(
-        self,
-        *,
-        redis_client: Redis,
-        key_prefix: str,
-        fallback: InMemoryAccessLogDedupeBackend | None = None,
-    ) -> None:
-        self._redis = redis_client
-        self._key_prefix = key_prefix.rstrip(":")
-        self._fallback = fallback or InMemoryAccessLogDedupeBackend()
-
-    def should_record(
-        self,
-        *,
-        key: str,
-        rule: AccessLogDedupeRule,
-        now: datetime | None = None,
-    ) -> bool:
-        if rule.window_seconds <= 0:
-            return True
-
-        redis_key = self._redis_key(key)
-        try:
-            return bool(
-                self._redis.set(
-                    redis_key,
-                    "1",
-                    ex=rule.window_seconds,
-                    nx=True,
-                ),
-            )
-        except RedisError:
-            return self._fallback.should_record(key=key, rule=rule, now=now)
-
-    def _redis_key(self, key: str) -> str:
-        digest = sha256(key.encode("utf-8")).hexdigest()
-        return f"{self._key_prefix}:access-log-dedupe:{digest}"
-
-
-def create_access_log_dedupe_backend(settings: Settings) -> AccessLogDedupeBackend:
-    if settings.rate_limit_backend != "redis" or not settings.redis_url:
-        return InMemoryAccessLogDedupeBackend()
-
-    redis_client = Redis.from_url(
-        settings.redis_url,
-        decode_responses=True,
-        protocol=2,
-        socket_connect_timeout=1,
-        socket_timeout=1,
-    )
-    return RedisAccessLogDedupeBackend(
-        redis_client=redis_client,
-        key_prefix=settings.redis_key_prefix,
     )
