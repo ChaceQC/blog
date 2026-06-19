@@ -73,7 +73,7 @@
 - 修复后台日志分页总页数显示：四类后台日志列表接口现在返回真实 `total`，前端日志页改为每页请求 10 条并使用真实总数计算“第 X / Y 页”；日志页即使只有一页也会显示分页条，且当日志清理导致当前页越界时会自动回到最后一页。该修复不涉及数据库迁移或服务器配置。
 - 优化后台文件上传选择控件：文件上传表单不再展示浏览器默认 `input[type=file]` 框，改为与后台表单系统一致的自定义选择区域，包含上传图标、选择/重新选择操作、文件名、大小和 MIME 摘要，并补充窄屏换行样式。该修复不涉及数据库迁移或服务器配置。
 - 修复移动端笔刷选区效果：`SelectionHighlight` 不再因 `(pointer: fine)` 只在桌面启用，移动端触摸选区会通过 `selectionchange`、`touchend/touchcancel` 和 `visualViewport` 滚动/缩放事件重新计算笔刷覆盖层；选区透明样式也改为组件启用时全端生效，同时保留输入框、文本域和隐藏元素的原生选区背景。该修复不涉及数据库迁移或服务器配置。
-- 优化前台导航栏毛玻璃效果：新增独立 `public-nav-glass.css`，将导航视觉从内部扫光调整为现实玻璃边缘折射，保留清透主体，只在四边、圆角和厚度边缘呈现高光/暗边扭曲，并补充移动端较轻的玻璃滤镜。该修复不涉及数据库迁移或服务器配置。
+- 优化前台导航栏 Liquid Glass 效果：新增独立 `public-nav-glass.css`，公共布局注入隐藏 SVG displacement filter，导航主体保持清透毛玻璃，边缘 ring 层使用折射滤镜、厚玻璃高光/暗边和圆角焦散模拟苹果手机式玻璃边缘扭曲；导航内选中项和图标块也改为半透明玻璃胶囊。该修复不涉及数据库迁移或服务器配置。
 
 ### 待修复清单
 
@@ -81,7 +81,7 @@
 
 ### 进行中
 
-- 无。前台导航栏边缘折射毛玻璃效果已完成并通过提交前验证。
+- 无。前台导航栏 Liquid Glass 效果已完成并通过提交前验证。
 
 ### 阻塞与风险
 
@@ -133,8 +133,9 @@
 - 后台文件上传选择控件视觉修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警，npm 仅提示可升级小版本。
 - 移动端笔刷选区效果修复后已运行 `npm.cmd run lint`，通过；npm 仅提示可升级小版本。
 - 移动端笔刷选区效果修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警，npm 仅提示可升级小版本。
-- 前台导航栏边缘折射毛玻璃效果修复后已运行 `npm.cmd run lint`，通过。
-- 前台导航栏边缘折射毛玻璃效果修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
+- 前台导航栏 Liquid Glass 效果修复后已运行 `npm.cmd run lint`，通过。
+- 前台导航栏 Liquid Glass 效果修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
+- 前台导航栏 Liquid Glass 效果修复后已临时启动前端 `15173`，通过 Playwright CLI + Microsoft Edge 截图检查桌面和 390px 移动端首页导航；截图保存在已忽略的 `output/playwright`，验证后已关闭临时前端服务并确认 `15173` 不再监听。
 - Linux `npm ci` 锁文件缺口修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - 尝试使用 Docker 验证 `node:24-alpine` 时，本机 Docker Desktop 未运行，无法连接 `dockerDesktopLinuxEngine`；Linux 容器内 `npm ci` 需在服务器或 Docker 可用环境复核。
 - 继续全量审计新增修复后已运行 `uv run alembic upgrade head --sql`，可正常生成从空库到 `20260619_0007` 的 MySQL 迁移 SQL；本轮新增修复未产生新迁移文件。

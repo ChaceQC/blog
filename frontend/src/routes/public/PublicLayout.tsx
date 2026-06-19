@@ -21,6 +21,31 @@ export function PublicLayout() {
 
   return (
     <div className="public-shell">
+      <svg className="glass-filter-defs" aria-hidden="true" focusable="false">
+        <filter
+          id="nav-glass-refraction"
+          x="-16%"
+          y="-70%"
+          width="132%"
+          height="240%"
+          colorInterpolationFilters="sRGB"
+        >
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.018 0.052"
+            numOctaves="2"
+            seed="19"
+            result="navNoise"
+          />
+          <feDisplacementMap
+            in="SourceGraphic"
+            in2="navNoise"
+            scale="16"
+            xChannelSelector="R"
+            yChannelSelector="G"
+          />
+        </filter>
+      </svg>
       <header className="site-header">
         <NavLink className="brand" to="/">
           <span className="brand-mark" aria-hidden="true">
