@@ -7,30 +7,46 @@ import type {
   SecurityEventListResponse,
 } from './types.ts'
 
-export function listAuditLogs(): Promise<AuditLogListResponse> {
+type LogListParams = {
+  limit: number
+  offset: number
+}
+
+export function listAuditLogs(params: LogListParams): Promise<AuditLogListResponse> {
   return apiGetEncrypted<AuditLogListResponse>(
-    '/admin/audit-logs?limit=50',
+    `/admin/audit-logs?${logQuery(params)}`,
     'sensitive-v1',
   )
 }
 
-export function listAccessLogs(): Promise<AccessLogListResponse> {
+export function listAccessLogs(
+  params: LogListParams,
+): Promise<AccessLogListResponse> {
   return apiGetEncrypted<AccessLogListResponse>(
-    '/admin/access-logs?limit=50',
+    `/admin/access-logs?${logQuery(params)}`,
     'sensitive-v1',
   )
 }
 
-export function listLoginLogs(): Promise<LoginLogListResponse> {
+export function listLoginLogs(params: LogListParams): Promise<LoginLogListResponse> {
   return apiGetEncrypted<LoginLogListResponse>(
-    '/admin/login-logs?limit=50',
+    `/admin/login-logs?${logQuery(params)}`,
     'sensitive-v1',
   )
 }
 
-export function listSecurityEvents(): Promise<SecurityEventListResponse> {
+export function listSecurityEvents(
+  params: LogListParams,
+): Promise<SecurityEventListResponse> {
   return apiGetEncrypted<SecurityEventListResponse>(
-    '/admin/security-events?limit=50',
+    `/admin/security-events?${logQuery(params)}`,
     'sensitive-v1',
   )
+}
+
+function logQuery({ limit, offset }: LogListParams): string {
+  return new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  }).toString()
 }

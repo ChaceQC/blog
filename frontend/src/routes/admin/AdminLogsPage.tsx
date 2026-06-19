@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
-import { usePagedItems } from '../../hooks/usePagedItems.ts'
 import {
   listAccessLogs,
   listAuditLogs,
@@ -38,23 +37,37 @@ export function AdminLogsPage() {
   const [activeTab, setActiveTab] = useState<LogTab>('audit')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [listPage, setListPage] = useState(0)
+  const logQueryParams = {
+    limit: LIST_PAGE_SIZE + 1,
+    offset: listPage * LIST_PAGE_SIZE,
+  }
   const auditLogsQuery = useQuery({
-    queryKey: ['admin-audit-logs'],
-    queryFn: listAuditLogs,
+    queryKey: ['admin-audit-logs', logQueryParams],
+    queryFn: () => listAuditLogs(logQueryParams),
+    enabled: activeTab === 'audit',
   })
   const accessLogsQuery = useQuery({
-    queryKey: ['admin-access-logs'],
-    queryFn: listAccessLogs,
+    queryKey: ['admin-access-logs', logQueryParams],
+    queryFn: () => listAccessLogs(logQueryParams),
+    enabled: activeTab === 'access',
   })
   const loginLogsQuery = useQuery({
-    queryKey: ['admin-login-logs'],
-    queryFn: listLoginLogs,
+    queryKey: ['admin-login-logs', logQueryParams],
+    queryFn: () => listLoginLogs(logQueryParams),
+    enabled: activeTab === 'login',
   })
   const securityEventsQuery = useQuery({
-    queryKey: ['admin-security-events'],
-    queryFn: listSecurityEvents,
+    queryKey: ['admin-security-events', logQueryParams],
+    queryFn: () => listSecurityEvents(logQueryParams),
+    enabled: activeTab === 'security',
   })
-  const records = useMemo<LogRecord[]>(() => {
+  const activeQuery = {
+    audit: auditLogsQuery,
+    access: accessLogsQuery,
+    login: loginLogsQuery,
+    security: securityEventsQuery,
+  }[activeTab]
+  const allFetchedRecords = useMemo<LogRecord[]>(() => {
     if (activeTab === 'audit') {
       return (auditLogsQuery.data?.items ?? []).map((item) => ({
         tab: 'audit',
@@ -84,21 +97,18 @@ export function AdminLogsPage() {
     loginLogsQuery.data,
     securityEventsQuery.data,
   ])
-  const { safePage: safeListPage, visibleItems: visibleRecords } = usePagedItems(
-    records,
-    listPage,
-    LIST_PAGE_SIZE,
+  const hasNextPage = allFetchedRecords.length > LIST_PAGE_SIZE
+  const records = allFetchedRecords.slice(0, LIST_PAGE_SIZE)
+  const currentPageItemCount =
+    records.length === 0 && listPage > 0 ? LIST_PAGE_SIZE : records.length
+  const estimatedTotalItems = Math.max(
+    0,
+    listPage * LIST_PAGE_SIZE + currentPageItemCount + (hasNextPage ? 1 : 0),
   )
   const selectedRecord =
     records.find((record) => logKey(record) === selectedKey) ??
-    visibleRecords[0] ??
+    records[0] ??
     null
-  const activeQuery = {
-    audit: auditLogsQuery,
-    access: accessLogsQuery,
-    login: loginLogsQuery,
-    security: securityEventsQuery,
-  }[activeTab]
 
   function switchTab(tab: LogTab) {
     setActiveTab(tab)
@@ -135,7 +145,7 @@ export function AdminLogsPage() {
 
         <div className="log-browser">
           <div className="log-list" role="tabpanel">
-            {visibleRecords.map((record) => (
+            {records.map((record) => (
               <button
                 className={
                   logKey(record) === logKey(selectedRecord)
@@ -156,10 +166,10 @@ export function AdminLogsPage() {
               <p className="empty-state">暂无{tabLabels[activeTab]}日志。</p>
             ) : null}
             <ListPager
-              page={safeListPage}
+              page={listPage}
               pageSize={LIST_PAGE_SIZE}
-              totalItems={records.length}
-              isLoading={activeQuery.isLoading}
+              totalItems={estimatedTotalItems}
+              isLoading={activeQuery.isLoading || activeQuery.isFetching}
               variant="admin"
               onPageChange={(nextPage) => {
                 setListPage(nextPage)
