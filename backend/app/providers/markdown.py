@@ -42,6 +42,9 @@ ALLOWED_ATTRIBUTES = {
 }
 ALLOWED_PROTOCOLS = {"http", "https", "mailto"}
 MATH_CLASSES = {"math", "inline", "block"}
+PUBLIC_POST_IMAGE_SRC_PATTERN = re.compile(
+    r"^/?api/public/posts/[a-z0-9][a-z0-9_-]{0,219}/files/[1-9][0-9]*/render$",
+)
 WORD_PATTERN = re.compile(
     r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]|[A-Za-z0-9]+(?:[-_'][A-Za-z0-9]+)*",
 )
@@ -78,6 +81,8 @@ def _allowed_attributes(
 ) -> bool:
     if name not in ALLOWED_ATTRIBUTES.get(tag, []):
         return False
+    if tag == "img" and name == "src":
+        return bool(PUBLIC_POST_IMAGE_SRC_PATTERN.fullmatch(value))
     if name != "class":
         return True
 

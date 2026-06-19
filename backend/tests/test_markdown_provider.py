@@ -42,6 +42,20 @@ def test_markdown_renderer_keeps_public_post_image_route() -> None:
     assert 'alt="封面"' in html
 
 
+def test_markdown_renderer_strips_external_image_sources() -> None:
+    html = MarkdownRenderer().render(
+        "![外链](https://example.com/pixel.png)\n\n"
+        "![协议相对](//example.com/pixel.png)\n\n"
+        "[正常链接](https://example.com)",
+    )
+
+    assert "https://example.com/pixel.png" not in html
+    assert "//example.com/pixel.png" not in html
+    assert 'alt="外链"' in html
+    assert 'alt="协议相对"' in html
+    assert 'href="https://example.com"' in html
+
+
 def test_markdown_renderer_sanitizes_dangerous_html_and_urls() -> None:
     html = MarkdownRenderer().render(
         "<script>alert(1)</script>\n\n"
