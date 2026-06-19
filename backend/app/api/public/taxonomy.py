@@ -50,7 +50,6 @@ async def list_public_categories(
         access_type="public_categories_list",
         status_code=status.HTTP_200_OK,
         entity_type="category",
-        detail_json={"limit": limit, "offset": offset, "count": len(categories)},
     )
     return response
 
@@ -76,7 +75,6 @@ async def get_public_category(
             access_type="public_category_detail",
             status_code=status.HTTP_404_NOT_FOUND,
             entity_type="category",
-            detail_json={"slug": slug},
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -97,7 +95,6 @@ async def get_public_category(
         status_code=status.HTTP_200_OK,
         entity_type="category",
         entity_id=category.id,
-        detail_json={"slug": slug},
     )
     return response
 
@@ -128,7 +125,6 @@ async def list_public_tags(
         access_type="public_tags_list",
         status_code=status.HTTP_200_OK,
         entity_type="tag",
-        detail_json={"limit": limit, "offset": offset, "count": len(tags)},
     )
     return response
 
@@ -154,7 +150,6 @@ async def get_public_tag(
             access_type="public_tag_detail",
             status_code=status.HTTP_404_NOT_FOUND,
             entity_type="tag",
-            detail_json={"slug": slug},
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -175,6 +170,5 @@ async def get_public_tag(
         status_code=status.HTTP_200_OK,
         entity_type="tag",
         entity_id=tag.id,
-        detail_json={"slug": slug},
     )
     return response

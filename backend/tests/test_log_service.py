@@ -1,5 +1,6 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import app.services.logs as logs_module
 from app.services.log_retention import LogRetentionService
@@ -26,6 +27,72 @@ class FakeLogRepository:
 
     async def commit(self) -> None:
         self.commit_count += 1
+
+
+class FakeReadableLogRepository(FakeLogRepository):
+    async def list_audit_logs(self, *, limit: int, offset: int) -> list[object]:
+        assert limit == 10
+        assert offset == 0
+        return [
+            SimpleNamespace(
+                id=1,
+                actor_id=1,
+                action="post.update",
+                entity_type="post",
+                entity_id=2,
+                before_json={"title": "旧标题", "status": "draft"},
+                after_json={
+                    "title": "新标题",
+                    "slug": "new-post",
+                    "status": "published",
+                    "changed_fields": ["title", "slug", "status"],
+                },
+                ip="127.0.0.1",
+                user_agent="pytest",
+                created_at=datetime(2026, 6, 19, tzinfo=UTC),
+            ),
+        ]
+
+    async def list_access_logs(self, *, limit: int, offset: int) -> list[object]:
+        assert limit == 10
+        assert offset == 0
+        return [
+            SimpleNamespace(
+                id=1,
+                access_type="post_image_render",
+                method="GET",
+                path="/api/public/posts/new-post/files/1/render",
+                status_code=200,
+                entity_type="file",
+                entity_id=1,
+                ip="127.0.0.1",
+                user_agent="pytest",
+                detail_json={"slug": "new-post", "filename": "cover.png"},
+                created_at=datetime(2026, 6, 19, tzinfo=UTC),
+            ),
+        ]
+
+    async def list_security_events(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[object]:
+        assert limit == 10
+        assert offset == 0
+        return [
+            SimpleNamespace(
+                id=1,
+                event_type="rate_limit.admin_login",
+                severity="medium",
+                actor_id=None,
+                ip="127.0.0.1",
+                user_agent="pytest",
+                path="/api/admin/auth/login",
+                detail_json={"username": "admin", "credential": "username"},
+                created_at=datetime(2026, 6, 19, tzinfo=UTC),
+            ),
+        ]
 
 
 class FakeLogRetentionRepository:
@@ -200,6 +267,26 @@ def test_record_access_log_keeps_post_operations(monkeypatch) -> None:
 
     assert len(repository.items) == 2
     assert repository.commit_count == 2
+
+
+def test_list_logs_sanitizes_historical_json_payloads() -> None:
+    service = LogService(repository=FakeReadableLogRepository())
+
+    async def run() -> tuple[object, object, object]:
+        audit_log = (await service.list_audit_logs(limit=10, offset=0))[0]
+        access_log = (await service.list_access_logs(limit=10, offset=0))[0]
+        security_event = (await service.list_security_events(limit=10, offset=0))[0]
+        return audit_log, access_log, security_event
+
+    audit_log, access_log, security_event = asyncio.run(run())
+
+    assert audit_log.before_json == {"status": "draft"}
+    assert audit_log.after_json == {
+        "changed_fields": ["slug", "status", "title"],
+        "status": "published",
+    }
+    assert access_log.detail_json is None
+    assert security_event.detail_json == {"credential": "username"}
 
 
 def test_in_memory_access_log_dedupe_allows_after_window() -> None:

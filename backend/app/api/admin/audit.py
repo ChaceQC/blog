@@ -4,7 +4,7 @@ from fastapi import Request
 
 from app.core.request import client_ip
 from app.services.auth import AuthenticatedUser
-from app.services.logs import LogService
+from app.services.logs import LogService, sanitize_audit_log_payload
 
 
 async def record_admin_audit(
@@ -25,6 +25,6 @@ async def record_admin_audit(
         actor_id=actor.id,
         ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
-        before_json=before_json,
-        after_json=after_json,
+        before_json=sanitize_audit_log_payload(before_json),
+        after_json=sanitize_audit_log_payload(after_json),
     )

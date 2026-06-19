@@ -172,10 +172,11 @@ def test_update_admin_setting_decrypts_sensitive_request() -> None:
     assert logs.audit_items[0]["action"] == "setting.update"
     assert logs.audit_items[0]["entity_type"] == "setting"
     assert logs.audit_items[0]["after_json"] == {
-        "key_name": SITE_PROFILE_KEY,
-        "group_name": "site",
+        "changed_fields": ["group_name", "is_public", "value_json"],
         "is_public": True,
     }
+    assert "key_name" not in logs.audit_items[0]["after_json"]
+    assert "group_name" not in logs.audit_items[0]["after_json"]
 
 
 def test_update_admin_setting_rejects_invalid_key_name_before_decrypt() -> None:

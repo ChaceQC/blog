@@ -234,12 +234,12 @@ def test_create_admin_post_decrypts_content_request() -> None:
     assert logs.audit_items[0]["entity_type"] == "post"
     assert logs.audit_items[0]["entity_id"] == 2
     assert logs.audit_items[0]["after_json"] == {
-        "title": "第二篇文章",
-        "slug": "second-post",
         "status": "draft",
         "visibility": "public",
-        "published_at": None,
+        "published_at_set": False,
     }
+    assert "title" not in logs.audit_items[0]["after_json"]
+    assert "slug" not in logs.audit_items[0]["after_json"]
 
 
 def test_preview_admin_post_renders_current_markdown() -> None:

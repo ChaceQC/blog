@@ -495,28 +495,17 @@ def _update_page_command(payload: PageUpdateRequest) -> UpdatePageCommand:
 
 def _post_audit_payload(post: object) -> dict[str, object]:
     return {
-        "title": getattr(post, "title", None),
-        "slug": getattr(post, "slug", None),
         "status": getattr(post, "status", None),
         "visibility": getattr(post, "visibility", None),
-        "published_at": _iso_or_none(getattr(post, "published_at", None)),
+        "published_at_set": getattr(post, "published_at", None) is not None,
     }
 
 
 def _page_audit_payload(page: object) -> dict[str, object]:
     return {
-        "title": getattr(page, "title", None),
-        "slug": getattr(page, "slug", None),
         "status": getattr(page, "status", None),
         "show_in_nav": getattr(page, "show_in_nav", None),
-        "sort_order": getattr(page, "sort_order", None),
     }
-
-
-def _iso_or_none(value: object) -> str | None:
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return None
 
 
 def _not_found(detail: str) -> HTTPException:

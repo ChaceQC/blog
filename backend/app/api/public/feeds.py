@@ -59,7 +59,6 @@ async def rss_feed(
             logs,
             request=request,
             access_type="public_rss",
-            count=count,
         )
         return response
 
@@ -84,7 +83,6 @@ async def rss_feed(
         logs,
         request=request,
         access_type="public_rss",
-        count=len(posts),
     )
     return response
 
@@ -105,7 +103,6 @@ async def sitemap(
             logs,
             request=request,
             access_type="public_sitemap",
-            count=count,
         )
         return response
 
@@ -133,7 +130,6 @@ async def sitemap(
         logs,
         request=request,
         access_type="public_sitemap",
-        count=len(posts) + len(categories) + len(tags),
     )
     return response
 
@@ -156,7 +152,6 @@ async def robots_txt(
         logs,
         request=request,
         access_type="public_robots",
-        count=0,
     )
     return response
 
@@ -430,7 +425,6 @@ async def _record_feed_access(
     *,
     request: Request,
     access_type: str,
-    count: int,
 ) -> None:
     await logs.record_access_log(
         access_type=access_type,
@@ -440,5 +434,5 @@ async def _record_feed_access(
         entity_type="post",
         ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
-        detail_json={"count": count},
+        detail_json=None,
     )

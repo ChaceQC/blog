@@ -97,7 +97,7 @@ def test_admin_login_rate_limit_uses_real_redis(redis_url: str) -> None:
     assert second.status_code == 429
     assert int(second.headers["Retry-After"]) >= 1
     assert logs.events[-1]["event_type"] == "rate_limit.admin_login"
-    assert logs.events[-1]["detail_json"] == {"username": "admin"}
+    assert logs.events[-1]["detail_json"] == {"credential": "username"}
 
 
 def _redis_settings(redis_url: str):

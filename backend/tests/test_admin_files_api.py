@@ -382,12 +382,12 @@ def test_admin_file_upload_accepts_multipart_and_csrf() -> None:
     assert logs.audit_items[0]["action"] == "file.upload"
     assert logs.audit_items[0]["entity_type"] == "file"
     assert logs.audit_items[0]["after_json"] == {
-        "original_name": "cover.png",
-        "mime_type": "image/png",
         "visibility": "public",
         "public_listed": True,
         "status": "active",
     }
+    assert "original_name" not in logs.audit_items[0]["after_json"]
+    assert "mime_type" not in logs.audit_items[0]["after_json"]
 
 
 def test_admin_file_upload_rejects_oversized_body_before_service() -> None:
@@ -577,10 +577,7 @@ def test_admin_file_download_allows_private_file_with_admin_auth(tmp_path) -> No
     assert response.content == b"%PDF-1.7\n"
     assert logs.items[0]["access_type"] == "admin_file_download"
     assert logs.items[0]["entity_id"] == 1
-    assert logs.items[0]["detail_json"] == {
-        "filename": "private-note.pdf",
-        "media_type": "application/pdf",
-    }
+    assert logs.items[0]["detail_json"] is None
 
 
 def test_admin_file_download_records_denied_access() -> None:

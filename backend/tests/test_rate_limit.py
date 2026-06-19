@@ -128,7 +128,7 @@ async def test_enforce_rate_limit_records_security_event() -> None:
         key="admin-login:127.0.0.1:admin",
         rule=rule,
         event_type="rate_limit.admin_login",
-        detail_json={"username": "admin"},
+        detail_json={"credential": "username"},
     )
 
     with pytest.raises(HTTPException) as exc_info:
@@ -139,7 +139,7 @@ async def test_enforce_rate_limit_records_security_event() -> None:
             key="admin-login:127.0.0.1:admin",
             rule=rule,
             event_type="rate_limit.admin_login",
-            detail_json={"username": "admin"},
+            detail_json={"credential": "username"},
         )
 
     assert exc_info.value.status_code == 429
@@ -150,7 +150,7 @@ async def test_enforce_rate_limit_records_security_event() -> None:
             "ip": "127.0.0.1",
             "user_agent": "pytest",
             "path": "/api/admin/auth/login",
-            "detail_json": {"username": "admin"},
+            "detail_json": {"credential": "username"},
         },
     ]
 

@@ -67,7 +67,7 @@ async def login(
             window_seconds=settings.admin_login_rate_limit_window_seconds,
         ),
         event_type="rate_limit.admin_login",
-        detail_json={"username": payload.username},
+        detail_json={"credential": "username"},
     )
     try:
         tokens = await service.login(

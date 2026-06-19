@@ -38,6 +38,5 @@ async def get_public_site_profile(
         access_type="public_site_profile",
         status_code=status.HTTP_200_OK,
         entity_type="setting",
-        detail_json={"key_name": "site_profile"},
     )
     return response

@@ -63,32 +63,19 @@ def validate_decrypted_payload[T: BaseModel](
 
 def friend_link_audit_payload(link: object) -> dict[str, object]:
     return {
-        "name": getattr(link, "name", None),
-        "url": getattr(link, "url", None),
         "status": getattr(link, "status", None),
-        "sort_order": getattr(link, "sort_order", None),
     }
 
 
 def site_item_audit_payload(item: object) -> dict[str, object]:
     return {
-        "group_id": getattr(item, "group_id", None),
-        "title": getattr(item, "title", None),
-        "url": getattr(item, "url", None),
-        "icon_url": getattr(item, "icon_url", None),
-        "tags_json": getattr(item, "tags_json", None),
         "visibility": getattr(item, "visibility", None),
-        "open_target": getattr(item, "open_target", None),
-        "sort_order": getattr(item, "sort_order", None),
     }
 
 
 def group_audit_payload(group: object) -> dict[str, object]:
     return {
-        "name": getattr(group, "name", None),
-        "slug": getattr(group, "slug", None),
         "visibility": getattr(group, "visibility", None),
-        "sort_order": getattr(group, "sort_order", None),
     }
 
 

@@ -3,7 +3,7 @@ from typing import Any
 from fastapi import HTTPException, Request, status
 
 from app.core.request import client_ip
-from app.services.logs import LogService
+from app.services.logs import LogService, sanitize_security_event_detail
 from app.services.rate_limit import RateLimitExceeded, RateLimitRule, RateLimitService
 
 
@@ -26,7 +26,7 @@ async def enforce_rate_limit(
             ip=client_ip(request),
             user_agent=request.headers.get("user-agent"),
             path=str(request.url.path),
-            detail_json=detail_json,
+            detail_json=sanitize_security_event_detail(detail_json),
         )
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,

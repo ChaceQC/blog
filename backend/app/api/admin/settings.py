@@ -96,8 +96,7 @@ async def update_setting(
         entity_type="setting",
         entity_id=setting.id,
         after_json={
-            "key_name": setting.key_name,
-            "group_name": setting.group_name,
+            "changed_fields": sorted(setting_payload.model_fields_set),
             "is_public": setting.is_public,
         },
     )

@@ -553,7 +553,7 @@ def test_rss_feed_returns_public_posts_xml() -> None:
     assert "SEO &lt;摘要&gt;" in response.text
     assert "<category>FastAPI</category>" in response.text
     assert logs.items[0]["access_type"] == "public_rss"
-    assert logs.items[0]["detail_json"] == {"count": 1}
+    assert logs.items[0]["detail_json"] is None
 
 
 def test_rss_feed_returns_304_without_access_log_for_matching_etag() -> None:
@@ -642,7 +642,7 @@ def test_sitemap_returns_public_post_urls_xml() -> None:
     assert "<loc>http://127.0.0.1:15173/tags/fastapi</loc>" in response.text
     assert "<lastmod>2026-06-17</lastmod>" in response.text
     assert logs.items[0]["access_type"] == "public_sitemap"
-    assert logs.items[0]["detail_json"] == {"count": 5}
+    assert logs.items[0]["detail_json"] is None
 
 
 def test_sitemap_cached_etag_short_circuits_before_queries() -> None:

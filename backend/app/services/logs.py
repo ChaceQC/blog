@@ -11,6 +11,21 @@ from redis.exceptions import RedisError
 from app.core.config import Settings, get_settings
 from app.models.log import AccessLog, AuditLog, LoginLog, SecurityEvent
 
+AUDIT_PAYLOAD_ALLOWED_KEYS = frozenset(
+    {
+        "changed_fields",
+        "status",
+        "visibility",
+        "public_listed",
+        "show_in_nav",
+        "published",
+        "published_at_set",
+        "review_status",
+        "is_public",
+    },
+)
+SECURITY_EVENT_DETAIL_ALLOWED_KEYS = frozenset({"scope", "profile", "credential"})
+
 
 @dataclass(frozen=True)
 class AccessLogDedupeRule:
@@ -210,7 +225,7 @@ class LogService:
             ip=ip,
             user_agent=user_agent,
             path=path,
-            detail_json=detail_json,
+            detail_json=sanitize_security_event_detail(detail_json),
         )
         await self.repository.commit()
 
@@ -233,8 +248,8 @@ class LogService:
             actor_id=actor_id,
             ip=ip,
             user_agent=user_agent,
-            before_json=before_json,
-            after_json=after_json,
+            before_json=sanitize_audit_log_payload(before_json),
+            after_json=sanitize_audit_log_payload(after_json),
         )
         await self.repository.commit()
 
@@ -267,7 +282,7 @@ class LogService:
             entity_id=entity_id,
             ip=ip,
             user_agent=user_agent,
-            detail_json=detail_json,
+            detail_json=sanitize_access_log_detail(detail_json),
         )
         await self.repository.commit()
 
@@ -318,8 +333,8 @@ def audit_log_read(log: AuditLog) -> AuditLogRead:
         action=log.action,
         entity_type=log.entity_type,
         entity_id=log.entity_id,
-        before_json=log.before_json,
-        after_json=log.after_json,
+        before_json=sanitize_audit_log_payload(log.before_json),
+        after_json=sanitize_audit_log_payload(log.after_json),
         ip=log.ip,
         user_agent=log.user_agent,
         created_at=log.created_at,
@@ -337,7 +352,7 @@ def access_log_read(log: AccessLog) -> AccessLogRead:
         entity_id=log.entity_id,
         ip=log.ip,
         user_agent=log.user_agent,
-        detail_json=log.detail_json,
+        detail_json=sanitize_access_log_detail(log.detail_json),
         created_at=log.created_at,
     )
 
@@ -364,9 +379,57 @@ def security_event_read(event: SecurityEvent) -> SecurityEventRead:
         ip=event.ip,
         user_agent=event.user_agent,
         path=event.path,
-        detail_json=event.detail_json,
+        detail_json=sanitize_security_event_detail(event.detail_json),
         created_at=event.created_at,
     )
+
+
+def sanitize_audit_log_payload(
+    payload: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    return _sanitize_json_payload(payload, AUDIT_PAYLOAD_ALLOWED_KEYS)
+
+
+def sanitize_access_log_detail(_: dict[str, Any] | None) -> None:
+    return None
+
+
+def sanitize_security_event_detail(
+    payload: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    return _sanitize_json_payload(payload, SECURITY_EVENT_DETAIL_ALLOWED_KEYS)
+
+
+def _sanitize_json_payload(
+    payload: dict[str, Any] | None,
+    allowed_keys: frozenset[str],
+) -> dict[str, Any] | None:
+    if payload is None:
+        return None
+
+    sanitized: dict[str, Any] = {}
+    for key, value in payload.items():
+        if key not in allowed_keys:
+            continue
+        safe_value = _safe_json_value(key=key, value=value)
+        if safe_value is not None:
+            sanitized[key] = safe_value
+    return sanitized or None
+
+
+def _safe_json_value(*, key: str, value: Any) -> Any:
+    if key == "changed_fields":
+        if not isinstance(value, (list, tuple, set)):
+            return None
+        fields = sorted(
+            str(item)
+            for item in value
+            if isinstance(item, str) and item.strip()
+        )
+        return fields[:64] if fields else None
+    if isinstance(value, (str, bool, int, float)):
+        return value
+    return None
 
 
 class InMemoryAccessLogDedupeBackend:

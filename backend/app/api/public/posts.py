@@ -87,14 +87,6 @@ async def list_public_posts(
         access_type="public_posts_list",
         status_code=status.HTTP_200_OK,
         entity_type="post",
-        detail_json={
-            "limit": limit,
-            "offset": offset,
-            "count": len(posts),
-            "total": total,
-            "category": category_slug,
-            "tag": tag_slug,
-        },
     )
     return response
 
@@ -121,7 +113,6 @@ async def get_public_post(
             access_type="public_post_detail",
             status_code=status.HTTP_404_NOT_FOUND,
             entity_type="post",
-            detail_json={"slug": slug},
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -157,7 +148,6 @@ async def get_public_post(
         status_code=status.HTTP_200_OK,
         entity_type="post",
         entity_id=post.id,
-        detail_json={"slug": slug},
     )
     return response
 
@@ -183,7 +173,6 @@ async def get_public_page(
             access_type="public_page_detail",
             status_code=status.HTTP_404_NOT_FOUND,
             entity_type="page",
-            detail_json={"slug": slug},
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -204,7 +193,6 @@ async def get_public_page(
         status_code=status.HTTP_200_OK,
         entity_type="page",
         entity_id=page.id,
-        detail_json={"slug": slug},
     )
     return response
 

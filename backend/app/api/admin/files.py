@@ -221,7 +221,7 @@ async def create_file_temporary_url(
         entity_id=access.file.id,
         ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
-        detail_json={"expires_at": access.expires_at.isoformat()},
+        detail_json=None,
     )
     return response
 
@@ -268,10 +268,6 @@ async def download_admin_file(
         logs=logs,
         file_id=file_id,
         status_code=status.HTTP_200_OK,
-        detail_json={
-            "filename": download.filename,
-            "media_type": download.media_type,
-        },
     )
     return FileResponse(
         download.path,
@@ -396,8 +392,6 @@ async def _files_response(
 
 def _file_audit_payload(file: object) -> dict[str, object]:
     return {
-        "original_name": getattr(file, "original_name", None),
-        "mime_type": getattr(file, "mime_type", None),
         "visibility": getattr(file, "visibility", None),
         "public_listed": getattr(file, "public_listed", None),
         "status": getattr(file, "status", None),

@@ -70,12 +70,6 @@ async def list_public_files(
         file_id=0,
         entity_type="file",
         entity_id=None,
-        detail_json={
-            "limit": limit,
-            "offset": offset,
-            "count": len(files),
-            "total": total,
-        },
     )
     return response
 
@@ -137,7 +131,6 @@ async def create_public_file_temporary_url(
         access_type="public_file_temporary_url",
         status_code=status.HTTP_200_OK,
         file_id=file_id,
-        detail_json={"expires_at": access.expires_at.isoformat()},
     )
     return response
 
@@ -189,7 +182,6 @@ async def download_public_file(
         access_type="public_file_download",
         status_code=status.HTTP_200_OK,
         file_id=file_id,
-        detail_json={"filename": download.filename, "media_type": download.media_type},
     )
     return FileResponse(
         download.path,
@@ -223,7 +215,6 @@ async def render_post_file(
             access_type="post_image_render",
             status_code=status.HTTP_403_FORBIDDEN,
             file_id=file_id,
-            detail_json={"slug": slug},
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -247,7 +238,6 @@ async def render_post_file(
             access_type="post_image_render",
             status_code=status.HTTP_404_NOT_FOUND,
             file_id=file_id,
-            detail_json={"slug": slug},
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -260,7 +250,6 @@ async def render_post_file(
             access_type="post_image_render",
             status_code=status.HTTP_403_FORBIDDEN,
             file_id=file_id,
-            detail_json={"slug": slug},
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -273,11 +262,6 @@ async def render_post_file(
         access_type="post_image_render",
         status_code=status.HTTP_200_OK,
         file_id=file_id,
-        detail_json={
-            "slug": slug,
-            "filename": download.filename,
-            "media_type": download.media_type,
-        },
     )
     return FileResponse(
         download.path,
@@ -312,7 +296,6 @@ async def thumbnail_post_file(
             access_type="post_image_thumbnail",
             status_code=status.HTTP_403_FORBIDDEN,
             file_id=file_id,
-            detail_json={"slug": slug},
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -336,7 +319,6 @@ async def thumbnail_post_file(
             access_type="post_image_thumbnail",
             status_code=status.HTTP_404_NOT_FOUND,
             file_id=file_id,
-            detail_json={"slug": slug},
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -349,7 +331,6 @@ async def thumbnail_post_file(
             access_type="post_image_thumbnail",
             status_code=status.HTTP_403_FORBIDDEN,
             file_id=file_id,
-            detail_json={"slug": slug},
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -362,11 +343,6 @@ async def thumbnail_post_file(
         access_type="post_image_thumbnail",
         status_code=status.HTTP_200_OK,
         file_id=file_id,
-        detail_json={
-            "slug": slug,
-            "filename": thumbnail.filename,
-            "media_type": thumbnail.media_type,
-        },
     )
     return FileResponse(
         thumbnail.path,

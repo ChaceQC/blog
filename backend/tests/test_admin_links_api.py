@@ -793,9 +793,10 @@ def test_create_admin_site_item_decrypts_content_request() -> None:
     assert manager.payload["tags_json"] == {"items": ["工具", "博客"]}
     assert manager.payload["open_target"] == "self"
     assert logs.audit_items[0]["action"] == "site_nav.create"
-    assert logs.audit_items[0]["after_json"]["tags_json"] == {
-        "items": ["工具", "博客"],
-    }
+    assert logs.audit_items[0]["after_json"] == {"visibility": "public"}
+    assert "title" not in logs.audit_items[0]["after_json"]
+    assert "url" not in logs.audit_items[0]["after_json"]
+    assert "tags_json" not in logs.audit_items[0]["after_json"]
 
 
 def test_update_admin_site_item_decrypts_content_request() -> None:

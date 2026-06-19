@@ -46,7 +46,7 @@ async def record_public_access(
         entity_id=entity_id,
         ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
-        detail_json=detail_json,
+        detail_json=None,
     )
 
 
