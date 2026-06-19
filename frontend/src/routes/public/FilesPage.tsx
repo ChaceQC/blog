@@ -21,10 +21,11 @@ export function FilesPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const filesQuery = useQuery({
     queryKey: ['public-files', page],
-    queryFn: () => listPublicFiles({ limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
+    queryFn: ({ signal }) =>
+      listPublicFiles({ limit: PAGE_SIZE, offset: page * PAGE_SIZE, signal }),
   })
   const temporaryUrlMutation = useMutation({
-    mutationFn: getPublicFileTemporaryUrl,
+    mutationFn: (fileId: number) => getPublicFileTemporaryUrl(fileId),
     onError: () => setNotice('下载链接暂时无法生成。'),
   })
   const files = filesQuery.data?.items ?? emptyFiles

@@ -15,7 +15,7 @@ import { siteSettings } from '../../features/settings/siteSettings.ts'
 export function PublicLayout() {
   const { data: siteProfile } = useQuery({
     queryKey: ['public-site-profile'],
-    queryFn: getPublicSiteProfile,
+    queryFn: ({ signal }) => getPublicSiteProfile({ signal }),
   })
   const title = siteProfile?.title ?? siteSettings.title
 

@@ -19,8 +19,8 @@ export function SitesPage() {
     isLoading,
   } = useQuery({
     queryKey: ['public-site-items', page],
-    queryFn: () =>
-      listPublicSiteItems({ limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
+    queryFn: ({ signal }) =>
+      listPublicSiteItems({ limit: PAGE_SIZE, offset: page * PAGE_SIZE, signal }),
   })
   const sites = sitesData?.items ?? emptySites
   const totalSites = sitesData?.total ?? 0

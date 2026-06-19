@@ -30,7 +30,7 @@ export function HomePage() {
     isLoading: isPostsLoading,
   } = useQuery({
     queryKey: ['public-posts', 'home'],
-    queryFn: () => listPublicPosts({ limit: 3 }),
+    queryFn: ({ signal }) => listPublicPosts({ limit: 3, signal }),
   })
   const {
     data: sitesData,
@@ -38,11 +38,11 @@ export function HomePage() {
     isLoading: isSitesLoading,
   } = useQuery({
     queryKey: ['public-site-items', 'home'],
-    queryFn: () => listPublicSiteItems({ limit: 3 }),
+    queryFn: ({ signal }) => listPublicSiteItems({ limit: 3, signal }),
   })
   const { data: siteProfile } = useQuery({
     queryKey: ['public-site-profile'],
-    queryFn: getPublicSiteProfile,
+    queryFn: ({ signal }) => getPublicSiteProfile({ signal }),
   })
   const profile = siteProfile
     ? {

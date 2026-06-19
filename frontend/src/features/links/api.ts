@@ -26,6 +26,7 @@ import type {
 type PublicLinkListOptions = {
   limit?: number
   offset?: number
+  signal?: AbortSignal
 }
 
 export function listAdminFriendLinks(): Promise<AdminFriendLinkListResponse> {
@@ -176,7 +177,7 @@ export function listPublicFriendLinks(
   return apiGetEncrypted<PublicFriendLinkListResponse>(
     `/public/friend-links${query}`,
     'content-v1',
-    { encryptionScope: 'public' },
+    { encryptionScope: 'public', signal: options.signal },
   )
 }
 

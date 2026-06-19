@@ -29,10 +29,12 @@ export function updateAdminSetting(
   )
 }
 
-export function getPublicSiteProfile(): Promise<PublicSiteProfile> {
+export function getPublicSiteProfile(
+  options: { signal?: AbortSignal } = {},
+): Promise<PublicSiteProfile> {
   return apiGetEncrypted<PublicSiteProfile>(
     '/public/settings/site-profile',
     'content-v1',
-    { encryptionScope: 'public' },
+    { encryptionScope: 'public', signal: options.signal },
   )
 }

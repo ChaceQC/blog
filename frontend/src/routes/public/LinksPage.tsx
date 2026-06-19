@@ -33,8 +33,8 @@ export function LinksPage() {
     isLoading,
   } = useQuery({
     queryKey: ['public-friend-links', page],
-    queryFn: () =>
-      listPublicFriendLinks({ limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
+    queryFn: ({ signal }) =>
+      listPublicFriendLinks({ limit: PAGE_SIZE, offset: page * PAGE_SIZE, signal }),
   })
   const links = linksData?.items ?? emptyLinks
   const totalLinks = linksData?.total ?? 0

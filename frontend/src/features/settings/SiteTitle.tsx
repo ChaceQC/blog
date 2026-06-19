@@ -7,7 +7,7 @@ import { siteSettings } from './siteSettings.ts'
 export function SiteTitle() {
   const { data } = useQuery({
     queryKey: ['public-site-profile'],
-    queryFn: getPublicSiteProfile,
+    queryFn: ({ signal }) => getPublicSiteProfile({ signal }),
   })
   const title = data?.title ?? siteSettings.title
 

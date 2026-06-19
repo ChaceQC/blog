@@ -16,6 +16,7 @@ import type {
 type PublicFileListOptions = {
   limit?: number
   offset?: number
+  signal?: AbortSignal
 }
 
 export function listAdminFiles(): Promise<AdminFileListResponse> {
@@ -58,17 +59,19 @@ export function listPublicFiles(
     'content-v1',
     {
       encryptionScope: 'public',
+      signal: options.signal,
     },
   )
 }
 
 export function getPublicFileTemporaryUrl(
   fileId: number,
+  options: { signal?: AbortSignal } = {},
 ): Promise<AdminFileTemporaryUrlResponse> {
   return apiGetEncrypted<AdminFileTemporaryUrlResponse>(
     `/public/files/${fileId}/temporary-url`,
     'content-v1',
-    { encryptionScope: 'public' },
+    { encryptionScope: 'public', signal: options.signal },
   )
 }
 

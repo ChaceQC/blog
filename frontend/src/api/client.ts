@@ -43,6 +43,7 @@ export async function apiGet<T>(
 ): Promise<T> {
   return requestJson<T>(path, {
     headers: jsonHeaders(options),
+    signal: options.signal,
     skipAuthRefresh: options.skipAuthRefresh,
   })
 }
@@ -56,6 +57,7 @@ export async function apiPost<TBody, TResponse>(
     method: 'POST',
     headers: jsonHeaders(options, { includeContentType: true }),
     body: JSON.stringify(body),
+    signal: options.signal,
     skipAuthRefresh: options.skipAuthRefresh,
   })
 }

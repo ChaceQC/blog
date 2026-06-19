@@ -6,6 +6,7 @@ import type { PublicSiteNavItemListResponse } from './types.ts'
 type PublicSiteListOptions = {
   limit?: number
   offset?: number
+  signal?: AbortSignal
 }
 
 export function listPublicSiteItems(
@@ -23,7 +24,7 @@ export function listPublicSiteItems(
   return apiGetEncrypted<PublicSiteNavItemListResponse>(
     `/public/site-items${query ? `?${query}` : ''}`,
     'content-v1',
-    { encryptionScope: 'public' },
+    { encryptionScope: 'public', signal: options.signal },
   )
 }
 

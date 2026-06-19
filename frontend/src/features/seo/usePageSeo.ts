@@ -25,7 +25,7 @@ export function usePageSeo({
 }: PageSeoOptions) {
   const { data: siteProfile } = useQuery({
     queryKey: ['public-site-profile'],
-    queryFn: getPublicSiteProfile,
+    queryFn: ({ signal }) => getPublicSiteProfile({ signal }),
   })
   const effectiveSiteName = siteName ?? siteProfile?.title ?? siteSettings.title
 

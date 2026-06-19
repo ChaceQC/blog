@@ -35,7 +35,7 @@ export function AdminLayout() {
   const navigate = useNavigate()
   const { data: siteProfile } = useQuery({
     queryKey: ['public-site-profile'],
-    queryFn: getPublicSiteProfile,
+    queryFn: ({ signal }) => getPublicSiteProfile({ signal }),
   })
   const title = siteProfile?.title ?? siteSettings.title
   const visibleLinks =
