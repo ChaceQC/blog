@@ -61,7 +61,7 @@ export async function getEncryptionSession(
 
   let pendingSession = pendingSessions.get(scope)
   if (!pendingSession) {
-    pendingSession = createEncryptionSession(scope, signal)
+    pendingSession = createEncryptionSession(scope)
       .then((session) => {
         activeSessions.set(scope, session)
         return session
@@ -164,10 +164,7 @@ function isBrowserPublicKey(value: JsonWebKey): value is BrowserPublicKey {
   return value.kty === 'EC' && value.crv === 'P-256' && !!value.x && !!value.y
 }
 
-async function createEncryptionSession(
-  scope: EncryptionScope,
-  signal?: AbortSignal,
-): Promise<EncryptionSession> {
+async function createEncryptionSession(scope: EncryptionScope): Promise<EncryptionSession> {
   const keyPair = await crypto.subtle.generateKey(
     { name: 'ECDH', namedCurve: 'P-256' },
     true,
@@ -185,7 +182,6 @@ async function createEncryptionSession(
       Accept: 'application/json',
       'Content-Type': 'application/json',
     },
-    signal,
     body: JSON.stringify({
       client_public_key: {
         kty: 'EC',
