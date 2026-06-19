@@ -18,7 +18,7 @@
 - 修复 `asyncmy 0.2.11` 依赖级风险：后端运行依赖切换为 `aiomysql`，`uv.lock`、本地/部署环境示例、Alembic 示例连接串和 README 均改为 `mysql+aiomysql://`；配置层会临时把旧 `mysql+asyncmy://` 前缀归一化到 `aiomysql`，避免本地遗留 `.env` 直接导致启动失败。
 - 公开 `content-v1` 加密 GET 已增加业务查询前置会话校验：公开分类、标签、文章、页面、站点资料、友链、站点目录和公开文件列表/短链接口会先验证 public scope 加密会话，缺少或无效 `X-Encryption-Session` 时不再先触发数据库列表、详情或总数查询。
 - `client_ip()` 已改为仅信任配置内反向代理：新增 `BLOG_TRUSTED_PROXY_HOSTS`，支持 IP 和 CIDR，只有直接连接来源属于可信代理时才读取 `X-Forwarded-For` / `X-Real-IP`；后端直连会使用连接 IP，降低伪造代理头绕过限流或污染日志的风险。
-- 公开访问日志压力已收敛：原先按类型跳过高频成功访问的策略已调整为 `BLOG_ACCESS_LOG_DEDUPE_SECONDS` 短时去重；同一 IP 在窗口内重复 `GET/HEAD` 同一 path 只写入第一条 `access_logs`，不把 query、临时 token 或签名参数纳入去重 key，生产 Redis 可用时使用 Redis `SET NX EX`，否则回落进程内缓存；错误访问、公开友链申请、公开站点跳转、后台短时链接和后台下载仍记录。
+- 公开访问日志压力已收敛：原先按类型跳过高频成功访问的策略已调整为 `BLOG_ACCESS_LOG_DEDUPE_SECONDS` 短时去重；同一 IP 在窗口内重复 `GET/HEAD` 同一 path 只写入第一条 `access_logs`，不把 query、临时 token 或签名参数纳入去重 key，生产 Redis 可用时使用 Redis `SET NX EX`，否则回落进程内缓存；错误访问、写操作和公开友链申请仍逐条记录，后台短时链接和后台下载等成功 `GET/HEAD` 也遵循同一短时去重策略。
 - 公开和后台列表分页已增加统一 `offset` 业务上限：新增 `PAGE_OFFSET_MAX = 10000` 并接入公开内容、公开文件、后台内容、后台文件、后台友链/导航和后台日志列表接口，避免超大 offset 造成深分页压力。
 - 按最新部署决策删除仓库内 `deploy/docker-compose.host-nginx.yml`；宿主机 Nginx 场景改为使用服务器本地 `deploy/docker-compose.local.yml` 覆盖文件绑定后端回环端口，避免把机器特定端口策略提交进仓库。
 - 继续全量审计后补充管理员刷新令牌边界：`POST /api/admin/auth/refresh` 不再接受 JSON body 中的 `refresh_token`，只读取 HttpOnly Cookie，减少刷新令牌进入前端 JS/请求体日志的兼容面。
@@ -82,6 +82,7 @@
 - P3 前端加密会话协商取消链路已修复：共享的 `pendingSessions` 不再绑定某个页面请求的 `AbortSignal`，单个页面切换只取消自己的等待结果，不会 abort 同 scope 下仍在复用的底层协商；新增回归测试覆盖首个调用 abort 后第二个调用继续成功的场景。该修复不涉及数据库字段、索引或服务器环境变量变化，不需要新增 Alembic 迁移。
 - P3 Markdown 正文外链图片策略已收紧：`MarkdownRenderer` 对 `img[src]` 单独校验，只允许站内 `/api/public/posts/{slug}/files/{id}/render` 文章资源路径，外部 `http/https`、协议相对 URL 和其他站内路径都会在渲染阶段剥离 `src`；普通链接仍保留 `http/https/mailto` 白名单。该修复不涉及数据库字段、索引或服务器环境变量变化，不需要新增 Alembic 迁移；历史已保存 `content_html` 需要重新保存内容才会被重渲染清理。
 - P4 `client_ip()` 代理头格式校验已补齐：可信代理场景下 `X-Real-IP` 只有合法 IP 才会被采用，无效值回退连接 IP；`X-Forwarded-For` 会先过滤非法片段，且当链路里只剩可信代理 IP 时不再返回代理地址，而是继续回退到合法 `X-Real-IP` 或连接 IP，避免非 IP 字符串污染限流和日志 key。该修复不涉及数据库字段、索引或服务器环境变量变化，不需要新增 Alembic 迁移。
+- P4 访问日志短时去重文档口径已同步：确认当前实现按用户此前确定的 `IP + method + path` 短窗口策略处理所有成功 `GET/HEAD`，包括后台短时链接和后台文件下载；错误、写操作和公开友链申请仍逐条记录。已同步 `backend/README.md` 与本进度文件，不改运行逻辑、不涉及数据库迁移或服务器配置。
 - P2 日志字段长度边界已修复：新增统一日志字段裁剪 helper，`LogService` 写入 access/audit/security 日志、`AuthService` 写入登录日志前都会按数据库列宽截断 `ip`、`path` 和 `user_agent`，避免超长 UA、异常代理头或长路径让日志记录本身触发数据库错误。该修复不涉及数据库字段变化，不需要新增 Alembic 迁移。
 - P2 后台加密 GET 前置会话校验已补齐：新增后台 `content-v1` / `sensitive-v1` 加密 session 预校验 dependency，内容、页面、文件列表/临时链接、友链、站点导航、设置和日志的加密 GET 会在业务列表、详情、计数或临时链接创建前先验证 `X-Encryption-Session`。该修复不涉及数据库迁移或服务器环境变量。
 - P3 后台加密会话单 IP 活跃上限已补齐：`/api/admin/encryption/sessions` 现在会向 `EncryptionSessionManager` 传入后台 scope 的活跃 session 上限，超过阈值返回 `429` 并写入 `security_events`；新增 `BLOG_ADMIN_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`，默认 `10`，已同步本地/部署 env 示例、README 和计划文档。该修复不涉及数据库迁移。
@@ -94,12 +95,11 @@
 
 ### 待修复清单
 
-- P4：访问日志去重实现和文档描述存在轻微策略漂移。`LogService._should_record_access_log()` 当前会对所有成功 `GET/HEAD` 按 IP + method + path 去重，包括后台文件下载和后台临时链接生成；而进度/文档多处描述“后台短时链接和后台下载仍记录”。如果后台下载审计需要逐次留痕，应按 `access_type` 做 allowlist/denylist；如果接受统一去重，应同步文档口径。
 - P4：测试文件体量较大，后续维护成本偏高。`backend/tests/test_public_content_api.py` 约 1233 行，`test_admin_links_api.py` 约 810 行，`test_admin_files_api.py` 约 726 行。虽然测试文件不完全适用普通源码 300/400 行限制，但继续追加用例会降低定位效率；建议按公开内容、公开文件、feed、友链申请、站点导航等行为拆分。
 
 ### 进行中
 
-- 正在按待修复清单逐项修复；下一项处理访问日志短时去重实现与文档描述的策略漂移。
+- 正在按待修复清单逐项修复；下一项拆分体量偏大的后端测试文件，降低后续安全回归维护成本。
 
 ### 阻塞与风险
 
@@ -118,7 +118,7 @@
 
 ### 下一步
 
-- 下一轮优先处理访问日志短时去重实现与文档描述的策略漂移；若改动数据库字段、索引或约束，必须同步评估 Alembic 迁移。
+- 下一轮优先拆分体量偏大的后端测试文件；若改动数据库字段、索引或约束，必须同步评估 Alembic 迁移。
 - 修复完成后再按服务器发布流程重新构建后端和前端静态产物，并复核 `/api/health`、后台登录、公开文章资源缓存、日志 IP 和访问日志短时去重效果。
 
 ### 验证
@@ -142,6 +142,7 @@
 - P3 Markdown 正文外链图片策略收紧后已运行 `uv run pytest tests/test_content_service.py tests/test_public_content_api.py tests/test_admin_content_api.py`，45 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - P4 `client_ip()` 代理头格式校验修复后已运行 `uv run ruff check app/core/request.py tests/test_request_client_ip.py`，通过。
 - P4 `client_ip()` 代理头格式校验修复后已运行 `uv run pytest tests/test_request_client_ip.py`，8 个测试通过。
+- P4 访问日志短时去重文档口径同步后已运行 `rg "后台短时链接|后台下载|逐条记录|短时去重|BLOG_ACCESS_LOG_DEDUPE_SECONDS" README.md backend/README.md PROJECT_PLAN.md PROJECT_PROGRESS.md`，确认文档统一描述为成功 `GET/HEAD` 按 IP、方法和 path 短时去重，错误和写操作逐条记录。
 - 本轮按 CTF/红队思路执行只读静态审计，覆盖公开入口、后台认证/会话、文件上传下载、URL/跳转、日志写入、部署暴露面、Markdown/前端危险 sink、配置漂移和工程体量；除写入 `PROJECT_PROGRESS.md` 外未修改业务代码。
 - 本轮未运行 `pip-audit` 等依赖扫描命令，避免再次触发本机杀软对审计工具缓存的误报；未启动本地前后端服务。
 - 本轮继续全量审计已运行 `rg` 静态扫描危险调用、路由写操作、SQLAlchemy 查询、前端 sink、事件监听、AbortSignal、文件体量和测试覆盖；未发现命令执行、用户输入拼接原生 SQL、静态上传目录重新暴露或 token/cookie 写入 localStorage/sessionStorage。
