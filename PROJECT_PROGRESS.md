@@ -72,11 +72,11 @@
 
 ### 待修复清单
 
-- 当前 P4 代码体量待修复项已处理完：超过或接近 400 行且职责混杂的 CSS、服务、Repository、公开 feed、后台内容路由、后台文件路由和前台归档页均已按职责拆分；剩余 350-381 行文件已复核为单一聚合/用例编排职责，暂不继续机械拆分。
+- 无。当前 P4 代码体量待修复项已处理完：超过或接近 400 行且职责混杂的 CSS、服务、Repository、公开 feed、后台内容路由、后台文件路由和前台归档页均已按职责拆分；最终源码体量扫描未发现 400 行以上源码文件，剩余 330-381 行文件已复核为单一聚合、页面编排或用例编排职责，暂不继续机械拆分。
 
 ### 进行中
 
-- 正在执行本轮 P4 收尾验证，准备清空待修复清单并合并到 `main`。
+- 本轮 P4 工程结构和体量修复已完成，正在将 `dev` 的已验证结果合并到 `main`。
 
 ### 阻塞与风险
 
@@ -92,7 +92,7 @@
 
 ### 下一步
 
-- 执行后端全量测试、Alembic SQL 生成、前端 lint/test/build、Docker Compose 配置展开和 `git diff --check`；全部通过后清空待修复清单并将 `dev` 合并到 `main`。
+- 在已部署服务器上按最新 `main` 发布后端和前端静态产物，并执行 Alembic 迁移到 `20260619_0009_friend_link_status_index.py`。
 
 ### 验证
 
@@ -138,6 +138,15 @@
 - 前台文章归档页拆分后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - 后台文件路由拆分后已运行 `uv run ruff check app/api/admin/files.py app/api/admin/files_common.py app/api/admin/file_management.py app/api/admin/file_access.py`，通过。
 - 后台文件路由拆分后已运行 `uv run pytest tests/test_admin_files_api.py tests/test_file_cleanup.py`，26 个测试通过；仍存在 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 状态常量上游弃用警告。
+- P4 收尾后已运行源码体量扫描，`backend/app` 与 `frontend/src` 下未发现 400 行以上源码文件；剩余 330 行以上文件最高为 `backend/app/services/links.py` 381 行、`backend/app/services/content.py` 380 行和 `backend/app/api/public/files.py` 374 行。
+- P4 收尾后已运行 `uv run ruff check .`，通过。
+- P4 收尾后已运行 `uv run pytest`，209 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 7 个 FastAPI/Starlette 上游弃用警告。
+- P4 收尾后已运行 `uv run alembic upgrade head --sql`，可正常生成从空库到 `20260619_0009` 的 MySQL 迁移 SQL。
+- P4 收尾后已运行 `npm.cmd run lint`，通过。
+- P4 收尾后已运行 `npm.cmd test`，3 个测试文件 6 个测试通过。
+- P4 收尾后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
+- P4 收尾后已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
+- P4 收尾后已运行 `git diff --check`，未发现空白或行尾问题。
 - `FileService` 拆分后已运行 `uv run ruff check app/services/file_errors.py app/services/file_tokens.py app/services/file_uploads.py app/services/file_storage.py app/services/files.py tests/test_admin_files_api.py tests/test_file_cleanup.py`，通过。
 - `FileService` 拆分后已运行 `uv run pytest tests/test_admin_files_api.py tests/test_file_cleanup.py tests/test_public_content_api.py tests/test_content_service.py`，60 个测试通过；仍存在 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 状态常量的上游弃用警告。
 - 公开读取 read model 边界调整后已运行 `uv run ruff check app/schemas/content.py app/services/content_read_models.py app/services/file_read_models.py app/services/content.py app/services/files.py app/api/public tests/test_public_content_api.py tests/test_content_service.py tests/test_admin_files_api.py`，通过。
