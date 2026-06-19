@@ -83,6 +83,7 @@
 - P3 Markdown 正文外链图片策略已收紧：`MarkdownRenderer` 对 `img[src]` 单独校验，只允许站内 `/api/public/posts/{slug}/files/{id}/render` 文章资源路径，外部 `http/https`、协议相对 URL 和其他站内路径都会在渲染阶段剥离 `src`；普通链接仍保留 `http/https/mailto` 白名单。该修复不涉及数据库字段、索引或服务器环境变量变化，不需要新增 Alembic 迁移；历史已保存 `content_html` 需要重新保存内容才会被重渲染清理。
 - P4 `client_ip()` 代理头格式校验已补齐：可信代理场景下 `X-Real-IP` 只有合法 IP 才会被采用，无效值回退连接 IP；`X-Forwarded-For` 会先过滤非法片段，且当链路里只剩可信代理 IP 时不再返回代理地址，而是继续回退到合法 `X-Real-IP` 或连接 IP，避免非 IP 字符串污染限流和日志 key。该修复不涉及数据库字段、索引或服务器环境变量变化，不需要新增 Alembic 迁移。
 - P4 访问日志短时去重文档口径已同步：确认当前实现按用户此前确定的 `IP + method + path` 短窗口策略处理所有成功 `GET/HEAD`，包括后台短时链接和后台文件下载；错误、写操作和公开友链申请仍逐条记录。已同步 `backend/README.md` 与本进度文件，不改运行逻辑、不涉及数据库迁移或服务器配置。
+- P4 大体量测试文件已按领域拆分：`test_public_content_api.py` 拆出公开加密、feed/SEO、公开链接和公开设置测试，原文件从 1421 行降到 377 行；`test_admin_links_api.py` 拆出分组和站点导航测试，原文件从 893 行降到 151 行；`test_admin_files_api.py` 拆出公开文件、后台文件访问和文章图片测试，原文件从 865 行降到 165 行；共享 fake/override 收敛到 helper 模块。该调整不改业务逻辑、不涉及数据库迁移或服务器配置。
 - P2 日志字段长度边界已修复：新增统一日志字段裁剪 helper，`LogService` 写入 access/audit/security 日志、`AuthService` 写入登录日志前都会按数据库列宽截断 `ip`、`path` 和 `user_agent`，避免超长 UA、异常代理头或长路径让日志记录本身触发数据库错误。该修复不涉及数据库字段变化，不需要新增 Alembic 迁移。
 - P2 后台加密 GET 前置会话校验已补齐：新增后台 `content-v1` / `sensitive-v1` 加密 session 预校验 dependency，内容、页面、文件列表/临时链接、友链、站点导航、设置和日志的加密 GET 会在业务列表、详情、计数或临时链接创建前先验证 `X-Encryption-Session`。该修复不涉及数据库迁移或服务器环境变量。
 - P3 后台加密会话单 IP 活跃上限已补齐：`/api/admin/encryption/sessions` 现在会向 `EncryptionSessionManager` 传入后台 scope 的活跃 session 上限，超过阈值返回 `429` 并写入 `security_events`；新增 `BLOG_ADMIN_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`，默认 `10`，已同步本地/部署 env 示例、README 和计划文档。该修复不涉及数据库迁移。
@@ -95,11 +96,11 @@
 
 ### 待修复清单
 
-- P4：测试文件体量较大，后续维护成本偏高。`backend/tests/test_public_content_api.py` 约 1233 行，`test_admin_links_api.py` 约 810 行，`test_admin_files_api.py` 约 726 行。虽然测试文件不完全适用普通源码 300/400 行限制，但继续追加用例会降低定位效率；建议按公开内容、公开文件、feed、友链申请、站点导航等行为拆分。
+- 当前待修复清单已清空。
 
 ### 进行中
 
-- 正在按待修复清单逐项修复；下一项拆分体量偏大的后端测试文件，降低后续安全回归维护成本。
+- 本轮待修复清单已处理完成；正在准备后端、前端、迁移和 Compose 全量验证。
 
 ### 阻塞与风险
 
@@ -118,7 +119,7 @@
 
 ### 下一步
 
-- 下一轮优先拆分体量偏大的后端测试文件；若改动数据库字段、索引或约束，必须同步评估 Alembic 迁移。
+- 下一步运行后端全量 lint/pytest、迁移 SQL、前端 lint/test/build 和 Compose 配置展开；通过后将 `dev` 合并到 `main` 并推送。
 - 修复完成后再按服务器发布流程重新构建后端和前端静态产物，并复核 `/api/health`、后台登录、公开文章资源缓存、日志 IP 和访问日志短时去重效果。
 
 ### 验证
@@ -143,6 +144,9 @@
 - P4 `client_ip()` 代理头格式校验修复后已运行 `uv run ruff check app/core/request.py tests/test_request_client_ip.py`，通过。
 - P4 `client_ip()` 代理头格式校验修复后已运行 `uv run pytest tests/test_request_client_ip.py`，8 个测试通过。
 - P4 访问日志短时去重文档口径同步后已运行 `rg "后台短时链接|后台下载|逐条记录|短时去重|BLOG_ACCESS_LOG_DEDUPE_SECONDS" README.md backend/README.md PROJECT_PLAN.md PROJECT_PROGRESS.md`，确认文档统一描述为成功 `GET/HEAD` 按 IP、方法和 path 短时去重，错误和写操作逐条记录。
+- P4 大体量测试文件拆分后已运行 `uv run ruff check tests/test_public_content_api.py tests/test_public_encryption_api.py tests/test_public_feeds_api.py tests/test_public_links_api.py tests/test_public_settings_api.py tests/public_content_api_helpers.py tests/test_admin_links_api.py tests/test_admin_link_groups_api.py tests/test_admin_site_nav_api.py tests/admin_links_api_helpers.py tests/test_admin_files_api.py tests/test_public_files_api.py tests/test_admin_file_access_api.py tests/test_post_file_images_api.py tests/admin_files_api_helpers.py`，通过。
+- P4 大体量测试文件拆分后已运行 `uv run pytest tests/test_public_content_api.py tests/test_public_encryption_api.py tests/test_public_feeds_api.py tests/test_public_links_api.py tests/test_public_settings_api.py tests/test_admin_links_api.py tests/test_admin_link_groups_api.py tests/test_admin_site_nav_api.py tests/test_admin_files_api.py tests/test_public_files_api.py tests/test_admin_file_access_api.py tests/test_post_file_images_api.py`，66 个测试通过；仍存在 FastAPI/Starlette TestClient、HTTP 状态常量和 per-request cookies 的上游弃用警告。
+- P4 大体量测试文件拆分后已运行测试文件体量扫描，三个待修复目标文件分别降为 `test_public_content_api.py` 377 行、`test_admin_links_api.py` 151 行、`test_admin_files_api.py` 165 行。
 - 本轮按 CTF/红队思路执行只读静态审计，覆盖公开入口、后台认证/会话、文件上传下载、URL/跳转、日志写入、部署暴露面、Markdown/前端危险 sink、配置漂移和工程体量；除写入 `PROJECT_PROGRESS.md` 外未修改业务代码。
 - 本轮未运行 `pip-audit` 等依赖扫描命令，避免再次触发本机杀软对审计工具缓存的误报；未启动本地前后端服务。
 - 本轮继续全量审计已运行 `rg` 静态扫描危险调用、路由写操作、SQLAlchemy 查询、前端 sink、事件监听、AbortSignal、文件体量和测试覆盖；未发现命令执行、用户输入拼接原生 SQL、静态上传目录重新暴露或 token/cookie 写入 localStorage/sessionStorage。
