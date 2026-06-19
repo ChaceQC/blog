@@ -91,7 +91,7 @@
 
 ### 进行中
 
-- 本轮待修复项已全部处理，正在执行最终全量验证和 `dev` 到 `main` 的合并收尾。
+- 本轮待修复项已全部处理并通过最终验证；合并流程按 `dev` 到 `main` 快进执行。
 
 ### 阻塞与风险
 
@@ -112,7 +112,7 @@
 
 - 在已部署服务器上按最新 `main` 发布后端和前端静态产物，并执行 Alembic 迁移到 `20260619_0009_friend_link_status_index.py`。
 - 服务器重新拉取最新 `main` 后，重新执行 `docker compose ... build nginx`，确认 Linux 镜像内 `npm ci` 不再缺少 `@emnapi/core` / `@emnapi/runtime`。
-- 完成最终全量验证后，将 `dev` 快进合并到 `main` 并推送，随后回到 `dev` 继续日常开发。
+- 服务端发布后复核 `/api/health`、后台登录、公开文章资源缓存、日志 IP 和访问日志短时去重效果。
 
 ### 验证
 
@@ -147,6 +147,15 @@
 - 前端页面和面板体量收敛后已运行 `npm.cmd run lint`，通过。
 - 前端页面和面板体量收敛后已运行 `npm.cmd test`，3 个测试文件 6 个测试通过。
 - 前端页面和面板体量收敛后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
+- 本轮待修复项收尾后已运行源码体量扫描，`backend/app` 与 `frontend/src` 下未发现 400 行以上源码文件；当前最高为 `backend/app/api/public/files.py` 353 行、`backend/app/services/links.py` 347 行、`backend/app/services/logs.py` 345 行和 `backend/app/services/content.py` 340 行。
+- 本轮待修复项收尾后已运行 `uv run ruff check .`，通过。
+- 本轮待修复项收尾后已运行 `uv run pytest`，217 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 7 个 FastAPI/Starlette 上游弃用警告。
+- 本轮待修复项收尾后已运行 `uv run alembic upgrade head --sql`，可正常生成从空库到 `20260619_0009` 的 MySQL 迁移 SQL。
+- 本轮待修复项收尾后已运行 `npm.cmd run lint`，通过。
+- 本轮待修复项收尾后已运行 `npm.cmd test`，3 个测试文件 6 个测试通过。
+- 本轮待修复项收尾后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
+- 本轮待修复项收尾后已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
+- 本轮待修复项收尾后已运行 `git diff --check`，未发现空白或行尾问题。
 - P1 上传静态暴露修复后已运行文本检查，确认 `deploy/nginx/templates/blog.conf.template`、`deploy/docker-compose.yml` 和 `deploy/nginx/Dockerfile` 不再包含 `/uploads/` 静态 location、上传目录挂载或 nginx 镜像内上传目录创建。
 - 已运行 `uv run ruff check .`，通过。
 - 已运行 `uv run pytest tests/test_public_content_api.py tests/test_admin_files_api.py tests/test_request_client_ip.py tests/test_log_service.py tests/test_admin_logs_api.py`，53 个测试通过；仍存在 FastAPI/Starlette TestClient 与 per-request cookies 的上游弃用警告。
