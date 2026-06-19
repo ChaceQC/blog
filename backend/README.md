@@ -112,7 +112,7 @@ uv run python -m app.cli check-friend-links --limit 100 --timeout-seconds 5
 - `GET /sitemap.xml`：输出 sitemap XML，包含首页、文章列表页、已公开文章永久链接、分类归档页和标签归档页。
 - `GET /robots.txt`：允许常规公开内容抓取，屏蔽 `/admin` 与 `/api/admin/`，并声明 sitemap 地址。
 
-这些公开 SEO 端点的绝对 URL 均由 `BLOG_PUBLIC_BASE_URL` 生成；RSS 文章条目会使用发布时间、更新时间、SEO 标题、SEO 描述、分类和标签。RSS、sitemap 和 robots.txt 均返回 `Cache-Control: public, max-age=300, stale-while-revalidate=60` 与 `ETag`，客户端命中 `If-None-Match` 时返回 `304` 且不写应用访问日志；正常 `200` 响应仍写入 `access_logs`。
+这些公开 SEO 端点的绝对 URL 均由 `BLOG_PUBLIC_BASE_URL` 生成；RSS 文章条目会使用发布时间、更新时间、SEO 标题、SEO 描述、分类和标签。RSS、sitemap 和 robots.txt 均返回 `Cache-Control: public, max-age=300, stale-while-revalidate=60` 与 `ETag`；RSS/sitemap 最近渲染结果会短时缓存在应用进程内，客户端命中 `If-None-Match` 时可在查库和 XML 渲染前直接返回 `304` 且不写应用访问日志，正常 `200` 响应仍写入 `access_logs`。
 
 ## 后台文件管理
 

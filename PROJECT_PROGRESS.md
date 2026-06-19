@@ -46,10 +46,10 @@
 - P1 上传静态暴露已修复：删除 Compose 内置 Nginx 的 `/uploads/` 静态 location、删除 nginx 服务对 `/data/blog/uploads/public` 的只读挂载，并移除 nginx 镜像内上传目录创建；README、部署 README 和计划书同步明确上传目录不能挂到 Nginx 静态目录，公开文件、文章图片和后台预览必须继续走后端签名接口。该修复不涉及数据库迁移。
 - 高优先级文章资源加载浪费已修复：公开文章、页面、归档和分类/标签查询会透传 React Query 的 `AbortSignal`，切换页面时会取消仍在等待的数据请求；`MathHtml` 会先在离线 `template` 中改写 `/api/...` 资源地址再插入 DOM，并在卸载或内容切换时移除 `img/iframe/video/audio` 的加载源，减少无效带宽消耗。
 - 文章资源临时 token 已支持浏览器缓存复用：文章正文图片、封面缩略图和后台预览图片的签名 URL 会在半个有效期时间窗内保持稳定，响应增加 `Cache-Control: private, max-age=..., immutable`、`ETag` 和 `X-Content-Type-Options: nosniff`；同一文件在时间窗内重复访问可命中浏览器缓存，过期后仍会自动换签名。
+- P2 RSS/sitemap 高成本 GET 已收敛：最近渲染的 RSS 和 sitemap 会短时缓存在应用进程内，缓存未过期时可在业务查询和 XML 渲染前处理 `If-None-Match` 并直接返回 `304`；缓存命中 `200` 仍保留访问日志，缓存命中 `304` 继续跳过访问日志。
 
 ### 待修复清单
 
-- P2：RSS/sitemap 的 ETag 仍在查库和渲染 XML 后才判断 `304`。`backend/app/api/public/feeds.py` 中 `/rss.xml` 会先取最多 1000 篇文章和站点资料再计算 ETag，`/sitemap.xml` 会先查文章、分类、标签并渲染 XML 后才对比 `If-None-Match`。当前已减少响应体和命中 304 时的访问日志，但没有减少匿名请求造成的数据库和 CPU 成本。建议引入应用内/Redis 缓存，或用内容更新时间、文章/分类/标签版本号生成轻量 ETag/Last-Modified 并在重查询前短路。
 - P2：公开站点跳转是匿名 GET 写库放大点。`backend/app/api/public/links.py` 的 `/site-items/{item_id}/visit` 每次命中都会调用 `record_public_site_nav_click`，`backend/app/repositories/links.py` 会执行 `click_count = click_count + 1`，随后还写访问日志。URL 来自管理员配置/审核，不是匿名 open redirect；但匿名用户可刷点击计数和访问日志，污染统计并放大数据库写压力。建议用 Redis 按 `IP + item_id` 短时去重点击，或改为异步聚合/采样写入。
 - P2：日志表缺少保留和清理任务，长期有数据库增长风险。`access_logs`、`audit_logs`、`login_logs`、`security_events` 目前有 list/insert 路径，但 `backend/app/repositories/logs.py` 没有 delete/retention，`deploy/systemd` 也只有加密会话和文件清理 timer。访问日志虽已短时去重，但错误请求、登录失败、限流安全事件、公开站点跳转和后台审计仍会持续增长。建议新增按天数/条数保留的 CLI 和 systemd timer，必要时先导出归档再删除。
 - P2：公开友链申请只按 IP 限流，没有 URL/域名维度的去重或待审上限。`backend/app/api/public/links.py` 的申请入口会创建 `pending` 记录，`friend_links.url` 当前没有唯一约束；攻击者可在限流窗口外反复提交同一 URL 或同域 URL，堆积待审核数据和后台审计负担。建议增加规范化 URL/域名维度的短期去重、待审数量上限，或对重复 URL 建唯一约束；如果改数据库约束，需要同步 Alembic 迁移并先评估历史重复数据。
@@ -126,6 +126,9 @@
 - 文章资源加载修复后已运行 `uv run pytest`，181 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 7 个 FastAPI/Starlette 上游弃用警告。
 - 文章资源加载修复后已运行 `npm.cmd run lint`，通过。
 - 文章资源加载修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
+- RSS/sitemap 缓存短路修复后已运行 `uv run pytest tests/test_public_content_api.py -k "rss or sitemap or robots"`，6 个测试通过，25 个未选中；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- RSS/sitemap 缓存短路修复后已运行 `uv run pytest tests/test_public_content_api.py`，31 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- RSS/sitemap 缓存短路修复后已运行 `uv run ruff check app/api/public/feeds.py tests/test_public_content_api.py`，通过。
 - API 共享依赖状态迁移后已运行 `uv run pytest tests/test_rate_limit.py tests/test_log_service.py tests/test_public_content_api.py tests/test_admin_encryption_api.py`，49 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run lint`，通过。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。

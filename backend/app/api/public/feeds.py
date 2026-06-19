@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from email.utils import format_datetime
 from hashlib import sha256
 from html import escape
+from time import monotonic
 from typing import Any
 
 from fastapi import APIRouter, Request, status
@@ -19,8 +20,26 @@ from app.services.content_read_models import PublicTaxonomyRead
 
 FEED_POST_LIMIT = 1000
 FEED_CACHE_CONTROL = "public, max-age=300, stale-while-revalidate=60"
+FEED_CACHE_SECONDS = 300
 
 router = APIRouter(tags=["feeds"])
+
+
+class CachedFeed:
+    def __init__(
+        self,
+        *,
+        content: str,
+        media_type: str,
+        etag: str,
+        count: int,
+        expires_at: float,
+    ) -> None:
+        self.content = content
+        self.media_type = media_type
+        self.etag = etag
+        self.count = count
+        self.expires_at = expires_at
 
 
 @router.get("/rss.xml")
@@ -31,6 +50,19 @@ async def rss_feed(
     settings: SettingsDependency,
     logs: LogServiceDependency,
 ) -> Response:
+    cached = _cached_feed_response(request, key="rss")
+    if cached is not None:
+        response, count = cached
+        if response.status_code == status.HTTP_304_NOT_MODIFIED:
+            return response
+        await _record_feed_access(
+            logs,
+            request=request,
+            access_type="public_rss",
+            count=count,
+        )
+        return response
+
     posts = list(await content.list_public_feed_posts(limit=FEED_POST_LIMIT))
     profile = _site_profile((await settings_service.get_site_profile()).value_json)
     xml = _render_rss(
@@ -39,10 +71,12 @@ async def rss_feed(
         site_description=profile["description"],
         base_url=settings.public_base_url,
     )
-    response = _cacheable_response(
+    response = _cached_or_new_feed_response(
         request=request,
+        key="rss",
         content=xml,
         media_type="application/rss+xml",
+        count=len(posts),
     )
     if response.status_code == status.HTTP_304_NOT_MODIFIED:
         return response
@@ -62,6 +96,19 @@ async def sitemap(
     settings: SettingsDependency,
     logs: LogServiceDependency,
 ) -> Response:
+    cached = _cached_feed_response(request, key="sitemap")
+    if cached is not None:
+        response, count = cached
+        if response.status_code == status.HTTP_304_NOT_MODIFIED:
+            return response
+        await _record_feed_access(
+            logs,
+            request=request,
+            access_type="public_sitemap",
+            count=count,
+        )
+        return response
+
     posts = list(await content.list_public_feed_posts(limit=FEED_POST_LIMIT))
     categories = list(
         await content.list_public_categories(limit=FEED_POST_LIMIT, offset=0),
@@ -73,10 +120,12 @@ async def sitemap(
         tags=tags,
         base_url=settings.public_base_url,
     )
-    response = _cacheable_response(
+    response = _cached_or_new_feed_response(
         request=request,
+        key="sitemap",
         content=xml,
         media_type="application/xml",
+        count=len(posts) + len(categories) + len(tags),
     )
     if response.status_code == status.HTTP_304_NOT_MODIFIED:
         return response
@@ -121,6 +170,57 @@ def _cacheable_response(*, request: Request, content: str, media_type: str) -> R
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
     return Response(content=content, media_type=media_type, headers=headers)
+
+
+def _cached_or_new_feed_response(
+    *,
+    request: Request,
+    key: str,
+    content: str,
+    media_type: str,
+    count: int,
+) -> Response:
+    entry = CachedFeed(
+        content=content,
+        media_type=media_type,
+        etag=f'"{sha256(content.encode("utf-8")).hexdigest()}"',
+        count=count,
+        expires_at=monotonic() + FEED_CACHE_SECONDS,
+    )
+    _feed_cache(request)[key] = entry
+    return _feed_entry_response(request=request, entry=entry)
+
+
+def _cached_feed_response(
+    request: Request,
+    *,
+    key: str,
+) -> tuple[Response, int] | None:
+    entry = _feed_cache(request).get(key)
+    if entry is None:
+        return None
+    if entry.expires_at <= monotonic():
+        _feed_cache(request).pop(key, None)
+        return None
+    return _feed_entry_response(request=request, entry=entry), entry.count
+
+
+def _feed_entry_response(*, request: Request, entry: CachedFeed) -> Response:
+    headers = {
+        "Cache-Control": FEED_CACHE_CONTROL,
+        "ETag": entry.etag,
+    }
+    if request.headers.get("if-none-match") == entry.etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
+    return Response(content=entry.content, media_type=entry.media_type, headers=headers)
+
+
+def _feed_cache(request: Request) -> dict[str, CachedFeed]:
+    cache = getattr(request.app.state, "feed_response_cache", None)
+    if not isinstance(cache, dict):
+        cache = {}
+        request.app.state.feed_response_cache = cache
+    return cache
 
 
 def _render_rss(

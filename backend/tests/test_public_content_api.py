@@ -292,6 +292,17 @@ class ExplodingPublicContentService:
         raise AssertionError("public content service should not be called")
 
 
+class ExplodingFeedContentService:
+    async def list_public_feed_posts(self, **_: object) -> list[object]:
+        raise AssertionError("feed content service should not be called")
+
+    async def list_public_categories(self, **_: object) -> list[object]:
+        raise AssertionError("feed category service should not be called")
+
+    async def list_public_tags(self, **_: object) -> list[object]:
+        raise AssertionError("feed tag service should not be called")
+
+
 class FakePublicLinkService:
     async def list_public_friend_links(
         self,
@@ -488,6 +499,7 @@ def test_public_encryption_session_rejects_active_session_overflow() -> None:
 
 
 def test_rss_feed_returns_public_posts_xml() -> None:
+    _clear_feed_response_cache()
     client = TestClient(app)
     logs = FakeLogService()
     app.dependency_overrides[get_content_service] = (
@@ -517,6 +529,7 @@ def test_rss_feed_returns_public_posts_xml() -> None:
 
 
 def test_rss_feed_returns_304_without_access_log_for_matching_etag() -> None:
+    _clear_feed_response_cache()
     client = TestClient(app)
     logs = FakeLogService()
     app.dependency_overrides[get_content_service] = (
@@ -542,7 +555,36 @@ def test_rss_feed_returns_304_without_access_log_for_matching_etag() -> None:
     assert logs.items == []
 
 
+def test_rss_feed_cached_etag_short_circuits_before_queries() -> None:
+    _clear_feed_response_cache()
+    client = TestClient(app)
+    logs = FakeLogService()
+    app.dependency_overrides[get_content_service] = (
+        lambda: FakePublicContentService()
+    )
+    app.dependency_overrides[get_setting_service] = lambda: FakeSettingService()
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        first = client.get("/rss.xml")
+        logs.items.clear()
+        app.dependency_overrides[get_content_service] = (
+            lambda: ExplodingFeedContentService()
+        )
+        second = client.get(
+            "/rss.xml",
+            headers={"If-None-Match": first.headers["etag"]},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert first.status_code == 200
+    assert second.status_code == 304
+    assert logs.items == []
+
+
 def test_sitemap_returns_public_post_urls_xml() -> None:
+    _clear_feed_response_cache()
     client = TestClient(app)
     logs = FakeLogService()
     app.dependency_overrides[get_content_service] = (
@@ -575,7 +617,35 @@ def test_sitemap_returns_public_post_urls_xml() -> None:
     assert logs.items[0]["detail_json"] == {"count": 5}
 
 
+def test_sitemap_cached_etag_short_circuits_before_queries() -> None:
+    _clear_feed_response_cache()
+    client = TestClient(app)
+    logs = FakeLogService()
+    app.dependency_overrides[get_content_service] = (
+        lambda: FakePublicContentService()
+    )
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        first = client.get("/sitemap.xml")
+        logs.items.clear()
+        app.dependency_overrides[get_content_service] = (
+            lambda: ExplodingFeedContentService()
+        )
+        second = client.get(
+            "/sitemap.xml",
+            headers={"If-None-Match": first.headers["etag"]},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert first.status_code == 200
+    assert second.status_code == 304
+    assert logs.items == []
+
+
 def test_robots_txt_points_to_sitemap_and_hides_admin_paths() -> None:
+    _clear_feed_response_cache()
     client = TestClient(app)
     logs = FakeLogService()
     app.dependency_overrides[get_log_service] = lambda: logs
@@ -1224,3 +1294,8 @@ def test_public_site_item_visit_returns_404_for_missing_item() -> None:
     assert response.json()["detail"] == "site nav item not found"
     assert logs.items[0]["access_type"] == "public_site_item_visit"
     assert logs.items[0]["status_code"] == 404
+
+
+def _clear_feed_response_cache() -> None:
+    if hasattr(app.state, "feed_response_cache"):
+        app.state.feed_response_cache.clear()
