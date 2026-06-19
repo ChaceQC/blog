@@ -7,12 +7,15 @@ import {
   Settings,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
+import { useRef } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
+import { LiquidGlassFilter } from '../../components/LiquidGlassFilter.tsx'
 import { getPublicSiteProfile } from '../../features/settings/api.ts'
 import { siteSettings } from '../../features/settings/siteSettings.ts'
 
 export function PublicLayout() {
+  const headerRef = useRef<HTMLElement>(null)
   const { data: siteProfile } = useQuery({
     queryKey: ['public-site-profile'],
     queryFn: getPublicSiteProfile,
@@ -21,32 +24,15 @@ export function PublicLayout() {
 
   return (
     <div className="public-shell">
-      <svg className="glass-filter-defs" aria-hidden="true" focusable="false">
-        <filter
-          id="nav-glass-refraction"
-          x="-16%"
-          y="-70%"
-          width="132%"
-          height="240%"
-          colorInterpolationFilters="sRGB"
-        >
-          <feTurbulence
-            type="fractalNoise"
-            baseFrequency="0.018 0.052"
-            numOctaves="2"
-            seed="19"
-            result="navNoise"
-          />
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="navNoise"
-            scale="16"
-            xChannelSelector="R"
-            yChannelSelector="G"
-          />
-        </filter>
-      </svg>
-      <header className="site-header">
+      <LiquidGlassFilter
+        targetRef={headerRef}
+        lensId="nav-glass-lens"
+        edgeId="nav-glass-edge"
+      />
+      <header className="site-header" ref={headerRef}>
+        <span className="site-header__lens" aria-hidden="true" />
+        <span className="site-header__edge" aria-hidden="true" />
+        <span className="site-header__shine" aria-hidden="true" />
         <NavLink className="brand" to="/">
           <span className="brand-mark" aria-hidden="true">
             <BookOpen size={18} strokeWidth={1.8} />
