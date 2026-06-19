@@ -53,11 +53,11 @@
 - P3 后台 `/api/admin/auth/me` 已前置校验加密会话：新增 `EncryptedCurrentAdminUserDependency`，会先验证 admin scope 的 `sensitive-v1` session，再解析 Access Token 和查询当前用户；缺少或无效 `X-Encryption-Session` 不再触发认证查询。该修复不涉及数据库迁移或服务器环境变量。
 - P3 logout 刷新令牌边界已收敛：`POST /api/admin/auth/logout` 不再声明或读取请求体中的 `refresh_token`，只从 HttpOnly `blog_admin_refresh` Cookie 读取并吊销；请求体里携带的 token 会被忽略。该修复不涉及数据库迁移或服务器环境变量。
 - P3 公开 href 敏感路径边界已收敛：统一 URL validator 会拒绝公开站内链接指向 `/admin` 和 `/api/admin` 管理入口，前端后台友链/站点导航的未保存链接预览也同步降级危险站内路径为 `#`。该修复不涉及数据库迁移或服务器环境变量。
+- P3 访问日志策略漂移已修正：删除后端配置中已不再使用的 `access_log_skip_types` 字段和测试假配置残留，文档统一以 `BLOG_ACCESS_LOG_DEDUPE_SECONDS` 短时去重为准。该修复不涉及数据库迁移；生产不需要新增配置，若曾设置旧 `BLOG_ACCESS_LOG_SKIP_TYPES` 可删除。
 
 ### 待修复清单
 
 - P3：访问日志和审计日志的 detail/after payload 仍不够最小化。公开日志仍记录列表 limit/offset/count/total、文章/分类/标签 slug、文件名和 media_type；后台审计仍记录友链 URL、站点 URL/icon/tags、内容 title/slug/status、文件 original_name/mime/visibility/status 等实体摘要。日志只在后台可读，但一旦日志泄露或被误导出，会暴露内容结构、URL、文件名和管理操作摘要。建议公开访问日志只保留 type/status/entity_id/path/IP/UA/时间，audit 只保留 changed_fields、状态类摘要或哈希，避免记录正文、URL、文件名等可复原业务信息。
-- P3：配置/计划文档存在访问日志策略漂移。`PROJECT_PLAN.md` 仍提到高频成功访问可通过 `BLOG_ACCESS_LOG_SKIP_TYPES` 跳过写库，`backend/app/core/config.py` 也保留未使用的 `access_log_skip_types` 字段；当前真实策略已改为 `BLOG_ACCESS_LOG_DEDUPE_SECONDS` 短时去重。风险是运维误以为 skip types 生效，实际配置不会改变行为。建议删除残留配置字段并同步计划文档。
 - P4：仍有多个源码文件超过项目单文件体量建议，后续维护和安全回归成本偏高。当前统计中 `frontend/src/styles/public.css` 约 1010 行，`forms.css` 约 570 行，`backend/app/services/files.py` 约 568 行，`backend/app/services/content.py` 约 513 行，`frontend/src/styles/admin.css` 约 499 行，`backend/app/api/admin/content.py` 约 477 行，`backend/app/repositories/content.py`、`backend/app/services/links.py`、`backend/app/services/logs.py` 等也超过 400 行或接近 400 行。建议继续按职责拆分 CSS 分层、内容用例、日志保留/查询、文件下载/预览和内容 repository 查询。
 - P4：前端缺少自动化组件/单元测试。`frontend/package.json` 只有 `dev/build/lint/preview`，未配置 test，仓库内也未发现 Vitest/Testing Library 用例。前端加密 client、刷新会话、分页 hook、日志页、上传页、URL safePreviewHref 和 MathHtml 都主要依赖 lint/build/人工联调，后续重构容易漏掉行为回归。建议引入 Vitest + React Testing Library，优先覆盖加密 API client、auth refresh、分页 hook、URL 白名单、日志分页和文件上传状态。
 - P4：后台日志页前端固定拉每类前 50 条再本地分页，不是真分页。`frontend/src/features/logs/api.ts` 对每类日志固定请求 `?limit=50`，`frontend/src/routes/admin/AdminLogsPage.tsx` 再用本地 `usePagedItems` 分页；后端已经支持 `limit/offset`。日志稍多时后台只能看到最新 50 条，影响排障和审计追溯。建议把 active tab、page、limit 接入后端分页，并显示总量或“已加载范围”。
@@ -147,6 +147,9 @@
 - 公开 href 敏感路径 denylist 修复后已运行 `uv run pytest tests/test_url_validation.py`，18 个测试通过。
 - 公开 href 敏感路径 denylist 修复后已运行 `uv run ruff check app/core/url_validation.py tests/test_url_validation.py`，通过。
 - 公开 href 敏感路径 denylist 修复后已运行 `npm.cmd run lint`，通过。
+- 访问日志策略漂移修正后已运行 `uv run pytest tests/test_log_service.py`，9 个测试通过。
+- 访问日志策略漂移修正后已运行 `uv run ruff check app/core/config.py tests/test_log_service.py`，通过。
+- 访问日志策略漂移修正后已用 `rg "ACCESS_LOG_SKIP_TYPES|access_log_skip_types|SKIP_TYPES|skip_types" -n` 检查旧配置名，确认仅剩进度文档中的已修正说明。
 - API 共享依赖状态迁移后已运行 `uv run pytest tests/test_rate_limit.py tests/test_log_service.py tests/test_public_content_api.py tests/test_admin_encryption_api.py`，49 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run lint`，通过。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。

@@ -14,7 +14,6 @@ from app.services.logs import (
 
 class FakeSettings:
     access_log_dedupe_seconds = 60
-    access_log_skip_types: list[str] = []
 
 
 class FakeLogRepository:

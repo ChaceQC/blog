@@ -54,7 +54,6 @@ class Settings(BaseSettings):
     docs_enabled: bool
     readiness_check_database: bool
     access_log_dedupe_seconds: int = Field(default=60, ge=0, le=3600)
-    access_log_skip_types: list[str] = Field(default_factory=list)
     upload_root: Path
     upload_max_size_bytes: int = Field(default=20 * 1024 * 1024, ge=1024)
     file_temporary_url_expire_seconds: int = Field(default=300, ge=30, le=3600)
