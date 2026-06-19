@@ -2,11 +2,19 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app.api.admin.dependencies import require_admin_permission
+from app.api.admin.dependencies import get_auth_service, require_admin_permission
 from app.api.admin.session import session_response, verify_csrf_tokens
 from app.core.config import Settings, get_settings
 from app.main import create_app
 from app.services.auth import AuthenticatedUser
+
+
+class FakeLogoutAuthService:
+    def __init__(self) -> None:
+        self.refresh_tokens: list[str] = []
+
+    async def logout(self, *, refresh_token: str) -> None:
+        self.refresh_tokens.append(refresh_token)
 
 
 def make_user(*, permissions: list[str]) -> AuthenticatedUser:
@@ -78,6 +86,49 @@ def test_session_response_keeps_tokens_out_of_response_body() -> None:
         "csrf_token": "csrf-token",
         "expires_in": 900,
     }
+
+
+def test_logout_uses_refresh_cookie_and_ignores_body_token() -> None:
+    app = create_app(settings=get_settings())
+    client = TestClient(app)
+    service = FakeLogoutAuthService()
+    app.dependency_overrides[get_auth_service] = lambda: service
+    client.cookies.set("blog_admin_csrf", "csrf-token", path="/api/admin")
+    client.cookies.set("blog_admin_refresh", "cookie-refresh", path="/api/admin")
+
+    try:
+        response = client.post(
+            "/api/admin/auth/logout",
+            headers={"X-CSRF-Token": "csrf-token"},
+            json={"refresh_token": "body-refresh-token-that-must-be-ignored"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    assert service.refresh_tokens == ["cookie-refresh"]
+
+
+def test_logout_ignores_body_token_without_refresh_cookie() -> None:
+    app = create_app(settings=get_settings())
+    client = TestClient(app)
+    service = FakeLogoutAuthService()
+    app.dependency_overrides[get_auth_service] = lambda: service
+    client.cookies.set("blog_admin_csrf", "csrf-token", path="/api/admin")
+
+    try:
+        response = client.post(
+            "/api/admin/auth/logout",
+            headers={"X-CSRF-Token": "csrf-token"},
+            json={"refresh_token": "body-refresh-token-that-must-be-ignored"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    assert service.refresh_tokens == []
 
 
 def test_development_response_uses_basic_security_headers_without_csp() -> None:

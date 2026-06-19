@@ -10,12 +10,6 @@ class LoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class LogoutRequest(BaseModel):
-    refresh_token: str | None = Field(default=None, min_length=32, max_length=256)
-
-    model_config = ConfigDict(extra="forbid")
-
-
 class AuthUserResponse(BaseModel):
     id: int
     username: str

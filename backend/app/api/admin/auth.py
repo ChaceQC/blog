@@ -28,7 +28,6 @@ from app.core.encryption import EncryptionProfile
 from app.core.request import client_ip
 from app.schemas.auth import (
     LoginRequest,
-    LogoutRequest,
     LogoutResponse,
 )
 from app.schemas.encryption import EncryptedApiResponse
@@ -147,11 +146,8 @@ async def logout(
     _: AdminCsrfDependency,
     service: AuthServiceDependency,
     settings: SettingsDependency,
-    payload: LogoutRequest | None = None,
 ) -> LogoutResponse:
-    refresh_token = (
-        payload.refresh_token if payload is not None else None
-    ) or refresh_token_from_request(request)
+    refresh_token = refresh_token_from_request(request)
     if refresh_token is not None:
         await service.logout(refresh_token=refresh_token)
     clear_admin_session_cookies(response, settings=settings)
