@@ -1,14 +1,11 @@
 import hashlib
-from collections.abc import Sequence
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Protocol
 
 from app.core.auth import utc_now
 from app.core.storage import StorageProvider
-from app.models.file import BlogFile
 from app.services import file_downloads
+from app.services.file_access import TemporaryFileAccess
 from app.services.file_downloads import FileDownload
 from app.services.file_errors import (
     FileAccessDeniedError,
@@ -25,6 +22,7 @@ from app.services.file_maintenance import (
     cleanup_deleted_files,
     cleanup_orphan_files,
 )
+from app.services.file_protocols import FileRepositoryProtocol
 from app.services.file_read_models import (
     AdminFileRead,
     PublicFileRead,
@@ -77,70 +75,6 @@ __all__ = (
     "verify_admin_file_preview_token",
     "verify_article_render_token",
 )
-
-
-@dataclass(frozen=True)
-class TemporaryFileAccess:
-    file: BlogFile
-    token: str
-    expires_at: datetime
-
-
-class FileRepositoryProtocol(Protocol):
-    async def list_files(
-        self,
-        *,
-        limit: int,
-        offset: int,
-    ) -> Sequence[tuple[BlogFile, int]]: ...
-
-    async def list_public_listed_files(
-        self,
-        *,
-        limit: int,
-        offset: int,
-    ) -> Sequence[BlogFile]: ...
-
-    async def count_public_listed_files(self) -> int: ...
-
-    async def get_file(self, file_id: int) -> BlogFile | None: ...
-
-    async def get_file_by_sha256(self, sha256: str) -> BlogFile | None: ...
-
-    async def list_storage_object_keys(self) -> Sequence[str]: ...
-
-    async def list_deleted_files_for_cleanup(
-        self,
-        *,
-        deleted_before: datetime,
-        limit: int,
-    ) -> Sequence[tuple[BlogFile, int]]: ...
-
-    async def delete_file_record(self, file_id: int) -> None: ...
-
-    async def create_file(
-        self,
-        *,
-        storage: str,
-        bucket: str | None,
-        object_key: str,
-        public_url: str | None,
-        original_name: str,
-        mime_type: str,
-        extension: str,
-        size_bytes: int,
-        sha256: str,
-        width: int | None,
-        height: int | None,
-        alt_text: str | None,
-        uploader_id: int | None,
-        visibility: str,
-        public_listed: bool,
-    ) -> BlogFile: ...
-
-    async def commit(self) -> None: ...
-
-    async def refresh(self, instance: object) -> None: ...
 
 
 class FileService:
