@@ -52,6 +52,26 @@ def test_site_nav_item_allows_site_path_and_mailto_but_rejects_script() -> None:
         SiteNavItemCreateRequest(title="坏入口", url="javascript:alert(1)")
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "/admin",
+        "/admin/users",
+        "/admin?next=/posts",
+        "/api/admin",
+        "/api/admin/content",
+        "/API/Admin/content",
+        "/%61dmin",
+        "/%2561dmin",
+        "/%2fadmin",
+        "/%5cadmin",
+    ],
+)
+def test_public_href_rejects_admin_site_paths(url: str) -> None:
+    with pytest.raises(ValueError):
+        validate_public_href(url)
+
+
 def test_shared_url_validator_rejects_control_characters() -> None:
     with pytest.raises(ValueError):
         validate_public_href("https://example.com/\nnext")
