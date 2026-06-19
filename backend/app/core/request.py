@@ -20,19 +20,23 @@ def client_ip(request: Request) -> str | None:
 
     real_ip = request.headers.get("x-real-ip")
     if real_ip:
-        return real_ip.strip() or connection_ip
+        real_ip = real_ip.strip()
+        if _is_valid_ip(real_ip):
+            return real_ip
 
     return connection_ip
 
 
 def _client_ip_from_forwarded_for(value: str) -> str | None:
-    forwarded_chain = [item.strip() for item in value.split(",") if item.strip()]
+    forwarded_chain = [
+        item.strip()
+        for item in value.split(",")
+        if item.strip() and _is_valid_ip(item.strip())
+    ]
     for forwarded_ip in reversed(forwarded_chain):
-        if not _is_valid_ip(forwarded_ip):
-            continue
         if not _is_trusted_proxy(forwarded_ip):
             return forwarded_ip
-    return forwarded_chain[0] if forwarded_chain else None
+    return None
 
 
 def _is_trusted_proxy(connection_ip: str) -> bool:

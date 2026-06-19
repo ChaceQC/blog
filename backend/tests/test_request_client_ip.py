@@ -82,6 +82,28 @@ def test_client_ip_falls_back_to_real_ip_then_connection_ip_for_trusted_proxy(
     assert client_ip(make_request([])) == "172.23.0.1"
 
 
+def test_client_ip_ignores_invalid_real_ip_for_trusted_proxy(monkeypatch) -> None:
+    monkeypatch.setattr(request_module, "get_settings", lambda: FakeSettings())
+    request = make_request([(b"x-real-ip", b"not-an-ip")])
+
+    assert client_ip(request) == "172.23.0.1"
+
+
+def test_client_ip_ignores_invalid_forwarded_for_values(monkeypatch) -> None:
+    monkeypatch.setattr(request_module, "get_settings", lambda: FakeSettings())
+    request = make_request(
+        [
+            (
+                b"x-forwarded-for",
+                b"unknown, not-an-ip, 172.23.0.1",
+            ),
+            (b"x-real-ip", b"198.51.100.7"),
+        ],
+    )
+
+    assert client_ip(request) == "198.51.100.7"
+
+
 def test_client_ip_allows_trusted_proxy_cidr(monkeypatch) -> None:
     monkeypatch.setattr(request_module, "get_settings", lambda: FakeCidrSettings())
     request = make_request([(b"x-forwarded-for", b"203.0.113.9")])
