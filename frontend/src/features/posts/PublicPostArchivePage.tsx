@@ -41,30 +41,31 @@ export function PublicPostArchivePage({ taxonomy }: PublicPostArchivePageProps) 
 
   const categoriesQuery = useQuery({
     queryKey: ['public-categories', 'archive'],
-    queryFn: () => listPublicCategories({ limit: 100 }),
+    queryFn: ({ signal }) => listPublicCategories({ limit: 100, signal }),
   })
   const tagsQuery = useQuery({
     queryKey: ['public-tags', 'archive'],
-    queryFn: () => listPublicTags({ limit: 100 }),
+    queryFn: ({ signal }) => listPublicTags({ limit: 100, signal }),
   })
   const categoryDetailQuery = useQuery({
     queryKey: ['public-category', categorySlug],
-    queryFn: () => getPublicCategory(categorySlug ?? ''),
+    queryFn: ({ signal }) => getPublicCategory(categorySlug ?? '', { signal }),
     enabled: taxonomy?.kind === 'category' && Boolean(categorySlug),
   })
   const tagDetailQuery = useQuery({
     queryKey: ['public-tag', tagSlug],
-    queryFn: () => getPublicTag(tagSlug ?? ''),
+    queryFn: ({ signal }) => getPublicTag(tagSlug ?? '', { signal }),
     enabled: taxonomy?.kind === 'tag' && Boolean(tagSlug),
   })
   const postsQuery = useQuery({
     queryKey: ['public-posts', 'archive', page, categorySlug, tagSlug],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       listPublicPosts({
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
         categorySlug,
         tagSlug,
+        signal,
       }),
   })
 

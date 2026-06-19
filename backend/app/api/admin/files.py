@@ -25,6 +25,7 @@ from app.api.dependencies import (
     SettingsDependency,
 )
 from app.api.encrypted_response import encrypted_response
+from app.api.file_cache import signed_file_cache_headers
 from app.core.encryption import EncryptionProfile
 from app.core.request import client_ip
 from app.core.urls import public_file_download_url
@@ -317,6 +318,7 @@ async def preview_file(
         download.path,
         media_type=download.media_type,
         filename=download.filename,
+        headers=signed_file_cache_headers(path=download.path, expires=expires),
     )
 
 

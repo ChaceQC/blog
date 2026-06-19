@@ -22,6 +22,7 @@ from app.services.files import (
     FileDownload,
     InvalidFileAccessTokenError,
     UploadFileCommand,
+    create_admin_file_preview_token,
     create_article_render_token,
 )
 
@@ -201,6 +202,26 @@ class FakeDownloadFileService:
             path=self.path,
             media_type="application/pdf",
             filename="private-note.pdf",
+        )
+
+    async def prepare_admin_preview(
+        self,
+        *,
+        file_id: int,
+        token: str,
+        expires: int,
+        secret_key: str,
+        upload_root,
+    ) -> FileDownload:
+        assert file_id == 1
+        assert token
+        assert expires > 0
+        assert secret_key
+        assert upload_root
+        return FileDownload(
+            path=self.path,
+            media_type="image/png",
+            filename="cover.png",
         )
 
 
@@ -601,6 +622,35 @@ def test_admin_file_thumbnail_returns_small_preview(tmp_path) -> None:
     assert response.content == _png_bytes()
 
 
+def test_admin_file_preview_uses_signed_cache_headers(tmp_path) -> None:
+    file_path = tmp_path / "cover.png"
+    file_path.write_bytes(_png_bytes())
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_file_service] = (
+        lambda: FakeDownloadFileService(file_path)
+    )
+    client = TestClient(app)
+    settings = get_settings()
+    access = create_admin_file_preview_token(
+        file_id=1,
+        expires_seconds=settings.file_temporary_url_expire_seconds,
+        secret_key=settings.secret_key,
+    )
+
+    try:
+        response = client.get(
+            "/api/admin/files/1/preview",
+            params={"expires": access.expires, "token": access.token},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.content == _png_bytes()
+    _assert_signed_cache_headers(response)
+
+
 def test_public_file_download_rejects_invalid_token() -> None:
     logs = FakeLogService()
     app.dependency_overrides[get_file_service] = lambda: FakeDeniedDownloadFileService()
@@ -650,6 +700,7 @@ def test_post_file_render_uses_article_image_endpoint(tmp_path) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
     assert response.content == _png_bytes()
+    _assert_signed_cache_headers(response)
     assert logs.items[0]["access_type"] == "post_image_render"
     assert logs.items[0]["path"] == "/api/public/posts/public-post/files/1/render"
 
@@ -685,8 +736,50 @@ def test_post_file_thumbnail_uses_article_image_endpoint(tmp_path) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/jpeg"
     assert response.content == _png_bytes()
+    _assert_signed_cache_headers(response)
     assert logs.items[0]["access_type"] == "post_image_thumbnail"
     assert logs.items[0]["path"] == "/api/public/posts/public-post/files/1/thumbnail"
+
+
+def test_article_render_token_is_stable_inside_cache_window(monkeypatch) -> None:
+    settings = get_settings()
+    first_now = datetime.fromtimestamp(1_800_000_010, UTC)
+    monkeypatch.setattr(
+        "app.services.file_tokens.utc_now",
+        lambda: first_now,
+    )
+    first = create_article_render_token(
+        post_slug="public-post",
+        file_id=1,
+        expires_seconds=settings.file_temporary_url_expire_seconds,
+        secret_key=settings.secret_key,
+    )
+
+    monkeypatch.setattr(
+        "app.services.file_tokens.utc_now",
+        lambda: datetime.fromtimestamp(1_800_000_040, UTC),
+    )
+    second = create_article_render_token(
+        post_slug="public-post",
+        file_id=1,
+        expires_seconds=settings.file_temporary_url_expire_seconds,
+        secret_key=settings.secret_key,
+    )
+
+    monkeypatch.setattr(
+        "app.services.file_tokens.utc_now",
+        lambda: datetime.fromtimestamp(1_800_000_170, UTC),
+    )
+    third = create_article_render_token(
+        post_slug="public-post",
+        file_id=1,
+        expires_seconds=settings.file_temporary_url_expire_seconds,
+        secret_key=settings.secret_key,
+    )
+
+    assert second == first
+    assert third.expires > first.expires
+    assert third.token != first.token
 
 
 def test_post_file_render_rejects_missing_image_token(tmp_path) -> None:
@@ -711,6 +804,13 @@ def test_post_file_render_rejects_missing_image_token(tmp_path) -> None:
     assert response.json()["detail"] == "invalid image access"
     assert logs.items[0]["access_type"] == "post_image_render"
     assert logs.items[0]["status_code"] == 403
+
+
+def _assert_signed_cache_headers(response) -> None:
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["etag"]
+    assert response.headers["cache-control"].startswith("private, max-age=")
+    assert response.headers["cache-control"].endswith(", immutable")
 
 
 def _file_item(status: str = "active", public_listed: bool = False) -> object:

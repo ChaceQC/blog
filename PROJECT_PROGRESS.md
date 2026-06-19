@@ -44,6 +44,8 @@
 - 全局 CSS 已按职责拆分：`frontend/src/index.css` 改为聚合导入，新增 `frontend/src/styles/base.css`、`public.css`、`prose.css`、`components.css`、`admin.css`、`forms.css` 和 `responsive.css`，保持原有规则顺序和视觉行为不变。
 - 修复宿主机 Nginx + Docker 后端场景下访问日志 IP 易显示为 Docker 网关的问题：`client_ip()` 在可信代理连接下会从 `X-Forwarded-For` 右侧开始跳过可信代理，取第一个非可信客户端 IP，避免简单取最左值被伪造头污染；部署示例将 `BLOG_TRUSTED_PROXY_HOSTS` 调整为 Docker bridge CIDR 示例，并补充 `172.23.0.1` 类网关地址的配置说明。
 - P1 上传静态暴露已修复：删除 Compose 内置 Nginx 的 `/uploads/` 静态 location、删除 nginx 服务对 `/data/blog/uploads/public` 的只读挂载，并移除 nginx 镜像内上传目录创建；README、部署 README 和计划书同步明确上传目录不能挂到 Nginx 静态目录，公开文件、文章图片和后台预览必须继续走后端签名接口。该修复不涉及数据库迁移。
+- 高优先级文章资源加载浪费已修复：公开文章、页面、归档和分类/标签查询会透传 React Query 的 `AbortSignal`，切换页面时会取消仍在等待的数据请求；`MathHtml` 会先在离线 `template` 中改写 `/api/...` 资源地址再插入 DOM，并在卸载或内容切换时移除 `img/iframe/video/audio` 的加载源，减少无效带宽消耗。
+- 文章资源临时 token 已支持浏览器缓存复用：文章正文图片、封面缩略图和后台预览图片的签名 URL 会在半个有效期时间窗内保持稳定，响应增加 `Cache-Control: private, max-age=..., immutable`、`ETag` 和 `X-Content-Type-Options: nosniff`；同一文件在时间窗内重复访问可命中浏览器缓存，过期后仍会自动换签名。
 
 ### 待修复清单
 
@@ -75,6 +77,7 @@
 - 访问日志去重窗口可通过 `BLOG_ACCESS_LOG_DEDUPE_SECONDS=60` 显式配置；不配置时默认 60 秒，生产 Redis 已启用时会复用 `BLOG_REDIS_URL`。
 - 本机 ignored 的 `deploy/env/backend.env` 仍可能保留旧连接串，`docker compose config` 只能证明配置展开语法有效；生产发布前必须按上面的真实 env 项显式更新。
 - P1 修复会影响服务器 Nginx/Compose 部署：如果服务器宿主机 Nginx 手动配置了 `/uploads/` 或等价 alias，需要同步删除；如果使用 Compose 内置 Nginx，需要重建 nginx 镜像并重新展开 Compose 配置。
+- 本次文章资源中断加载和签名缓存修复不涉及数据库字段、索引或约束变化，不需要新增 Alembic 迁移；也没有新增、删除或改名服务器环境变量。部署侧只需要发布新的后端代码和前端静态构建产物。
 
 ### 下一步
 
@@ -118,6 +121,11 @@
 - 后台文章/页面编辑状态抽取后已运行 `npm.cmd run lint`，通过。
 - 后台文章/页面编辑状态抽取后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - API 共享依赖状态迁移后已运行 `uv run ruff check app/api/state.py app/api/dependencies.py app/main.py tests/test_rate_limit.py tests/test_log_service.py tests/test_public_content_api.py tests/test_admin_encryption_api.py`，通过。
+- 文章资源加载修复后已运行 `uv run pytest tests/test_admin_files_api.py`，17 个测试通过；仍存在 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 状态常量的上游弃用警告。
+- 文章资源加载修复后已运行 `uv run ruff check app/api/file_cache.py app/api/public/files.py app/api/admin/files.py app/services/file_tokens.py tests/test_admin_files_api.py`，通过。
+- 文章资源加载修复后已运行 `uv run pytest`，181 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 7 个 FastAPI/Starlette 上游弃用警告。
+- 文章资源加载修复后已运行 `npm.cmd run lint`，通过。
+- 文章资源加载修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - API 共享依赖状态迁移后已运行 `uv run pytest tests/test_rate_limit.py tests/test_log_service.py tests/test_public_content_api.py tests/test_admin_encryption_api.py`，49 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run lint`，通过。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。

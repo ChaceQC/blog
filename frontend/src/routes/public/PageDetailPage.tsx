@@ -11,7 +11,7 @@ export function PageDetailPage() {
   const { slug = '' } = useParams()
   const { data: page, isError, isLoading } = useQuery({
     queryKey: ['public-page', slug],
-    queryFn: () => getPublicPage(slug),
+    queryFn: ({ signal }) => getPublicPage(slug, { signal }),
     enabled: slug.length > 0,
   })
   usePageSeo({

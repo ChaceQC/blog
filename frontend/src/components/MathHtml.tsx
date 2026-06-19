@@ -16,13 +16,18 @@ export function MathHtml({ className, html }: MathHtmlProps) {
     if (!container) {
       return
     }
-    container.innerHTML = html
 
-    container
+    const template = document.createElement('template')
+    template.innerHTML = html
+    const fragment = template.content
+
+    fragment
       .querySelectorAll<HTMLImageElement>('img[src^="/api/"], img[src^="api/"]')
       .forEach((node) => {
         node.src = apiResourceUrl(node.getAttribute('src') ?? '')
       })
+
+    container.replaceChildren(fragment.cloneNode(true))
 
     container.querySelectorAll<HTMLElement>('.math').forEach((node) => {
       const source = node.textContent ?? ''
@@ -40,6 +45,11 @@ export function MathHtml({ className, html }: MathHtmlProps) {
         node.textContent = source
       }
     })
+
+    return () => {
+      stopLoadingEmbeddedResources(container)
+      container.replaceChildren()
+    }
   }, [html])
 
   return (
@@ -48,6 +58,26 @@ export function MathHtml({ className, html }: MathHtmlProps) {
       ref={containerRef}
     />
   )
+}
+
+function stopLoadingEmbeddedResources(container: HTMLElement): void {
+  container
+    .querySelectorAll<HTMLImageElement | HTMLIFrameElement>('img, iframe')
+    .forEach((node) => {
+      node.removeAttribute('srcset')
+      node.removeAttribute('src')
+    })
+
+  container
+    .querySelectorAll<HTMLMediaElement>('video, audio')
+    .forEach((node) => {
+      node.pause()
+      node.removeAttribute('src')
+      node.querySelectorAll<HTMLSourceElement>('source').forEach((source) => {
+        source.removeAttribute('src')
+      })
+      node.load()
+    })
 }
 
 function apiResourceUrl(path: string): string {

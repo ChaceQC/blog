@@ -16,6 +16,7 @@ type ApiRequestOptions = {
   csrfToken?: string
   encryptRequest?: boolean
   encryptionScope?: EncryptionScope
+  signal?: AbortSignal
   skipAuthRefresh?: boolean
 }
 
@@ -67,10 +68,12 @@ export async function apiGetEncrypted<T>(
   const session = await getEncryptionSession(
     profile,
     options.encryptionScope ?? 'admin',
+    options.signal,
   )
   return requestJson<T>(path, {
     headers: jsonHeaders(options, { encryptionSessionId: session.id }),
     encryption: { profile, session },
+    signal: options.signal,
     skipAuthRefresh: options.skipAuthRefresh,
   })
 }
@@ -84,6 +87,7 @@ export async function apiPostEncrypted<TBody, TResponse>(
   const session = await getEncryptionSession(
     profile,
     options.encryptionScope ?? 'admin',
+    options.signal,
   )
   const requestBody = options.encryptRequest
     ? await encryptRequestPayload(body, profile, session)
@@ -96,6 +100,7 @@ export async function apiPostEncrypted<TBody, TResponse>(
     }),
     body: JSON.stringify(requestBody),
     encryption: { profile, session },
+    signal: options.signal,
     skipAuthRefresh: options.skipAuthRefresh,
   })
 }
@@ -109,6 +114,7 @@ export async function apiPostFormEncrypted<TResponse>(
   const session = await getEncryptionSession(
     profile,
     options.encryptionScope ?? 'admin',
+    options.signal,
   )
   return requestJson<TResponse>(path, {
     method: 'POST',
@@ -117,6 +123,7 @@ export async function apiPostFormEncrypted<TResponse>(
     }),
     body,
     encryption: { profile, session },
+    signal: options.signal,
     skipAuthRefresh: options.skipAuthRefresh,
   })
 }
@@ -130,6 +137,7 @@ export async function apiPatchEncrypted<TBody, TResponse>(
   const session = await getEncryptionSession(
     profile,
     options.encryptionScope ?? 'admin',
+    options.signal,
   )
   const requestBody = options.encryptRequest
     ? await encryptRequestPayload(body, profile, session)
@@ -142,6 +150,7 @@ export async function apiPatchEncrypted<TBody, TResponse>(
     }),
     body: JSON.stringify(requestBody),
     encryption: { profile, session },
+    signal: options.signal,
     skipAuthRefresh: options.skipAuthRefresh,
   })
 }
@@ -154,6 +163,7 @@ export async function apiDeleteEncrypted<TResponse>(
   const session = await getEncryptionSession(
     profile,
     options.encryptionScope ?? 'admin',
+    options.signal,
   )
   return requestJson<TResponse>(path, {
     method: 'DELETE',
@@ -161,6 +171,7 @@ export async function apiDeleteEncrypted<TResponse>(
       encryptionSessionId: session.id,
     }),
     encryption: { profile, session },
+    signal: options.signal,
     skipAuthRefresh: options.skipAuthRefresh,
   })
 }

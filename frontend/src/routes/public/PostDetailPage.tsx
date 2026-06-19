@@ -16,7 +16,7 @@ export function PostDetailPage() {
   const { slug = '' } = useParams()
   const { data: post, isError, isLoading } = useQuery({
     queryKey: ['public-post', slug],
-    queryFn: () => getPublicPost(slug),
+    queryFn: ({ signal }) => getPublicPost(slug, { signal }),
     enabled: slug.length > 0,
   })
   usePageSeo({

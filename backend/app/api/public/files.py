@@ -11,6 +11,7 @@ from app.api.dependencies import (
     SettingsDependency,
 )
 from app.api.encrypted_response import encrypted_response
+from app.api.file_cache import signed_file_cache_headers
 from app.api.public.common import (
     record_public_access,
     validate_public_content_session,
@@ -282,6 +283,7 @@ async def render_post_file(
         download.path,
         media_type=download.media_type,
         filename=download.filename,
+        headers=signed_file_cache_headers(path=download.path, expires=expires),
     )
 
 
@@ -370,6 +372,7 @@ async def thumbnail_post_file(
         thumbnail.path,
         media_type=thumbnail.media_type,
         filename=thumbnail.filename,
+        headers=signed_file_cache_headers(path=thumbnail.path, expires=expires),
     )
 
 

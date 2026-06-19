@@ -43,6 +43,7 @@ const decoder = new TextDecoder()
 export async function getEncryptionSession(
   profile: EncryptionProfile,
   scope: EncryptionScope = 'admin',
+  signal?: AbortSignal,
 ): Promise<EncryptionSession> {
   const now = Date.now()
   const activeSession = activeSessions.get(scope)
@@ -57,14 +58,17 @@ export async function getEncryptionSession(
 
   let pendingSession = pendingSessions.get(scope)
   if (!pendingSession) {
-    pendingSession = createEncryptionSession(scope).finally(() => {
-      pendingSessions.delete(scope)
-    })
+    pendingSession = createEncryptionSession(scope)
+      .then((session) => {
+        activeSessions.set(scope, session)
+        return session
+      })
+      .finally(() => {
+        pendingSessions.delete(scope)
+      })
     pendingSessions.set(scope, pendingSession)
   }
-  const session = await pendingSession
-  activeSessions.set(scope, session)
-  return session
+  return await abortable(pendingSession, signal)
 }
 
 export async function decryptEncryptedResponse<T>(
@@ -218,6 +222,28 @@ async function createEncryptionSession(
     profiles: sessionResponse.profiles,
     expiresAt: parseApiTime(sessionResponse.expires_at),
   }
+}
+
+function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return promise
+  }
+  if (signal.aborted) {
+    return Promise.reject(abortError())
+  }
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => {
+      reject(abortError())
+    }
+    signal.addEventListener('abort', abort, { once: true })
+    promise.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', abort)
+    })
+  })
+}
+
+function abortError(): DOMException {
+  return new DOMException('请求已取消', 'AbortError')
 }
 
 function base64urlDecode(value: string): ArrayBuffer {

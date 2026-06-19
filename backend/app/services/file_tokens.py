@@ -5,7 +5,7 @@ import re
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from binascii import Error as BinasciiError
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from app.core.auth import utc_now
 
@@ -58,7 +58,7 @@ def create_article_render_token(
     expires_seconds: int,
     secret_key: str,
 ) -> ArticleRenderToken:
-    expires = int((utc_now() + timedelta(seconds=expires_seconds)).timestamp())
+    expires = _stable_token_expires(expires_seconds)
     payload = {
         "exp": expires,
         "file_id": file_id,
@@ -74,7 +74,7 @@ def create_admin_file_preview_token(
     expires_seconds: int,
     secret_key: str,
 ) -> ArticleRenderToken:
-    expires = int((utc_now() + timedelta(seconds=expires_seconds)).timestamp())
+    expires = _stable_token_expires(expires_seconds)
     payload = {
         "exp": expires,
         "file_id": file_id,
@@ -182,6 +182,13 @@ def _create_token(
         token=f"{payload_part}.{_base64url_encode(signature)}",
         expires=expires,
     )
+
+
+def _stable_token_expires(expires_seconds: int) -> int:
+    now_ts = int(utc_now().timestamp())
+    window_seconds = max(1, expires_seconds // 2)
+    window_start = (now_ts // window_seconds) * window_seconds
+    return window_start + expires_seconds
 
 
 def _signed_payload_part(payload: dict[str, object]) -> str:
