@@ -76,10 +76,10 @@
 - 还原前台导航栏 Liquid Glass 试验提交：通过 `git revert` 回退 `fb17194`、`4761f22` 和 `968544a` 三个导航玻璃折射相关提交，删除 `LiquidGlassFilter` 和 `public-nav-glass.css`，公开导航恢复到此前毛玻璃效果。该还原不涉及数据库迁移、服务器环境变量或 Nginx 配置。
 - 继续全量审计当前代码：复查公开入口、后台认证/CSRF/加密会话、文件上传下载、日志写入、URL/跳转、SSRF 防御、部署暴露面、前端危险 sink、查询取消、测试覆盖和工程体量；本轮只写入审计结果，未修改业务代码。
 - P2 日志字段长度边界已修复：新增统一日志字段裁剪 helper，`LogService` 写入 access/audit/security 日志、`AuthService` 写入登录日志前都会按数据库列宽截断 `ip`、`path` 和 `user_agent`，避免超长 UA、异常代理头或长路径让日志记录本身触发数据库错误。该修复不涉及数据库字段变化，不需要新增 Alembic 迁移。
+- P2 后台加密 GET 前置会话校验已补齐：新增后台 `content-v1` / `sensitive-v1` 加密 session 预校验 dependency，内容、页面、文件列表/临时链接、友链、站点导航、设置和日志的加密 GET 会在业务列表、详情、计数或临时链接创建前先验证 `X-Encryption-Session`。该修复不涉及数据库迁移或服务器环境变量。
 
 ### 待修复清单
 
-- P2：后台加密 GET 仍缺少业务查询前置会话校验。后台列表/详情接口已要求登录权限，但多数 GET 仍是在查询数据库、组装对象后才由 `encrypted_response()` 校验 `X-Encryption-Session`；无效加密会话不会泄露数据，但已认证请求仍可触发不必要的列表、详情和总数查询。建议新增 admin scope 的前置加密 dependency，覆盖后台内容、文件、友链、站点、设置和日志 GET。
 - P3：后台加密会话入口只有速率限制，缺少单 IP 活跃 session 上限。`POST /api/admin/encryption/sessions` 是匿名 ECDH + DB 写入口，目前没有像 public scope 一样传入 `active_session_limit`；nginx 和应用速率限制能挡洪峰，但仍建议补齐 admin scope 活跃会话上限。若新增独立阈值环境变量，后续需要同步服务器 `backend.env`。
 - P3：WebP 上传未在上传阶段读取尺寸。上传校验会读取 PNG/GIF/JPEG 尺寸并限制单边和总像素，但 WebP 目前只校验 `RIFF/WEBP` 文件头，像素边界主要等到缩略图生成时由 Pillow 触发。建议在上传校验阶段用 Pillow 以 warning-as-error 方式读取 WebP 尺寸，提前拒绝超大像素图片。
 - P3：站点导航 `icon_url` 复用了 href validator。`SiteNavItemCreateRequest` / `SiteNavItemUpdateRequest` 对 `icon_url` 使用 `validate_public_href()`，当前测试也允许 `mailto:`；该字段进入前端 `<img src>`，应改用 `validate_public_image_src()`，只允许 `http/https/站内公开路径`。该修复需同步更新 `test_url_validation.py` 和前端预览边界。
@@ -90,7 +90,7 @@
 
 ### 进行中
 
-- 正在按待修复清单逐项推进；下一项处理后台加密 GET 的业务查询前置会话校验。
+- 正在按待修复清单逐项推进；下一项处理后台加密会话入口的单 IP 活跃 session 上限。
 
 ### 阻塞与风险
 
@@ -110,7 +110,7 @@
 
 - 在已部署服务器上按最新 `main` 发布后端和前端静态产物，并执行 Alembic 迁移到 `20260619_0009_friend_link_status_index.py`。
 - 服务器重新拉取最新 `main` 后，重新执行 `docker compose ... build nginx`，确认 Linux 镜像内 `npm ci` 不再缺少 `@emnapi/core` / `@emnapi/runtime`。
-- 处理 P2 后台加密 GET 前置会话校验；若修复 admin 加密会话活跃上限并新增配置，需要同步告知服务器环境变量变更。
+- 处理 P3 后台加密会话入口单 IP 活跃 session 上限；若新增配置，需要同步告知服务器环境变量变更。
 
 ### 验证
 
@@ -125,6 +125,8 @@
 - 本轮继续全量审计已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
 - 日志字段长度修复后已运行 `uv run ruff check app/services/log_sanitizers.py app/services/logs.py app/services/auth.py tests/test_log_service.py tests/test_auth_service.py`，通过。
 - 日志字段长度修复后已运行 `uv run pytest tests/test_log_service.py tests/test_auth_service.py`，20 个测试通过。
+- 后台加密 GET 前置校验修复后已运行 `uv run ruff check app/api/admin/dependencies.py app/api/admin/content_posts.py app/api/admin/content_pages.py app/api/admin/file_management.py app/api/admin/friend_links.py app/api/admin/link_groups.py app/api/admin/site_nav.py app/api/admin/settings.py app/api/admin/logs.py tests/test_admin_content_api.py tests/test_admin_files_api.py tests/test_admin_links_api.py tests/test_admin_settings_api.py tests/test_admin_logs_api.py`，通过。
+- 后台加密 GET 前置校验修复后已运行 `uv run pytest tests/test_admin_content_api.py tests/test_admin_files_api.py tests/test_admin_links_api.py tests/test_admin_settings_api.py tests/test_admin_logs_api.py tests/test_admin_encryption_api.py`，53 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - P1 上传静态暴露修复后已运行文本检查，确认 `deploy/nginx/templates/blog.conf.template`、`deploy/docker-compose.yml` 和 `deploy/nginx/Dockerfile` 不再包含 `/uploads/` 静态 location、上传目录挂载或 nginx 镜像内上传目录创建。
 - 已运行 `uv run ruff check .`，通过。
 - 已运行 `uv run pytest tests/test_public_content_api.py tests/test_admin_files_api.py tests/test_request_client_ip.py tests/test_log_service.py tests/test_admin_logs_api.py`，53 个测试通过；仍存在 FastAPI/Starlette TestClient 与 per-request cookies 的上游弃用警告。

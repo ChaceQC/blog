@@ -1,7 +1,10 @@
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from app.api.admin.audit import record_admin_audit
-from app.api.admin.dependencies import AdminCsrfDependency
+from app.api.admin.dependencies import (
+    AdminContentEncryptionDependency,
+    AdminCsrfDependency,
+)
 from app.api.admin.files_common import (
     AltTextForm,
     FileDeleterDependency,
@@ -42,6 +45,7 @@ router = APIRouter(tags=["admin-files"])
 @router.get("/files", response_model=EncryptedApiResponse)
 async def list_files(
     _: FileUploaderDependency,
+    __: AdminContentEncryptionDependency,
     request: Request,
     service: FileServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
@@ -153,6 +157,7 @@ async def delete_file(
 async def create_file_temporary_url(
     file_id: int,
     _: FileUploaderDependency,
+    __: AdminContentEncryptionDependency,
     request: Request,
     service: FileServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,

@@ -1,7 +1,11 @@
 from fastapi import APIRouter, Query, Request
 
 from app.api.admin.audit import record_admin_audit
-from app.api.admin.dependencies import AdminCsrfDependency, LinkGroupServiceDependency
+from app.api.admin.dependencies import (
+    AdminContentEncryptionDependency,
+    AdminCsrfDependency,
+    LinkGroupServiceDependency,
+)
 from app.api.admin.links_common import (
     FriendLinkReviewerDependency,
     SiteNavWriterDependency,
@@ -47,6 +51,7 @@ router = APIRouter(tags=["admin-link-groups"])
 @router.get("/friend-link-groups", response_model=EncryptedApiResponse)
 async def list_friend_link_groups(
     _: FriendLinkReviewerDependency,
+    __: AdminContentEncryptionDependency,
     request: Request,
     service: LinkGroupServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
@@ -161,6 +166,7 @@ async def update_friend_link_group(
 @router.get("/site-groups", response_model=EncryptedApiResponse)
 async def list_site_nav_groups(
     _: SiteNavWriterDependency,
+    __: AdminContentEncryptionDependency,
     request: Request,
     service: LinkGroupServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,

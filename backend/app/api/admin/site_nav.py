@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Query, Request
 
 from app.api.admin.audit import record_admin_audit
-from app.api.admin.dependencies import AdminCsrfDependency
+from app.api.admin.dependencies import (
+    AdminContentEncryptionDependency,
+    AdminCsrfDependency,
+)
 from app.api.admin.links_common import (
     SiteNavWriterDependency,
     decrypt_links_payload,
@@ -38,6 +41,7 @@ router = APIRouter(tags=["admin-site-nav"])
 @router.get("/site-items", response_model=EncryptedApiResponse)
 async def list_site_nav_items(
     _: SiteNavWriterDependency,
+    __: AdminContentEncryptionDependency,
     request: Request,
     service: LinkServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,

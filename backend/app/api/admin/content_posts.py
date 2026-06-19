@@ -11,7 +11,10 @@ from app.api.admin.content_common import (
     slug_conflict,
     validate_decrypted_payload,
 )
-from app.api.admin.dependencies import AdminCsrfDependency
+from app.api.admin.dependencies import (
+    AdminContentEncryptionDependency,
+    AdminCsrfDependency,
+)
 from app.api.dependencies import (
     ContentServiceDependency,
     EncryptionSessionManagerDependency,
@@ -44,6 +47,7 @@ router = APIRouter(tags=["admin-content"])
 @router.get("/posts", response_model=EncryptedApiResponse)
 async def list_posts(
     _: PostReaderDependency,
+    __: AdminContentEncryptionDependency,
     request: Request,
     service: ContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
@@ -150,6 +154,7 @@ async def preview_post(
 async def get_post(
     post_id: int,
     _: PostReaderDependency,
+    __: AdminContentEncryptionDependency,
     request: Request,
     service: ContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,

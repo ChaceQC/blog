@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Query, Request
 
 from app.api.admin.audit import record_admin_audit
-from app.api.admin.dependencies import AdminCsrfDependency
+from app.api.admin.dependencies import (
+    AdminContentEncryptionDependency,
+    AdminCsrfDependency,
+)
 from app.api.admin.links_common import (
     FriendLinkReviewerDependency,
     decrypt_links_payload,
@@ -39,6 +42,7 @@ router = APIRouter(tags=["admin-friend-links"])
 @router.get("/friend-links", response_model=EncryptedApiResponse)
 async def list_friend_links(
     _: FriendLinkReviewerDependency,
+    __: AdminContentEncryptionDependency,
     request: Request,
     service: LinkServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,

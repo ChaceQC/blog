@@ -90,6 +90,17 @@ class FakeEncryptionSessionManager:
         self.request_payload = payload
         return self.decrypted_payload
 
+    async def validate_session(
+        self,
+        *,
+        session_id: str,
+        scope: str,
+        profile: EncryptionProfile,
+    ) -> None:
+        assert session_id == "sensitive-session"
+        assert scope == "admin"
+        assert profile == EncryptionProfile.SENSITIVE
+
 
 class FakeLogService:
     def __init__(self) -> None:

@@ -9,7 +9,10 @@ from app.api.admin.content_common import (
     slug_conflict,
     validate_decrypted_payload,
 )
-from app.api.admin.dependencies import AdminCsrfDependency
+from app.api.admin.dependencies import (
+    AdminContentEncryptionDependency,
+    AdminCsrfDependency,
+)
 from app.api.dependencies import (
     ContentServiceDependency,
     EncryptionSessionManagerDependency,
@@ -37,6 +40,7 @@ router = APIRouter(tags=["admin-content"])
 @router.get("/pages", response_model=EncryptedApiResponse)
 async def list_pages(
     _: PageWriterDependency,
+    __: AdminContentEncryptionDependency,
     request: Request,
     service: ContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
@@ -105,6 +109,7 @@ async def create_page(
 async def get_page(
     page_id: int,
     _: PageWriterDependency,
+    __: AdminContentEncryptionDependency,
     request: Request,
     service: ContentServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,

@@ -104,6 +104,17 @@ class FakeEncryptionSessionManager:
             ciphertext="test-ciphertext",
         )
 
+    async def validate_session(
+        self,
+        *,
+        session_id: str,
+        scope: str,
+        profile: EncryptionProfile,
+    ) -> None:
+        assert session_id == "sensitive-session"
+        assert scope == "admin"
+        assert profile == EncryptionProfile.SENSITIVE
+
 
 def test_login_logs_require_admin_permission() -> None:
     client = TestClient(app)
@@ -126,6 +137,7 @@ def test_login_logs_require_admin_permission() -> None:
 
 def test_admin_logs_reject_oversized_offset() -> None:
     client = TestClient(app)
+    manager = FakeEncryptionSessionManager()
     app.dependency_overrides[get_current_admin_user] = lambda: AuthenticatedUser(
         id=1,
         username="admin",
@@ -133,9 +145,13 @@ def test_admin_logs_reject_oversized_offset() -> None:
         roles=["super_admin"],
         permissions=["*"],
     )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
 
     try:
-        response = client.get("/api/admin/login-logs?offset=10001")
+        response = client.get(
+            "/api/admin/login-logs?offset=10001",
+            headers={"X-Encryption-Session": "sensitive-session"},
+        )
     finally:
         app.dependency_overrides.clear()
 

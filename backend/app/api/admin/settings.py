@@ -6,6 +6,7 @@ from pydantic import BaseModel, ValidationError
 from app.api.admin.audit import record_admin_audit
 from app.api.admin.dependencies import (
     AdminCsrfDependency,
+    AdminSensitiveEncryptionDependency,
     require_admin_permission,
 )
 from app.api.dependencies import (
@@ -37,6 +38,7 @@ SettingWriterDependency = Annotated[
 @router.get("/settings", response_model=EncryptedApiResponse)
 async def list_settings(
     _: SettingWriterDependency,
+    __: AdminSensitiveEncryptionDependency,
     request: Request,
     service: SettingServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,

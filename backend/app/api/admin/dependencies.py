@@ -102,6 +102,40 @@ EncryptedCurrentAdminUserDependency = Annotated[
 ]
 
 
+async def validate_admin_content_encryption_session(
+    request: Request,
+    encryption_manager: EncryptionSessionManagerDependency,
+) -> None:
+    await validate_encryption_session(
+        request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+    )
+
+
+AdminContentEncryptionDependency = Annotated[
+    None,
+    Depends(validate_admin_content_encryption_session),
+]
+
+
+async def validate_admin_sensitive_encryption_session(
+    request: Request,
+    encryption_manager: EncryptionSessionManagerDependency,
+) -> None:
+    await validate_encryption_session(
+        request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.SENSITIVE,
+    )
+
+
+AdminSensitiveEncryptionDependency = Annotated[
+    None,
+    Depends(validate_admin_sensitive_encryption_session),
+]
+
+
 def verify_admin_csrf(request: Request) -> None:
     verify_csrf_tokens(
         header_token=request.headers.get("x-csrf-token"),

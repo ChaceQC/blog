@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request
 
 from app.api.admin.dependencies import (
+    AdminSensitiveEncryptionDependency,
     require_admin_permission,
 )
 from app.api.dependencies import (
@@ -36,6 +37,7 @@ AuditReaderDependency = Annotated[
 @router.get("/audit-logs", response_model=EncryptedApiResponse)
 async def list_audit_logs(
     _: AuditReaderDependency,
+    __: AdminSensitiveEncryptionDependency,
     request: Request,
     service: LogServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
@@ -57,6 +59,7 @@ async def list_audit_logs(
 @router.get("/access-logs", response_model=EncryptedApiResponse)
 async def list_access_logs(
     _: AuditReaderDependency,
+    __: AdminSensitiveEncryptionDependency,
     request: Request,
     service: LogServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
@@ -78,6 +81,7 @@ async def list_access_logs(
 @router.get("/login-logs", response_model=EncryptedApiResponse)
 async def list_login_logs(
     _: AuditReaderDependency,
+    __: AdminSensitiveEncryptionDependency,
     request: Request,
     service: LogServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
@@ -99,6 +103,7 @@ async def list_login_logs(
 @router.get("/security-events", response_model=EncryptedApiResponse)
 async def list_security_events(
     _: AuditReaderDependency,
+    __: AdminSensitiveEncryptionDependency,
     request: Request,
     service: LogServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,

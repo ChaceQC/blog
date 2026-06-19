@@ -81,6 +81,11 @@ class FakeContentService:
         )
 
 
+class FailIfListCalledContentService(FakeContentService):
+    async def list_admin_posts(self, *, limit: int, offset: int) -> list[object]:
+        raise AssertionError("post list service should not be called")
+
+
 class FakeEncryptionSessionManager:
     def __init__(self, decrypted_payload: dict[str, object] | None = None) -> None:
         self.decrypted_payload = decrypted_payload or {}
@@ -117,6 +122,17 @@ class FakeEncryptionSessionManager:
         assert profile == EncryptionProfile.CONTENT
         self.request_payload = payload
         return self.decrypted_payload
+
+    async def validate_session(
+        self,
+        *,
+        session_id: str,
+        scope: str,
+        profile: EncryptionProfile,
+    ) -> None:
+        assert session_id == "content-session"
+        assert scope == "admin"
+        assert profile == EncryptionProfile.CONTENT
 
 
 class FakeLogService:
@@ -163,7 +179,9 @@ def test_admin_posts_reject_missing_encryption_session() -> None:
         roles=["super_admin"],
         permissions=["*"],
     )
-    app.dependency_overrides[get_content_service] = lambda: FakeContentService()
+    app.dependency_overrides[get_content_service] = lambda: (
+        FailIfListCalledContentService()
+    )
     app.dependency_overrides[get_encryption_session_manager] = (
         lambda: FakeEncryptionSessionManager()
     )
