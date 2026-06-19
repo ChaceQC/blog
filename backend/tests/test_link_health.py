@@ -82,6 +82,12 @@ def test_check_healthy_friend_links_skips_empty_commit() -> None:
 
 
 def test_url_checker_rejects_loopback_target(monkeypatch) -> None:
+    requested_addresses: list[str] = []
+
+    def fake_request_status_once(*args, address: str, **kwargs) -> tuple[int, None]:
+        requested_addresses.append(address)
+        return 204, None
+
     monkeypatch.setattr(
         link_tasks.socket,
         "getaddrinfo",
@@ -95,16 +101,27 @@ def test_url_checker_rejects_loopback_target(monkeypatch) -> None:
             ),
         ],
     )
+    monkeypatch.setattr(
+        link_tasks,
+        "_request_status_once",
+        fake_request_status_once,
+    )
 
     assert link_tasks._request_status(
         "https://example.test",
         method="HEAD",
         timeout_seconds=1,
-        opener=_RaisingOpener(),
     ) is None
+    assert requested_addresses == []
 
 
 def test_url_checker_allows_public_target(monkeypatch) -> None:
+    requested_addresses: list[str] = []
+
+    def fake_request_status_once(*args, address: str, **kwargs) -> tuple[int, None]:
+        requested_addresses.append(address)
+        return 204, None
+
     monkeypatch.setattr(
         link_tasks.socket,
         "getaddrinfo",
@@ -118,13 +135,45 @@ def test_url_checker_allows_public_target(monkeypatch) -> None:
             ),
         ],
     )
+    monkeypatch.setattr(
+        link_tasks,
+        "_request_status_once",
+        fake_request_status_once,
+    )
 
     assert link_tasks._request_status(
         "https://example.test",
         method="HEAD",
         timeout_seconds=1,
-        opener=_FakeOpener(204),
     ) == 204
+    assert requested_addresses == ["93.184.216.34"]
+
+
+def test_url_checker_revalidates_redirect_target(monkeypatch) -> None:
+    def fake_getaddrinfo(host: str, *args, **kwargs):
+        address = "93.184.216.34" if host == "example.test" else "127.0.0.1"
+        return [
+            (
+                link_tasks.socket.AF_INET,
+                link_tasks.socket.SOCK_STREAM,
+                6,
+                "",
+                (address, 80),
+            ),
+        ]
+
+    monkeypatch.setattr(link_tasks.socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(
+        link_tasks,
+        "_request_status_once",
+        lambda *args, **kwargs: (302, "http://private.example.test/"),
+    )
+
+    assert link_tasks._request_status(
+        "http://example.test",
+        method="HEAD",
+        timeout_seconds=1,
+    ) is None
 
 
 def _link_item(link_id: int, url: str) -> object:
@@ -134,27 +183,3 @@ def _link_item(link_id: int, url: str) -> object:
         last_checked_at=None,
         last_status_code=None,
     )
-
-
-class _FakeResponse:
-    def __init__(self, status: int) -> None:
-        self.status = status
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        return None
-
-
-class _FakeOpener:
-    def __init__(self, status: int) -> None:
-        self.status = status
-
-    def open(self, *args: object, **kwargs: object) -> _FakeResponse:
-        return _FakeResponse(self.status)
-
-
-class _RaisingOpener:
-    def open(self, *args: object, **kwargs: object) -> _FakeResponse:
-        raise AssertionError("unsafe URL should not be opened")

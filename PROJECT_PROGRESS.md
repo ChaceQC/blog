@@ -78,6 +78,7 @@
 - 本轮再次按 CTF/红队思路进行只读审计，新增后台登录限流、认证时序、临时 token 长度、友链健康检查 DNS rebinding、前端加密协商取消链路、Markdown 外链资源和测试体量等待修复项；除更新本进度文件外未修改业务代码。
 - P2 后台登录限流与账号枚举时序问题已修复：登录入口新增 IP 级总限流，再保留 IP+用户名组合限流，避免随机用户名绕过；内存限流器增加 key 容量上限，降低 Redis 不可用回落内存时的一次性 key 写放大；认证服务对不存在用户使用固定 dummy Argon2 hash 校验，减少用户名存在性时序差异。该修复不涉及数据库字段、索引或服务器环境变量变化，不需要新增 Alembic 迁移。
 - P2 临时访问 token 和加密 session header 长度上限已补齐：公开下载 token、文章图片 token、后台预览 token 统一限制到 2048 字符以内，`X-Encryption-Session` 头与加密信封 `session_id` 一样限制到 128 字符以内，超长值会在进入 HMAC/base64/数据库比较前被拒绝。该修复不涉及数据库字段、索引或服务器环境变量变化，不需要新增 Alembic 迁移。
+- P3 友链健康检查 DNS rebinding 防御已补齐：健康检查先解析并校验目标地址，再固定连接到已校验 IP，同时保留原始 Host/SNI；重定向目标会重新解析和校验，避免“检查时公网、连接时内网”的 TOCTOU/重绑定绕过。该修复不涉及数据库字段、索引或服务器环境变量变化，不需要新增 Alembic 迁移。
 - P2 日志字段长度边界已修复：新增统一日志字段裁剪 helper，`LogService` 写入 access/audit/security 日志、`AuthService` 写入登录日志前都会按数据库列宽截断 `ip`、`path` 和 `user_agent`，避免超长 UA、异常代理头或长路径让日志记录本身触发数据库错误。该修复不涉及数据库字段变化，不需要新增 Alembic 迁移。
 - P2 后台加密 GET 前置会话校验已补齐：新增后台 `content-v1` / `sensitive-v1` 加密 session 预校验 dependency，内容、页面、文件列表/临时链接、友链、站点导航、设置和日志的加密 GET 会在业务列表、详情、计数或临时链接创建前先验证 `X-Encryption-Session`。该修复不涉及数据库迁移或服务器环境变量。
 - P3 后台加密会话单 IP 活跃上限已补齐：`/api/admin/encryption/sessions` 现在会向 `EncryptionSessionManager` 传入后台 scope 的活跃 session 上限，超过阈值返回 `429` 并写入 `security_events`；新增 `BLOG_ADMIN_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`，默认 `10`，已同步本地/部署 env 示例、README 和计划文档。该修复不涉及数据库迁移。
@@ -90,7 +91,6 @@
 
 ### 待修复清单
 
-- P3：友链健康检查的 SSRF 防御仍存在 DNS rebinding/TOCTOU 余量。`backend/app/tasks/links.py:128` 先解析并拒绝内网地址，但 `backend/app/tasks/links.py:109` 交给 `urlopen` 时会再次按域名建立连接；恶意域名可理论上在检查和连接之间切换解析结果。由于友链 URL 需管理员审核，风险较低；建议后续改为使用受控解析结果发起连接，或至少在连接后复核 peer IP，并对重定向目标继续沿用同样策略。
 - P3：前端加密会话协商的 pending promise 只按 scope 共享，首个请求的 `AbortSignal` 会影响同 scope 后续请求。`frontend/src/api/encryption.ts:38`、`frontend/src/api/encryption.ts:62`、`frontend/src/api/encryption.ts:64` 复用同一个 pending session；如果第一个页面切换导致协商 fetch abort，后续复用该 pending 的请求也会失败。建议让协商底层不绑定单个页面信号，或按调用方 signal 做独立等待，避免页面切换影响新页面数据加载。
 - P3：Markdown 正文图片仍允许外部 `http/https` 资源，绕过文章资源签名、缓存和取消加载策略。`backend/app/providers/markdown.py:43` 允许 `http/https/mailto` 协议，`img[src]` 没有单独限制到站内 `/api/public/posts/.../render`。这不是 XSS，但会让访客浏览文章时直接请求第三方图片，带来隐私、追踪和带宽不可控问题。建议按内容策略决定是否禁止外链图片，或至少提供管理员显式开关与渲染告警。
 - P4：`client_ip()` 在可信代理场景下对 `X-Real-IP` 缺少格式校验。`backend/app/core/request.py:21` 会直接返回 `X-Real-IP` 字符串；当前 Nginx 模板会覆盖为 `$remote_addr`，通常安全，但若未来换代理或手动配置透传，限流和日志 key 可能被非 IP 字符串污染。建议和 `X-Forwarded-For` 一样校验 IP 格式，不合法则回退连接 IP。
@@ -118,7 +118,7 @@
 
 ### 下一步
 
-- 下一轮优先补齐前端加密协商取消链路和友链健康检查 DNS rebinding 防御；若改动数据库字段、索引或约束，必须同步评估 Alembic 迁移。
+- 下一轮优先补齐前端加密协商取消链路；若改动数据库字段、索引或约束，必须同步评估 Alembic 迁移。
 - 修复完成后再按服务器发布流程重新构建后端和前端静态产物，并复核 `/api/health`、后台登录、公开文章资源缓存、日志 IP 和访问日志短时去重效果。
 
 ### 验证
@@ -131,6 +131,8 @@
 - P2 后台登录限流与时序修复后已运行 `uv run pytest tests/test_auth_service.py tests/test_rate_limit.py tests/test_admin_encryption_api.py tests/test_rate_limit_redis_integration.py`，25 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 1 个 FastAPI/Starlette TestClient 上游弃用警告。
 - P2 token/header 长度上限修复后已运行 `uv run ruff check app/api/encrypted_response.py app/api/public/files.py app/api/admin/files_common.py app/schemas/files.py tests/test_admin_files_api.py tests/test_admin_encryption_api.py`，通过。
 - P2 token/header 长度上限修复后已运行 `uv run pytest tests/test_admin_files_api.py tests/test_admin_encryption_api.py`，30 个测试通过；仍存在 5 个 FastAPI/Starlette 上游弃用警告。
+- P3 友链健康检查 DNS rebinding 修复后已运行 `uv run ruff check app/tasks/links.py tests/test_link_health.py`，通过。
+- P3 友链健康检查 DNS rebinding 修复后已运行 `uv run pytest tests/test_link_health.py`，5 个测试通过。
 - 本轮按 CTF/红队思路执行只读静态审计，覆盖公开入口、后台认证/会话、文件上传下载、URL/跳转、日志写入、部署暴露面、Markdown/前端危险 sink、配置漂移和工程体量；除写入 `PROJECT_PROGRESS.md` 外未修改业务代码。
 - 本轮未运行 `pip-audit` 等依赖扫描命令，避免再次触发本机杀软对审计工具缓存的误报；未启动本地前后端服务。
 - 本轮继续全量审计已运行 `rg` 静态扫描危险调用、路由写操作、SQLAlchemy 查询、前端 sink、事件监听、AbortSignal、文件体量和测试覆盖；未发现命令执行、用户输入拼接原生 SQL、静态上传目录重新暴露或 token/cookie 写入 localStorage/sessionStorage。
