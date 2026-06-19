@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from app.core.encryption import EncryptionProfile
 from app.schemas.encryption import (
+    ENCRYPTION_SESSION_ID_MAX_LENGTH,
     EncryptedApiRequest,
     EncryptedApiResponse,
     EncryptionSessionScope,
@@ -41,6 +42,11 @@ def require_encryption_session(request: Request) -> str:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="missing encryption session",
+        )
+    if not session_id or len(session_id) > ENCRYPTION_SESSION_ID_MAX_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid encryption session",
         )
     return session_id
 

@@ -8,6 +8,7 @@ from app.core.encryption import EncryptionProfile
 from app.core.request import client_ip
 from app.schemas.encryption import EncryptedApiResponse
 from app.schemas.files import (
+    FILE_ACCESS_TOKEN_MAX_LENGTH,
     AdminFileItem,
     AdminFileListResponse,
     AdminFileTemporaryUrlResponse,
@@ -22,7 +23,10 @@ UploadedFile = Annotated[UploadFile, File()]
 FileVisibilityForm = Annotated[FileVisibility, Form()]
 AltTextForm = Annotated[str | None, Form(max_length=255)]
 PublicListedForm = Annotated[bool, Form()]
-PreviewToken = Annotated[str | None, Query(min_length=16)]
+PreviewToken = Annotated[
+    str | None,
+    Query(min_length=16, max_length=FILE_ACCESS_TOKEN_MAX_LENGTH),
+]
 PreviewExpires = Annotated[int | None, Query(ge=1)]
 FileUploaderDependency = Annotated[
     AuthenticatedUser,

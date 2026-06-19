@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 FileVisibility = Literal["public", "private"]
+FILE_ACCESS_TOKEN_MAX_LENGTH = 2048
 
 
 class AdminFileItem(BaseModel):

@@ -20,6 +20,7 @@ from app.core.encryption import EncryptionProfile
 from app.core.urls import public_file_download_url
 from app.schemas.encryption import EncryptedApiResponse
 from app.schemas.files import (
+    FILE_ACCESS_TOKEN_MAX_LENGTH,
     AdminFileTemporaryUrlResponse,
     PublicFileItem,
     PublicFileListResponse,
@@ -34,8 +35,14 @@ from app.services.files import (
 )
 
 router = APIRouter(tags=["public-files"])
-TemporaryFileToken = Annotated[str, Query(min_length=16)]
-ArticleImageToken = Annotated[str | None, Query(min_length=16)]
+TemporaryFileToken = Annotated[
+    str,
+    Query(min_length=16, max_length=FILE_ACCESS_TOKEN_MAX_LENGTH),
+]
+ArticleImageToken = Annotated[
+    str | None,
+    Query(min_length=16, max_length=FILE_ACCESS_TOKEN_MAX_LENGTH),
+]
 ArticleImageExpires = Annotated[int | None, Query(ge=1)]
 PublicFileContentServiceDependency = ContentServiceDependency
 

@@ -263,6 +263,30 @@ def test_login_rejects_missing_encryption_session_header() -> None:
     assert response.json()["detail"] == "missing encryption session"
 
 
+def test_login_rejects_oversized_encryption_session_header() -> None:
+    client = TestClient(app)
+    app.dependency_overrides[get_auth_service] = lambda: RaisingAuthService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        EncryptionSessionManager(
+            repository=FakeEncryptionSessionRepository(),
+            settings=get_settings(),
+        )
+    )
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
+    try:
+        response = client.post(
+            "/api/admin/auth/login",
+            headers={"X-Encryption-Session": "s" * 129},
+            json={"username": "admin", "password": "correct-password"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid encryption session"
+
+
 def test_login_rejects_public_encryption_session_before_authentication() -> None:
     client_private_key = ec.generate_private_key(ec.SECP256R1())
     client = TestClient(app)

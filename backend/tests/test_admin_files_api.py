@@ -14,6 +14,7 @@ from app.core.config import get_settings
 from app.core.encryption import EncryptionProfile
 from app.main import app
 from app.schemas.encryption import EncryptedApiResponse
+from app.schemas.files import FILE_ACCESS_TOKEN_MAX_LENGTH
 from app.services.auth import AuthenticatedUser
 from app.services.content_read_models import PublicPostDetailRead
 from app.services.file_read_models import PublicFileRead
@@ -225,6 +226,11 @@ class FakeDownloadFileService:
 class FakeDeniedDownloadFileService:
     async def prepare_public_download(self, **_: object) -> FileDownload:
         raise InvalidFileAccessTokenError("invalid temporary file token")
+
+
+class FailIfDownloadCalledFileService:
+    async def prepare_public_download(self, **_: object) -> FileDownload:
+        raise AssertionError("download service should not be called")
 
 
 class FakeDeniedAdminDownloadFileService:
@@ -661,6 +667,23 @@ def test_public_file_download_rejects_invalid_token() -> None:
     assert response.status_code == 403
     assert response.json()["detail"] == "invalid file access"
     assert logs.items[0]["status_code"] == 403
+
+
+def test_public_file_download_rejects_oversized_token_before_service() -> None:
+    app.dependency_overrides[get_file_service] = (
+        lambda: FailIfDownloadCalledFileService()
+    )
+    client = TestClient(app)
+
+    try:
+        response = client.get(
+            "/api/public/files/1/download",
+            params={"token": "x" * (FILE_ACCESS_TOKEN_MAX_LENGTH + 1)},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
 
 
 def test_post_file_render_uses_article_image_endpoint(tmp_path) -> None:
