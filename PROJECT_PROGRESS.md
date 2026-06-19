@@ -73,7 +73,7 @@
 - 修复后台日志分页总页数显示：四类后台日志列表接口现在返回真实 `total`，前端日志页改为每页请求 10 条并使用真实总数计算“第 X / Y 页”；日志页即使只有一页也会显示分页条，且当日志清理导致当前页越界时会自动回到最后一页。该修复不涉及数据库迁移或服务器配置。
 - 优化后台文件上传选择控件：文件上传表单不再展示浏览器默认 `input[type=file]` 框，改为与后台表单系统一致的自定义选择区域，包含上传图标、选择/重新选择操作、文件名、大小和 MIME 摘要，并补充窄屏换行样式。该修复不涉及数据库迁移或服务器配置。
 - 修复移动端笔刷选区效果：`SelectionHighlight` 不再因 `(pointer: fine)` 只在桌面启用，移动端触摸选区会通过 `selectionchange`、`touchend/touchcancel` 和 `visualViewport` 滚动/缩放事件重新计算笔刷覆盖层；选区透明样式也改为组件启用时全端生效，同时保留输入框、文本域和隐藏元素的原生选区背景。该修复不涉及数据库迁移或服务器配置。
-- 重做前台导航栏 Liquid Glass 效果：参考开源 Liquid Glass 实现的尺寸感知 displacement map 思路，新增 `LiquidGlassFilter` 组件按导航实际宽高生成圆角胶囊位移图，导航拆为基础玻璃层、边缘折射层和中性高光层；去除两侧红/蓝焦散色块，并把大范围假阴影收敛为轻接触阴影和边缘暗线。该修复不涉及数据库迁移、服务器配置或前端依赖变更。
+- 还原前台导航栏 Liquid Glass 试验提交：通过 `git revert` 回退 `fb17194`、`4761f22` 和 `968544a` 三个导航玻璃折射相关提交，删除 `LiquidGlassFilter` 和 `public-nav-glass.css`，公开导航恢复到此前毛玻璃效果。该还原不涉及数据库迁移、服务器环境变量或 Nginx 配置。
 
 ### 待修复清单
 
@@ -81,7 +81,7 @@
 
 ### 进行中
 
-- 无。前台导航栏 Liquid Glass 效果已按最新反馈重做并通过提交前验证。
+- 无。前台导航栏已恢复到此前毛玻璃效果并通过提交前验证。
 
 ### 阻塞与风险
 
@@ -95,6 +95,7 @@
 - P1 修复会影响服务器 Nginx/Compose 部署：如果服务器宿主机 Nginx 手动配置了 `/uploads/` 或等价 alias，需要同步删除；如果使用 Compose 内置 Nginx，需要重建 nginx 镜像并重新展开 Compose 配置。
 - 本次文章资源中断加载和签名缓存修复不涉及数据库字段、索引或约束变化，不需要新增 Alembic 迁移；也没有新增、删除或改名服务器环境变量。部署侧只需要发布新的后端代码和前端静态构建产物。
 - 本机 Docker Desktop 当前未运行，无法在本地直接执行 `node:24-alpine` 容器内 `npm ci`；本次已按服务器报错补齐 Linux optional 依赖 lock 条目，并在 Windows 本地通过 `npm.cmd ci --ignore-scripts`、lint 和 build 验证。服务器重新拉取后仍需重跑 `docker compose ... build nginx` 确认。
+- 本次前台导航还原只影响前端静态资源，不涉及数据库字段、Alembic 迁移、后端环境变量或 Nginx 配置；服务器发布时重新构建并复制最新前端静态产物即可。
 
 ### 下一步
 
@@ -133,9 +134,9 @@
 - 后台文件上传选择控件视觉修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警，npm 仅提示可升级小版本。
 - 移动端笔刷选区效果修复后已运行 `npm.cmd run lint`，通过；npm 仅提示可升级小版本。
 - 移动端笔刷选区效果修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警，npm 仅提示可升级小版本。
-- 前台导航栏 Liquid Glass 效果重做后已运行 `npm.cmd run lint`，通过。
-- 前台导航栏 Liquid Glass 效果重做后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
-- 前台导航栏 Liquid Glass 效果重做后已临时启动前端 `15173`，通过 Playwright CLI + Microsoft Edge 截图检查桌面和 390px 移动端首页导航；截图保存在已忽略的 `output/playwright`，验证后已关闭临时前端服务并确认 `15173` 不再监听。
+- 前台导航栏 Liquid Glass 提交还原后已运行 `git diff --check` 和 `git diff --cached --check`，未发现空白或行尾问题。
+- 前台导航栏 Liquid Glass 提交还原后已运行 `npm.cmd run lint`，通过。
+- 前台导航栏 Liquid Glass 提交还原后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - Linux `npm ci` 锁文件缺口修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - 尝试使用 Docker 验证 `node:24-alpine` 时，本机 Docker Desktop 未运行，无法连接 `dockerDesktopLinuxEngine`；Linux 容器内 `npm ci` 需在服务器或 Docker 可用环境复核。
 - 继续全量审计新增修复后已运行 `uv run alembic upgrade head --sql`，可正常生成从空库到 `20260619_0007` 的 MySQL 迁移 SQL；本轮新增修复未产生新迁移文件。
