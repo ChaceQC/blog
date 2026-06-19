@@ -136,7 +136,7 @@ async def upload_file(
         after_json=_file_audit_payload(uploaded_file),
     )
     return await _files_response(
-        AdminFileItem.model_validate(service.admin_file_response(uploaded_file)),
+        AdminFileItem.model_validate(uploaded_file),
         request=request,
         encryption_manager=encryption_manager,
     )
@@ -170,7 +170,7 @@ async def delete_file(
         after_json=_file_audit_payload(file),
     )
     return await _files_response(
-        AdminFileItem.model_validate(service.admin_file_response(file)),
+        AdminFileItem.model_validate(file),
         request=request,
         encryption_manager=encryption_manager,
     )

@@ -71,9 +71,6 @@ class FakeFileService:
         assert file_id == 1
         return _file_item(status="deleted")
 
-    def admin_file_response(self, file: object) -> object:
-        return file
-
     async def create_temporary_access(
         self,
         *,

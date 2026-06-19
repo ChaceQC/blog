@@ -64,7 +64,6 @@ __all__ = (
     "FileService",
     "FileTooLargeError",
     "FileValidationError",
-    "FileWithUsage",
     "InvalidFileAccessTokenError",
     "InvalidFileTypeError",
     "InvalidFileVisibilityError",
@@ -79,15 +78,6 @@ __all__ = (
     "verify_admin_file_preview_token",
     "verify_article_render_token",
 )
-
-
-@dataclass(frozen=True)
-class FileWithUsage:
-    file: BlogFile
-    usage_count: int
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self.file, name)
 
 
 @dataclass(frozen=True)
@@ -191,9 +181,9 @@ class FileService:
         self.repository = repository
         self.storage = storage
 
-    async def list_files(self, *, limit: int, offset: int) -> list[FileWithUsage]:
+    async def list_files(self, *, limit: int, offset: int) -> list[AdminFileRead]:
         files = await self.repository.list_files(limit=limit, offset=offset)
-        return [FileWithUsage(file=file, usage_count=count) for file, count in files]
+        return [admin_file_read(file, usage_count=count) for file, count in files]
 
     async def list_admin_files(
         self,
@@ -201,11 +191,7 @@ class FileService:
         limit: int,
         offset: int,
     ) -> list[AdminFileRead]:
-        files = await self.list_files(limit=limit, offset=offset)
-        return [self.admin_file_response(file) for file in files]
-
-    def admin_file_response(self, file: FileWithUsage) -> AdminFileRead:
-        return admin_file_read(file.file, usage_count=file.usage_count)
+        return await self.list_files(limit=limit, offset=offset)
 
     async def list_public_files(
         self,
@@ -222,7 +208,7 @@ class FileService:
     async def count_public_files(self) -> int:
         return await self.repository.count_public_listed_files()
 
-    async def upload_file(self, command: UploadFileCommand) -> FileWithUsage:
+    async def upload_file(self, command: UploadFileCommand) -> AdminFileRead:
         validate_size(command.data, command.max_size_bytes)
         validate_visibility(command.visibility)
 
@@ -242,7 +228,7 @@ class FileService:
             expected_mime=expected_mime,
             extension=extension,
         ):
-            return FileWithUsage(file=existing_file, usage_count=0)
+            return admin_file_read(existing_file, usage_count=0)
 
         object_key = build_object_key(
             visibility=command.visibility,
@@ -278,7 +264,7 @@ class FileService:
         )
         await self.repository.commit()
         await self.repository.refresh(file)
-        return FileWithUsage(file=file, usage_count=0)
+        return admin_file_read(file, usage_count=0)
 
     async def cleanup_deleted_files(
         self,
@@ -389,7 +375,7 @@ class FileService:
             orphan_object_keys=tuple(orphan_object_keys),
         )
 
-    async def delete_file(self, file_id: int) -> FileWithUsage:
+    async def delete_file(self, file_id: int) -> AdminFileRead:
         file = await self.repository.get_file(file_id)
         if file is None:
             raise ManagedFileNotFoundError("file not found")
@@ -398,7 +384,7 @@ class FileService:
         file.deleted_at = utc_now()
         await self.repository.commit()
         await self.repository.refresh(file)
-        return FileWithUsage(file=file, usage_count=0)
+        return admin_file_read(file, usage_count=0)
 
     async def create_temporary_access(
         self,

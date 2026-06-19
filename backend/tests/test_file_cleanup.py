@@ -42,7 +42,13 @@ class FakeCleanupRepository:
 
     async def create_file(self, **payload: object) -> object:
         self.created_payload = payload
-        return SimpleNamespace(id=99, status="active", **payload)
+        return SimpleNamespace(
+            id=99,
+            status="active",
+            created_at=datetime(2026, 6, 19, tzinfo=UTC),
+            updated_at=datetime(2026, 6, 19, tzinfo=UTC),
+            **payload,
+        )
 
     async def refresh(self, instance: object) -> None:
         return None
@@ -254,9 +260,8 @@ def test_upload_rejects_image_with_too_many_pixels() -> None:
 
 
 def test_upload_reuses_existing_file_only_when_metadata_matches() -> None:
-    existing = SimpleNamespace(
-        id=7,
-        status="active",
+    existing = _uploaded_file_item(
+        file_id=7,
         visibility="public",
         public_listed=True,
         original_name="same.pdf",
@@ -283,15 +288,15 @@ def test_upload_reuses_existing_file_only_when_metadata_matches() -> None:
         ),
     )
 
-    assert result.file is existing
+    assert result.id == existing.id
+    assert result.usage_count == 0
     assert not hasattr(repository, "created_payload")
 
 
 def test_upload_creates_new_record_when_duplicate_visibility_differs() -> None:
     repository = FakeCleanupRepository([])
-    repository.existing_file = SimpleNamespace(
-        id=7,
-        status="active",
+    repository.existing_file = _uploaded_file_item(
+        file_id=7,
         visibility="private",
         public_listed=False,
         original_name="same.pdf",
@@ -316,7 +321,8 @@ def test_upload_creates_new_record_when_duplicate_visibility_differs() -> None:
         ),
     )
 
-    assert result.file.id == 99
+    assert result.id == 99
+    assert result.usage_count == 0
     assert repository.created_payload["visibility"] == "public"
     assert repository.created_payload["public_listed"] is True
 
@@ -340,3 +346,29 @@ def _file_item(file_id: int, object_key: str, sha256: str) -> object:
         status="deleted",
         deleted_at=datetime(2026, 6, 1, tzinfo=UTC) - timedelta(days=file_id),
     )
+
+
+def _uploaded_file_item(file_id: int, **overrides: object) -> object:
+    values = {
+        "id": file_id,
+        "storage": "local",
+        "bucket": None,
+        "object_key": "public/2026/06/same.pdf",
+        "public_url": None,
+        "original_name": "same.pdf",
+        "mime_type": "application/pdf",
+        "extension": "pdf",
+        "size_bytes": 9,
+        "sha256": "e" * 64,
+        "width": None,
+        "height": None,
+        "alt_text": None,
+        "uploader_id": 1,
+        "visibility": "public",
+        "public_listed": True,
+        "status": "active",
+        "created_at": datetime(2026, 6, 19, tzinfo=UTC),
+        "updated_at": datetime(2026, 6, 19, tzinfo=UTC),
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
