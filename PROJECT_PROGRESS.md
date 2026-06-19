@@ -69,6 +69,7 @@
 - P4 `FileService` 剩余体量已继续收敛：新增 `file_access.py` 承载临时文件访问 DTO，新增 `file_protocols.py` 承载文件 Repository 协议；`files.py` 降到 352 行，旧的 `app.services.files` 具名导入保持兼容。该修复不涉及数据库迁移或服务器配置。
 - P4 前台文章归档页已按展示职责拆分：新增 `TaxonomyFilters.tsx` 承载分类/标签筛选与更多弹窗，新增 `archiveHelpers.ts` 承载归档标题、SEO path 和筛选文案 helper；`PublicPostArchivePage.tsx` 降到 153 行，只保留数据查询、SEO 和页面编排。该修复不涉及数据库迁移或服务器配置。
 - P4 后台文件路由已按访问职责拆分：`backend/app/api/admin/files.py` 缩减为聚合器，新增 `files_common.py` 承载权限/表单/响应/下载日志 helper，新增 `file_management.py` 承载列表、上传、删除和临时 URL，新增 `file_access.py` 承载后台下载、预览和缩略图；原 `/api/admin/files*` URL、权限和响应契约保持不变。该修复不涉及数据库迁移或服务器配置。
+- 修复生产 Linux 镜像 `npm ci` 锁文件缺口：`frontend/package-lock.json` 补齐 `@napi-rs/wasm-runtime` 在 Linux/optional 依赖解析时需要的顶层 `@emnapi/core@1.11.1` 和 `@emnapi/runtime@1.11.1` 条目；同时在 `AGENT.md` 明确后续前端依赖变更必须考虑 Linux 镜像内 `npm ci`，避免 Windows 本地通过但 Docker 构建失败。
 
 ### 待修复清单
 
@@ -89,10 +90,12 @@
 - 本机 ignored 的 `deploy/env/backend.env` 仍可能保留旧连接串，`docker compose config` 只能证明配置展开语法有效；生产发布前必须按上面的真实 env 项显式更新。
 - P1 修复会影响服务器 Nginx/Compose 部署：如果服务器宿主机 Nginx 手动配置了 `/uploads/` 或等价 alias，需要同步删除；如果使用 Compose 内置 Nginx，需要重建 nginx 镜像并重新展开 Compose 配置。
 - 本次文章资源中断加载和签名缓存修复不涉及数据库字段、索引或约束变化，不需要新增 Alembic 迁移；也没有新增、删除或改名服务器环境变量。部署侧只需要发布新的后端代码和前端静态构建产物。
+- 本机 Docker Desktop 当前未运行，无法在本地直接执行 `node:24-alpine` 容器内 `npm ci`；本次已按服务器报错补齐 Linux optional 依赖 lock 条目，并在 Windows 本地通过 `npm.cmd ci --ignore-scripts`、lint 和 build 验证。服务器重新拉取后仍需重跑 `docker compose ... build nginx` 确认。
 
 ### 下一步
 
 - 在已部署服务器上按最新 `main` 发布后端和前端静态产物，并执行 Alembic 迁移到 `20260619_0009_friend_link_status_index.py`。
+- 服务器重新拉取最新 `main` 后，重新执行 `docker compose ... build nginx`，确认 Linux 镜像内 `npm ci` 不再缺少 `@emnapi/core` / `@emnapi/runtime`。
 
 ### 验证
 
@@ -113,6 +116,10 @@
 - 继续全量审计新增修复后已运行 `npm.cmd run lint`，通过。
 - 继续全量审计新增部署脚本后已使用 Git for Windows Bash 运行 `bash -n deploy/scripts/backup_mysql.sh deploy/scripts/restore_mysql.sh deploy/scripts/upgrade_backend_db.sh`，通过；PowerShell 中直接调用 `bash` 会落到当前不可用的 WSL，已改用 `C:\Program Files\Git\bin\bash.exe` 验证。
 - 继续全量审计新增修复后已运行 `uv run pytest`，150 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 7 个 FastAPI/Starlette 上游弃用警告。
+- Linux `npm ci` 锁文件缺口修复后已运行 `npm.cmd ci --ignore-scripts`，通过并提示 0 个漏洞。
+- Linux `npm ci` 锁文件缺口修复后已运行 `npm.cmd run lint`，通过。
+- Linux `npm ci` 锁文件缺口修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
+- 尝试使用 Docker 验证 `node:24-alpine` 时，本机 Docker Desktop 未运行，无法连接 `dockerDesktopLinuxEngine`；Linux 容器内 `npm ci` 需在服务器或 Docker 可用环境复核。
 - 继续全量审计新增修复后已运行 `uv run alembic upgrade head --sql`，可正常生成从空库到 `20260619_0007` 的 MySQL 迁移 SQL；本轮新增修复未产生新迁移文件。
 - 继续全量审计新增修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - 继续全量审计新增修复后已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
