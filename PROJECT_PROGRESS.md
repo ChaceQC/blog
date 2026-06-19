@@ -46,11 +46,24 @@
 
 ### 待修复清单
 
-- 无。
+- P1：Nginx 模板仍静态暴露 `/uploads/`，可能绕过后端文件访问控制。`deploy/nginx/templates/blog.conf.template` 中仍保留 `location /uploads/ { alias /data/blog/uploads/public/; ... }`，`deploy/docker-compose.yml` 也把 `/data/blog/uploads/public` 只读挂进 nginx；而当前文件访问设计已经改为后端签名下载、文章图片签名渲染和私有文件后台鉴权下载。CTF 视角下，如果攻击者从文章 HTML、日志、备份、历史数据或其他侧信道拿到 `public/YYYY/MM/<sha256prefix>.<ext>` 对象 key，可直接请求静态文件，绕过后端 token、`public_listed`、文件状态校验、访问日志和短时去重。建议删除仓库 nginx 模板中的 `/uploads/` location 和 nginx 服务上传目录挂载；宿主机 Nginx 部署也要同步确认没有等价 `/uploads/` alias。该修复属于部署配置变化，不涉及数据库迁移。
+- P2：RSS/sitemap 的 ETag 仍在查库和渲染 XML 后才判断 `304`。`backend/app/api/public/feeds.py` 中 `/rss.xml` 会先取最多 1000 篇文章和站点资料再计算 ETag，`/sitemap.xml` 会先查文章、分类、标签并渲染 XML 后才对比 `If-None-Match`。当前已减少响应体和命中 304 时的访问日志，但没有减少匿名请求造成的数据库和 CPU 成本。建议引入应用内/Redis 缓存，或用内容更新时间、文章/分类/标签版本号生成轻量 ETag/Last-Modified 并在重查询前短路。
+- P2：公开站点跳转是匿名 GET 写库放大点。`backend/app/api/public/links.py` 的 `/site-items/{item_id}/visit` 每次命中都会调用 `record_public_site_nav_click`，`backend/app/repositories/links.py` 会执行 `click_count = click_count + 1`，随后还写访问日志。URL 来自管理员配置/审核，不是匿名 open redirect；但匿名用户可刷点击计数和访问日志，污染统计并放大数据库写压力。建议用 Redis 按 `IP + item_id` 短时去重点击，或改为异步聚合/采样写入。
+- P2：日志表缺少保留和清理任务，长期有数据库增长风险。`access_logs`、`audit_logs`、`login_logs`、`security_events` 目前有 list/insert 路径，但 `backend/app/repositories/logs.py` 没有 delete/retention，`deploy/systemd` 也只有加密会话和文件清理 timer。访问日志虽已短时去重，但错误请求、登录失败、限流安全事件、公开站点跳转和后台审计仍会持续增长。建议新增按天数/条数保留的 CLI 和 systemd timer，必要时先导出归档再删除。
+- P2：公开友链申请只按 IP 限流，没有 URL/域名维度的去重或待审上限。`backend/app/api/public/links.py` 的申请入口会创建 `pending` 记录，`friend_links.url` 当前没有唯一约束；攻击者可在限流窗口外反复提交同一 URL 或同域 URL，堆积待审核数据和后台审计负担。建议增加规范化 URL/域名维度的短期去重、待审数量上限，或对重复 URL 建唯一约束；如果改数据库约束，需要同步 Alembic 迁移并先评估历史重复数据。
+- P3：访问日志和审计日志的 detail/after payload 仍不够最小化。公开日志仍记录列表 limit/offset/count/total、文章/分类/标签 slug、文件名、media_type、友链申请 name/url、站点跳转 click_count/open_target；后台审计仍记录友链 URL、站点 URL/icon/tags、内容 title/slug/status、文件 original_name/mime/visibility/status 等实体摘要。日志只在后台可读，但一旦日志泄露或被误导出，会暴露内容结构、URL、文件名和管理操作摘要。建议公开访问日志只保留 type/status/entity_id/path/IP/UA/时间，audit 只保留 changed_fields、状态类摘要或哈希，避免记录正文、URL、文件名等可复原业务信息。
+- P3：后台 `/api/admin/auth/me` 仍未在依赖查询前校验加密会话有效性。`backend/app/api/admin/auth.py` 先解析当前用户/JWT 并触发认证查询，函数内只调用 `require_encryption_session()` 检查 header 是否存在，真正 session scope/profile 有效性在 `encrypted_response()` 时才校验。无有效 session 不会泄露数据，但拒绝太晚，已登录请求可在无效加密会话下白白触发认证和权限查询。建议像 public 加密 GET 一样增加前置 `validate_encryption_session(profile=SENSITIVE, scope=admin)` dependency，并确保顺序早于业务查询。
+- P3：logout 仍兼容请求体中的 `refresh_token`，刷新接口已收敛为只读 HttpOnly Cookie。`backend/app/api/admin/auth.py` 的 logout 会读取 `payload.refresh_token` 或 Cookie，`backend/app/schemas/auth.py` 仍保留 `LogoutRequest.refresh_token`；前端实际发送空 body。该路径不是直接漏洞，CSRF 仍会校验，但与“刷新令牌不进入 JS、请求体、代理日志”的原则不一致。建议 logout 也只读取 HttpOnly Cookie，删除 body token 兼容面。
+- P3：公开 href validator 允许任意站内路径，管理员配置可把公开入口指向后台或 API 路径。`backend/app/core/url_validation.py` 在 `allow_site_path=True` 时接受任意 `/...`，用于站点导航和社交链接。由于 URL 需要管理员配置/审核，风险较低；但公开页面可出现 `/api/admin/...`、`/admin/...` 等不适合访客点击的同站入口，造成边界混淆或误操作诱导。建议区分“公开 href”和“内部功能入口”，对 `/api/admin`、`/admin` 等敏感前缀做 denylist 或显式 allowlist。
+- P3：配置/计划文档存在访问日志策略漂移。`PROJECT_PLAN.md` 仍提到高频成功访问可通过 `BLOG_ACCESS_LOG_SKIP_TYPES` 跳过写库，`backend/app/core/config.py` 也保留未使用的 `access_log_skip_types` 字段；当前真实策略已改为 `BLOG_ACCESS_LOG_DEDUPE_SECONDS` 短时去重。风险是运维误以为 skip types 生效，实际配置不会改变行为。建议删除残留配置字段并同步计划文档。
+- P4：仍有多个源码文件超过项目单文件体量建议，后续维护和安全回归成本偏高。当前统计中 `frontend/src/styles/public.css` 约 1010 行，`forms.css` 约 570 行，`backend/app/services/files.py` 约 568 行，`backend/app/services/content.py` 约 513 行，`frontend/src/styles/admin.css` 约 499 行，`backend/app/api/admin/content.py` 约 477 行，`backend/app/repositories/content.py`、`backend/app/services/links.py`、`backend/app/services/logs.py` 等也超过 400 行或接近 400 行。建议继续按职责拆分 CSS 分层、内容用例、日志保留/查询、文件下载/预览和内容 repository 查询。
+- P4：前端缺少自动化组件/单元测试。`frontend/package.json` 只有 `dev/build/lint/preview`，未配置 test，仓库内也未发现 Vitest/Testing Library 用例。前端加密 client、刷新会话、分页 hook、日志页、上传页、URL safePreviewHref 和 MathHtml 都主要依赖 lint/build/人工联调，后续重构容易漏掉行为回归。建议引入 Vitest + React Testing Library，优先覆盖加密 API client、auth refresh、分页 hook、URL 白名单、日志分页和文件上传状态。
+- P4：后台日志页前端固定拉每类前 50 条再本地分页，不是真分页。`frontend/src/features/logs/api.ts` 对每类日志固定请求 `?limit=50`，`frontend/src/routes/admin/AdminLogsPage.tsx` 再用本地 `usePagedItems` 分页；后端已经支持 `limit/offset`。日志稍多时后台只能看到最新 50 条，影响排障和审计追溯。建议把 active tab、page、limit 接入后端分页，并显示总量或“已加载范围”。
+- P4：`FileWithUsage.__getattr__` 动态代理让服务层返回值处于“半 ORM、半 DTO”状态。`backend/app/services/files.py` 中 `FileWithUsage` 包住 `BlogFile` 并用 `__getattr__` 透传，方便兼容 Pydantic，但弱化 read model 边界和类型可读性。建议改成显式 read model 或在 repository/service 层直接构造 `AdminFileRead`，减少隐式属性代理。
 
 ### 进行中
 
-- 无。
+- 本轮全量 CTF 式只读审计已完成，待按上面的待修复清单逐项处理。
 
 ### 阻塞与风险
 
@@ -64,10 +77,12 @@
 
 ### 下一步
 
-- 推送日志 IP 修复到 `dev`，验证后快进合并到 `main`，并提示服务器同步 `BLOG_TRUSTED_PROXY_HOSTS` 后重启后端容器。
+- 优先修复 P1 `/uploads/` 静态暴露，再处理 P2 匿名高成本/写放大和日志保留问题；涉及数据库唯一约束、日志保留索引或字段变更时同步补充 Alembic 迁移。
 
 ### 验证
 
+- 本轮按 CTF/红队思路执行只读静态审计，覆盖公开入口、后台认证/会话、文件上传下载、URL/跳转、日志写入、部署暴露面、Markdown/前端危险 sink、配置漂移和工程体量；除写入 `PROJECT_PROGRESS.md` 外未修改业务代码。
+- 本轮未运行 `pip-audit` 等依赖扫描命令，避免再次触发本机杀软对审计工具缓存的误报；未启动本地前后端服务。
 - 已运行 `uv run ruff check .`，通过。
 - 已运行 `uv run pytest tests/test_public_content_api.py tests/test_admin_files_api.py tests/test_request_client_ip.py tests/test_log_service.py tests/test_admin_logs_api.py`，53 个测试通过；仍存在 FastAPI/Starlette TestClient 与 per-request cookies 的上游弃用警告。
 - 已运行 `uv run pytest`，141 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 4 个 FastAPI/Starlette 上游弃用警告。
