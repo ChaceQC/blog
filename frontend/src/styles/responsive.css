@@ -78,6 +78,20 @@
     width: auto;
   }
 
+  .file-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .file-picker__action {
+    width: 100%;
+  }
+
+  .file-picker__summary strong,
+  .file-picker__summary small {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   .admin-panel--list,
   .admin-panel--preview {
     position: static;

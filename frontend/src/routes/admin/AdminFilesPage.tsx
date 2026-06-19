@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { LockKeyhole, Search, UploadCloud } from 'lucide-react'
+import { FileUp, LockKeyhole, Search, UploadCloud } from 'lucide-react'
 import { useMemo, useState, type ChangeEvent } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
@@ -232,11 +232,28 @@ export function AdminFilesPage() {
           <form className="content-form">
             <label>
               文件
-              <input
-                accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
-                onChange={(event) => handleFileChange(event, setUploadFile)}
-                type="file"
-              />
+              <span className="file-picker">
+                <input
+                  accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
+                  className="file-picker__input"
+                  onChange={(event) => handleFileChange(event, setUploadFile)}
+                  type="file"
+                />
+                <span className="file-picker__action" aria-hidden="true">
+                  <FileUp size={17} strokeWidth={1.8} />
+                  {uploadFile ? '重新选择' : '选择文件'}
+                </span>
+                <span className="file-picker__summary">
+                  <strong>{uploadFile?.name ?? '尚未选择文件'}</strong>
+                  <small>
+                    {uploadFile
+                      ? `${formatFileSize(uploadFile.size)} · ${
+                          uploadFile.type || '未知类型'
+                        }`
+                      : 'JPEG、PNG、GIF、WebP 或 PDF，最大 20MB'}
+                  </small>
+                </span>
+              </span>
             </label>
             <div className="form-grid form-grid--two">
               <label>
@@ -314,4 +331,14 @@ function handleFileChange(
   setUploadFile: (file: File | null) => void,
 ) {
   setUploadFile(event.target.files?.[0] ?? null)
+}
+
+function formatFileSize(sizeBytes: number): string {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`
+  }
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`
+  }
+  return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`
 }
