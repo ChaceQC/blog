@@ -15,7 +15,6 @@ services:
     volumes:
       - certbot-www:/var/www/certbot
       - ./certs/letsencrypt:/etc/letsencrypt:ro
-      - /data/blog/uploads/public:/data/blog/uploads/public:ro
     networks:
       - public
       - private

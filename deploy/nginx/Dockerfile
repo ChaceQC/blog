@@ -14,4 +14,4 @@ COPY deploy/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY deploy/nginx/templates /etc/nginx/templates
 COPY --from=frontend-build /workspace/frontend/dist /usr/share/nginx/html
 
-RUN mkdir -p /data/blog/uploads/public /var/www/certbot
+RUN mkdir -p /var/www/certbot

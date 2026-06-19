@@ -43,10 +43,10 @@
 - 前后端类型手写镜像已补充契约测试：新增 `backend/tests/test_frontend_contract.py`，按字段名、可空性、数组和对象形状校验后端 Pydantic 响应 schema 与前端 `features/*/types.ts` 的主要响应类型，降低后续手写类型漂移风险。
 - 全局 CSS 已按职责拆分：`frontend/src/index.css` 改为聚合导入，新增 `frontend/src/styles/base.css`、`public.css`、`prose.css`、`components.css`、`admin.css`、`forms.css` 和 `responsive.css`，保持原有规则顺序和视觉行为不变。
 - 修复宿主机 Nginx + Docker 后端场景下访问日志 IP 易显示为 Docker 网关的问题：`client_ip()` 在可信代理连接下会从 `X-Forwarded-For` 右侧开始跳过可信代理，取第一个非可信客户端 IP，避免简单取最左值被伪造头污染；部署示例将 `BLOG_TRUSTED_PROXY_HOSTS` 调整为 Docker bridge CIDR 示例，并补充 `172.23.0.1` 类网关地址的配置说明。
+- P1 上传静态暴露已修复：删除 Compose 内置 Nginx 的 `/uploads/` 静态 location、删除 nginx 服务对 `/data/blog/uploads/public` 的只读挂载，并移除 nginx 镜像内上传目录创建；README、部署 README 和计划书同步明确上传目录不能挂到 Nginx 静态目录，公开文件、文章图片和后台预览必须继续走后端签名接口。该修复不涉及数据库迁移。
 
 ### 待修复清单
 
-- P1：Nginx 模板仍静态暴露 `/uploads/`，可能绕过后端文件访问控制。`deploy/nginx/templates/blog.conf.template` 中仍保留 `location /uploads/ { alias /data/blog/uploads/public/; ... }`，`deploy/docker-compose.yml` 也把 `/data/blog/uploads/public` 只读挂进 nginx；而当前文件访问设计已经改为后端签名下载、文章图片签名渲染和私有文件后台鉴权下载。CTF 视角下，如果攻击者从文章 HTML、日志、备份、历史数据或其他侧信道拿到 `public/YYYY/MM/<sha256prefix>.<ext>` 对象 key，可直接请求静态文件，绕过后端 token、`public_listed`、文件状态校验、访问日志和短时去重。建议删除仓库 nginx 模板中的 `/uploads/` location 和 nginx 服务上传目录挂载；宿主机 Nginx 部署也要同步确认没有等价 `/uploads/` alias。该修复属于部署配置变化，不涉及数据库迁移。
 - P2：RSS/sitemap 的 ETag 仍在查库和渲染 XML 后才判断 `304`。`backend/app/api/public/feeds.py` 中 `/rss.xml` 会先取最多 1000 篇文章和站点资料再计算 ETag，`/sitemap.xml` 会先查文章、分类、标签并渲染 XML 后才对比 `If-None-Match`。当前已减少响应体和命中 304 时的访问日志，但没有减少匿名请求造成的数据库和 CPU 成本。建议引入应用内/Redis 缓存，或用内容更新时间、文章/分类/标签版本号生成轻量 ETag/Last-Modified 并在重查询前短路。
 - P2：公开站点跳转是匿名 GET 写库放大点。`backend/app/api/public/links.py` 的 `/site-items/{item_id}/visit` 每次命中都会调用 `record_public_site_nav_click`，`backend/app/repositories/links.py` 会执行 `click_count = click_count + 1`，随后还写访问日志。URL 来自管理员配置/审核，不是匿名 open redirect；但匿名用户可刷点击计数和访问日志，污染统计并放大数据库写压力。建议用 Redis 按 `IP + item_id` 短时去重点击，或改为异步聚合/采样写入。
 - P2：日志表缺少保留和清理任务，长期有数据库增长风险。`access_logs`、`audit_logs`、`login_logs`、`security_events` 目前有 list/insert 路径，但 `backend/app/repositories/logs.py` 没有 delete/retention，`deploy/systemd` 也只有加密会话和文件清理 timer。访问日志虽已短时去重，但错误请求、登录失败、限流安全事件、公开站点跳转和后台审计仍会持续增长。建议新增按天数/条数保留的 CLI 和 systemd timer，必要时先导出归档再删除。
@@ -63,7 +63,7 @@
 
 ### 进行中
 
-- 本轮全量 CTF 式只读审计已完成，待按上面的待修复清单逐项处理。
+- 正在处理 P2 匿名高成本 GET、公开跳转写放大、日志保留和友链申请去重/上限。
 
 ### 阻塞与风险
 
@@ -74,15 +74,17 @@
 - 生产环境现在会强制校验 `BLOG_PUBLIC_BASE_URL` 为 `https://` 绝对地址；服务器真实 `backend.env` 不能再使用 `http://`、相对路径或占位值。
 - 访问日志去重窗口可通过 `BLOG_ACCESS_LOG_DEDUPE_SECONDS=60` 显式配置；不配置时默认 60 秒，生产 Redis 已启用时会复用 `BLOG_REDIS_URL`。
 - 本机 ignored 的 `deploy/env/backend.env` 仍可能保留旧连接串，`docker compose config` 只能证明配置展开语法有效；生产发布前必须按上面的真实 env 项显式更新。
+- P1 修复会影响服务器 Nginx/Compose 部署：如果服务器宿主机 Nginx 手动配置了 `/uploads/` 或等价 alias，需要同步删除；如果使用 Compose 内置 Nginx，需要重建 nginx 镜像并重新展开 Compose 配置。
 
 ### 下一步
 
-- 优先修复 P1 `/uploads/` 静态暴露，再处理 P2 匿名高成本/写放大和日志保留问题；涉及数据库唯一约束、日志保留索引或字段变更时同步补充 Alembic 迁移。
+- 继续修复 P2 匿名高成本/写放大和日志保留问题；涉及数据库唯一约束、日志保留索引或字段变更时同步补充 Alembic 迁移。
 
 ### 验证
 
 - 本轮按 CTF/红队思路执行只读静态审计，覆盖公开入口、后台认证/会话、文件上传下载、URL/跳转、日志写入、部署暴露面、Markdown/前端危险 sink、配置漂移和工程体量；除写入 `PROJECT_PROGRESS.md` 外未修改业务代码。
 - 本轮未运行 `pip-audit` 等依赖扫描命令，避免再次触发本机杀软对审计工具缓存的误报；未启动本地前后端服务。
+- P1 上传静态暴露修复后已运行文本检查，确认 `deploy/nginx/templates/blog.conf.template`、`deploy/docker-compose.yml` 和 `deploy/nginx/Dockerfile` 不再包含 `/uploads/` 静态 location、上传目录挂载或 nginx 镜像内上传目录创建。
 - 已运行 `uv run ruff check .`，通过。
 - 已运行 `uv run pytest tests/test_public_content_api.py tests/test_admin_files_api.py tests/test_request_client_ip.py tests/test_log_service.py tests/test_admin_logs_api.py`，53 个测试通过；仍存在 FastAPI/Starlette TestClient 与 per-request cookies 的上游弃用警告。
 - 已运行 `uv run pytest`，141 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 4 个 FastAPI/Starlette 上游弃用警告。

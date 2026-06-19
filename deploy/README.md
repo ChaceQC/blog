@@ -92,6 +92,8 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml bu
 - 精确反代 `/rss.xml`、`/sitemap.xml` 和 `/robots.txt`，避免被 SPA 的 `index.html` 兜底吞掉。
 - 设置上传体积限制、基础安全响应头和代理头。当前模板使用 `client_max_body_size 20m`，后端生产环境变量应同步为 `BLOG_UPLOAD_MAX_SIZE_BYTES=20971520`。
 
+上传文件目录不挂载到 Nginx，也不提供 `/uploads/` 静态访问；公开文件、文章图片和后台预览均由后端签名接口授权。宿主机 Nginx 部署时也不要手动添加 `/uploads/` alias。
+
 后端生产响应也会设置 HSTS 与 Content Security Policy，Nginx 的同类响应头保留为公网入口兜底；部署前仍应确认公网只暴露 Nginx `80/443`，后端、MySQL、Redis 不映射到宿主公网端口。
 
 证书路径由 `deploy/env/nginx.env` 中的 `BLOG_SSL_CERTIFICATE` 和 `BLOG_SSL_CERTIFICATE_KEY` 控制，填写的是 Nginx 容器内路径。基础 Compose 文件默认挂载 `deploy/certs/letsencrypt` 到 `/etc/letsencrypt`；如果使用宿主机已有证书，例如 `/etc/nginx/ssl/blog.pem` 和 `/etc/nginx/ssl/blog.key`，需要在 `deploy/docker-compose.local.yml` 中加入证书目录挂载：

@@ -78,13 +78,6 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
   }
 
-  location /uploads/ {
-    alias /data/blog/uploads/public/;
-    autoindex off;
-    add_header X-Content-Type-Options "nosniff" always;
-    try_files $uri =404;
-  }
-
   location / {
     try_files $uri $uri/ /index.html;
   }

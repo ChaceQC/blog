@@ -372,7 +372,7 @@ BLOG_SSL_CERTIFICATE_KEY=/etc/nginx/ssl/blog.key
 
 如果使用 Compose 内置 Nginx，请继续按下文的 `deploy/docker-compose.local.yml` 挂载证书目录，并用包含 nginx 服务的 compose 命令启动。`deploy/docker-compose.local.yml` 是服务器本地文件，已被 `.gitignore` 忽略；如果前面已经创建过，请编辑合并内容，不要直接覆盖。
 
-如果使用宿主机已有 Nginx，不启动 Compose 内置 Nginx 服务即可；宿主机 Nginx 仍需要把 `/api/` 反代到 `http://127.0.0.1:18080`，并把前端静态目录指向 `/var/www/blog`。如需让宿主机访问后端容器，在服务器本地覆盖文件中加入：
+如果使用宿主机已有 Nginx，不启动 Compose 内置 Nginx 服务即可；宿主机 Nginx 仍需要把 `/api/` 反代到 `http://127.0.0.1:18080`，并把前端静态目录指向 `/var/www/blog`。上传文件目录不能配置为 Nginx 静态目录，公开文件和文章图片必须继续走后端签名接口。若需让宿主机访问后端容器，在服务器本地覆盖文件中加入：
 
 ```yaml
 services:
@@ -420,7 +420,7 @@ sudo test -r /etc/nginx/ssl/blog.key
 ### 6. 准备数据目录
 
 ```bash
-sudo mkdir -p /data/blog/uploads/public /data/blog/backups/mysql /data/blog/backups/uploads
+sudo mkdir -p /data/blog/uploads /data/blog/backups/mysql /data/blog/backups/uploads
 ```
 
 后端容器以非 root 用户运行。首次启动后如果上传文件时报权限错误，按容器内实际 UID/GID 修正上传目录：
