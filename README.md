@@ -180,6 +180,7 @@ npm.cmd run build
 - `BLOG_UPLOAD_MAX_SIZE_BYTES`：后端上传上限，默认 `20971520`，需与 Nginx `client_max_body_size 20m` 保持一致。
 - `BLOG_RATE_LIMIT_BACKEND`：限流后端，支持 `memory` 和 `redis`。
 - `BLOG_REDIS_URL`：Redis 连接串，生产示例为 `redis://redis:6379/0`。
+- `BLOG_ADMIN_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`：后台加密会话单 IP 活跃数量上限，默认 `10`。
 - `BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`：公开加密会话单 IP 活跃数量上限，默认 `10`。
 - `BLOG_TRUSTED_PROXY_HOSTS`：可信反向代理直连后端的 IP 或 CIDR 列表；只有这些来源的 `X-Forwarded-For` / `X-Real-IP` 会被用于应用层限流和日志。
 - `BLOG_ACCESS_LOG_DEDUPE_SECONDS`：成功 `GET/HEAD` 访问日志短时去重窗口，默认 `60`；同一 IP 在窗口内重复访问同一 path 只写入第一条，错误和写操作仍逐条记录。
@@ -356,6 +357,7 @@ BLOG_REDIS_URL=redis://redis:6379/0
 BLOG_TRUSTED_PROXY_HOSTS=["172.16.0.0/12"]
 BLOG_UPLOAD_ROOT=/data/blog/uploads
 BLOG_UPLOAD_MAX_SIZE_BYTES=20971520
+BLOG_ADMIN_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP=10
 BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP=10
 BLOG_ACCESS_LOG_DEDUPE_SECONDS=60
 ```

@@ -12,7 +12,10 @@ from app.schemas.encryption import (
     CreateEncryptionSessionRequest,
     CreateEncryptionSessionResponse,
 )
-from app.services.encryption import EncryptionSessionError
+from app.services.encryption import (
+    ActiveEncryptionSessionLimitExceeded,
+    EncryptionSessionError,
+)
 from app.services.rate_limit import RateLimitRule
 
 router = APIRouter(prefix="/encryption", tags=["admin-encryption"])
@@ -27,11 +30,12 @@ async def create_encryption_session(
     rate_limiter: RateLimitServiceDependency,
     logs: LogServiceDependency,
 ) -> CreateEncryptionSessionResponse:
+    ip = client_ip(request)
     await enforce_rate_limit(
         request=request,
         limiter=rate_limiter,
         logs=logs,
-        key=f"encryption-session:{client_ip(request) or 'unknown'}",
+        key=f"encryption-session:{ip or 'unknown'}",
         rule=RateLimitRule(
             max_attempts=settings.encryption_session_rate_limit_max_attempts,
             window_seconds=settings.encryption_session_rate_limit_window_seconds,
@@ -43,8 +47,24 @@ async def create_encryption_session(
         return await manager.create_session(
             client_public_key=payload.client_public_key,
             scope="admin",
-            client_ip=client_ip(request),
+            client_ip=ip,
+            active_session_limit=(
+                settings.admin_encryption_session_active_limit_per_ip
+            ),
         )
+    except ActiveEncryptionSessionLimitExceeded as exc:
+        await logs.record_security_event(
+            event_type="rate_limit.encryption_session_active",
+            severity="medium",
+            ip=ip,
+            user_agent=request.headers.get("user-agent"),
+            path=str(request.url.path),
+            detail_json={"scope": "admin", "profile": "sensitive-v1"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="too many active encryption sessions",
+        ) from exc
     except EncryptionSessionError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

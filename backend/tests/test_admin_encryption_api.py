@@ -22,7 +22,10 @@ from app.core.encryption import (
 from app.main import app
 from app.schemas.encryption import BrowserPublicKey
 from app.services.auth import AuthenticatedUser, TokenPair
-from app.services.encryption import EncryptionSessionManager
+from app.services.encryption import (
+    ActiveEncryptionSessionLimitExceeded,
+    EncryptionSessionManager,
+)
 from app.services.rate_limit import RateLimitService
 
 
@@ -155,6 +158,19 @@ class RaisingAuthService:
 class FakeLogService:
     async def record_security_event(self, **_: object) -> None:
         raise AssertionError("security event should not be recorded")
+
+
+class CollectingLogService:
+    def __init__(self) -> None:
+        self.events: list[dict[str, object]] = []
+
+    async def record_security_event(self, **payload: object) -> None:
+        self.events.append(dict(payload))
+
+
+class ActiveLimitExceededManager:
+    async def create_session(self, **_: object) -> object:
+        raise ActiveEncryptionSessionLimitExceeded("too many active sessions")
 
 
 def test_login_response_can_use_sensitive_encryption_session() -> None:
@@ -530,6 +546,39 @@ def test_create_session_rejects_active_session_overflow() -> None:
 
     assert exc_info.value.__class__.__name__ == "ActiveEncryptionSessionLimitExceeded"
     assert len(repository.sessions) == 1
+
+
+def test_admin_encryption_session_rejects_active_session_overflow() -> None:
+    client = TestClient(app)
+    logs = CollectingLogService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        ActiveLimitExceededManager()
+    )
+    app.dependency_overrides[get_log_service] = lambda: logs
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
+
+    try:
+        response = client.post(
+            "/api/admin/encryption/sessions",
+            json={
+                "client_public_key": {
+                    "kty": "EC",
+                    "crv": "P-256",
+                    "x": "test-x",
+                    "y": "test-y",
+                },
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "too many active encryption sessions"
+    assert logs.events[0]["event_type"] == "rate_limit.encryption_session_active"
+    assert logs.events[0]["detail_json"] == {
+        "scope": "admin",
+        "profile": "sensitive-v1",
+    }
 
 
 def _export_public_key(public_key: ec.EllipticCurvePublicKey) -> dict[str, str]:

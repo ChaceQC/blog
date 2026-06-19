@@ -32,6 +32,11 @@ class Settings(BaseSettings):
         ge=1,
         le=100,
     )
+    admin_encryption_session_active_limit_per_ip: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+    )
     friend_link_application_rate_limit_max_attempts: int = Field(
         default=5,
         ge=1,
