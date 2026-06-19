@@ -36,9 +36,10 @@ class RateLimiterBackend(Protocol):
 
 
 class InMemoryRateLimiter:
-    def __init__(self) -> None:
+    def __init__(self, *, max_keys: int = 10_000) -> None:
         self._hits: dict[str, deque[datetime]] = defaultdict(deque)
         self._lock = Lock()
+        self._max_keys = max(1, max_keys)
 
     def hit(
         self,
@@ -51,9 +52,14 @@ class InMemoryRateLimiter:
         window = timedelta(seconds=rule.window_seconds)
 
         with self._lock:
+            if key not in self._hits and len(self._hits) >= self._max_keys:
+                self._evict_oldest_key()
             hits = self._hits[key]
             while hits and current_time - hits[0] >= window:
                 hits.popleft()
+            if not hits:
+                self._hits.pop(key, None)
+                hits = self._hits[key]
 
             if len(hits) >= rule.max_attempts:
                 retry_after = window - (current_time - hits[0])
@@ -61,6 +67,15 @@ class InMemoryRateLimiter:
 
             hits.append(current_time)
             return None
+
+    def _evict_oldest_key(self) -> None:
+        oldest_key = min(
+            self._hits,
+            key=lambda item: self._hits[item][0]
+            if self._hits[item]
+            else datetime.min.replace(tzinfo=UTC),
+        )
+        self._hits.pop(oldest_key, None)
 
 
 class RedisRateLimiter:

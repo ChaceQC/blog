@@ -53,8 +53,21 @@ async def login(
         manager=encryption_manager,
         profile=EncryptionProfile.SENSITIVE,
     )
+    client = client_ip(request) or "unknown"
+    await enforce_rate_limit(
+        request=request,
+        limiter=rate_limiter,
+        logs=logs,
+        key=f"admin-login-ip:{client}",
+        rule=RateLimitRule(
+            max_attempts=settings.admin_login_rate_limit_max_attempts * 3,
+            window_seconds=settings.admin_login_rate_limit_window_seconds,
+        ),
+        event_type="rate_limit.admin_login",
+        detail_json={"credential": "ip"},
+    )
     limit_key = (
-        f"admin-login:{client_ip(request) or 'unknown'}:"
+        f"admin-login:{client}:"
         f"{payload.username.casefold()}"
     )
     await enforce_rate_limit(

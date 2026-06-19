@@ -6,7 +6,8 @@ import pytest
 
 from app.core.auth import decode_access_token, hash_password, hash_refresh_token
 from app.repositories.auth import Authorization
-from app.services.auth import AuthenticationError, AuthService
+from app.services import auth as auth_service_module
+from app.services.auth import DUMMY_PASSWORD_HASH, AuthenticationError, AuthService
 
 
 @pytest.fixture
@@ -197,6 +198,34 @@ async def test_login_rejects_wrong_password_and_records_failure() -> None:
     assert repository.refresh_tokens == []
     assert repository.login_logs[0]["success"] is False
     assert repository.login_logs[0]["reason"] == "invalid_credentials"
+    assert repository.commit_count == 1
+
+
+@pytest.mark.anyio
+async def test_login_checks_dummy_hash_for_unknown_username(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checked_hashes: list[str] = []
+
+    def fake_verify_password(password: str, password_hash: str) -> bool:
+        checked_hashes.append(password_hash)
+        return False
+
+    monkeypatch.setattr(auth_service_module, "verify_password", fake_verify_password)
+    repository = FakeAuthRepository(None)
+    service = AuthService(repository=repository, settings=make_settings())
+
+    with pytest.raises(AuthenticationError):
+        await service.login(
+            username="missing",
+            password="wrong-password",
+            ip=None,
+            user_agent=None,
+        )
+
+    assert checked_hashes == [DUMMY_PASSWORD_HASH]
+    assert repository.login_logs[0]["success"] is False
+    assert repository.login_logs[0]["user_id"] is None
     assert repository.commit_count == 1
 
 

@@ -309,6 +309,57 @@ def test_login_rejects_public_encryption_session_before_authentication() -> None
     assert response.json()["detail"] == "invalid encryption session"
 
 
+def test_admin_login_ip_rate_limit_blocks_rotating_usernames() -> None:
+    settings = get_settings().model_copy(
+        update={
+            "admin_login_rate_limit_max_attempts": 1,
+            "admin_login_rate_limit_window_seconds": 60,
+        },
+    )
+    client_private_key = ec.generate_private_key(ec.SECP256R1())
+    client = TestClient(app)
+    encryption_repository = FakeEncryptionSessionRepository()
+    encryption_manager = EncryptionSessionManager(
+        repository=encryption_repository,
+        settings=settings,
+    )
+    logs = CollectingLogService()
+    rate_limiter = RateLimitService()
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_auth_service] = lambda: FakeAuthService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        encryption_manager
+    )
+    app.dependency_overrides[get_log_service] = lambda: logs
+    app.dependency_overrides[get_rate_limit_service] = lambda: rate_limiter
+
+    try:
+        session_response = client.post(
+            "/api/admin/encryption/sessions",
+            json={
+                "client_public_key": _export_public_key(
+                    client_private_key.public_key(),
+                ),
+            },
+        )
+        session_id = session_response.json()["session_id"]
+        responses = [
+            client.post(
+                "/api/admin/auth/login",
+                headers={"X-Encryption-Session": session_id},
+                json={"username": f"missing-{index}", "password": "wrong-password"},
+            )
+            for index in range(4)
+        ]
+    finally:
+        app.dependency_overrides.clear()
+
+    assert session_response.status_code == 200
+    assert [response.status_code for response in responses] == [200, 200, 200, 429]
+    assert logs.events[-1]["event_type"] == "rate_limit.admin_login"
+    assert logs.events[-1]["detail_json"] == {"credential": "ip"}
+
+
 def test_me_rejects_public_encryption_session_before_authentication() -> None:
     client_private_key = ec.generate_private_key(ec.SECP256R1())
     client = TestClient(app)

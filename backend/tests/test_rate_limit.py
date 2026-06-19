@@ -57,6 +57,20 @@ def test_rate_limit_allows_after_window_moves_forward() -> None:
     )
 
 
+def test_in_memory_rate_limit_caps_tracked_keys() -> None:
+    limiter = InMemoryRateLimiter(max_keys=2)
+    service = RateLimitService(limiter)
+    rule = RateLimitRule(max_attempts=2, window_seconds=60)
+    now = datetime(2026, 6, 16, tzinfo=UTC)
+
+    service.check(key="one", rule=rule, now=now)
+    service.check(key="two", rule=rule, now=now + timedelta(seconds=1))
+    service.check(key="three", rule=rule, now=now + timedelta(seconds=2))
+
+    assert len(limiter._hits) == 2
+    assert "one" not in limiter._hits
+
+
 def test_redis_rate_limit_blocks_with_shared_window() -> None:
     service = RateLimitService(
         RedisRateLimiter(

@@ -23,6 +23,12 @@ class AuthenticationError(Exception):
     pass
 
 
+DUMMY_PASSWORD_HASH = (
+    "$argon2id$v=19$m=65536,t=3,p=4$rIlOXSgomTbRCi+eNR3zVw"
+    "$Dw2Fs2E3Xfyt5phCoDWV6VALbztfkFDR+HPgzJgeA7s"
+)
+
+
 class AuthRepositoryProtocol(Protocol):
     async def get_user_by_username(self, username: str) -> User | None: ...
 
@@ -109,7 +115,9 @@ class AuthService:
     ) -> TokenPair:
         logged_in_at = utc_now()
         user = await self.repository.get_user_by_username(username)
-        if user is None or not verify_password(password, user.password_hash):
+        password_hash = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
+        password_matches = verify_password(password, password_hash)
+        if user is None or not password_matches:
             await self._record_login_failure(
                 username=username,
                 user_id=user.id if user else None,
