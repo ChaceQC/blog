@@ -1,16 +1,19 @@
-import re
 from collections.abc import Sequence
-from hashlib import sha1
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import utc_now
 from app.models.content import Category, Page, Post, PostCategory, PostTag, Tag
 from app.models.file import BlogFile, FileUsage
+from app.repositories.content_helpers import (
+    normalize_labels,
+    rows_to_map,
+    slug_from_label,
+)
+from app.repositories.content_public import ContentPublicQueryMixin
 
 
-class ContentRepository:
+class ContentRepository(ContentPublicQueryMixin):
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
@@ -26,157 +29,6 @@ class ContentRepository:
         await self._attach_post_taxonomy(posts)
         return posts
 
-    async def list_public_posts(
-        self,
-        *,
-        limit: int,
-        offset: int,
-        category_slug: str | None = None,
-        tag_slug: str | None = None,
-    ) -> Sequence[Post]:
-        now = utc_now()
-        statement = select(Post).where(*_public_post_filters(now))
-        if category_slug is not None:
-            statement = (
-                statement.join(PostCategory, PostCategory.post_id == Post.id)
-                .join(Category, Category.id == PostCategory.category_id)
-                .where(Category.slug == category_slug)
-            )
-        if tag_slug is not None:
-            statement = (
-                statement.join(PostTag, PostTag.post_id == Post.id)
-                .join(Tag, Tag.id == PostTag.tag_id)
-                .where(Tag.slug == tag_slug)
-            )
-        result = await self.session.execute(
-            statement
-            .order_by(Post.published_at.desc(), Post.id.desc())
-            .limit(limit)
-            .offset(offset),
-        )
-        posts = list(result.scalars().all())
-        await self._attach_post_taxonomy(posts)
-        return posts
-
-    async def count_public_posts(
-        self,
-        *,
-        category_slug: str | None = None,
-        tag_slug: str | None = None,
-    ) -> int:
-        now = utc_now()
-        statement = select(func.count(Post.id)).where(*_public_post_filters(now))
-        if category_slug is not None:
-            statement = (
-                statement.join(PostCategory, PostCategory.post_id == Post.id)
-                .join(Category, Category.id == PostCategory.category_id)
-                .where(Category.slug == category_slug)
-            )
-        if tag_slug is not None:
-            statement = (
-                statement.join(PostTag, PostTag.post_id == Post.id)
-                .join(Tag, Tag.id == PostTag.tag_id)
-                .where(Tag.slug == tag_slug)
-            )
-        result = await self.session.execute(statement)
-        return int(result.scalar_one())
-
-    async def list_public_feed_posts(self, *, limit: int) -> Sequence[Post]:
-        now = utc_now()
-        result = await self.session.execute(
-            select(Post)
-            .where(
-                *_public_post_filters(now),
-            )
-            .order_by(Post.published_at.desc(), Post.id.desc())
-            .limit(limit),
-        )
-        posts = list(result.scalars().all())
-        await self._attach_post_taxonomy(posts)
-        return posts
-
-    async def list_public_categories(
-        self,
-        *,
-        limit: int,
-        offset: int,
-    ) -> Sequence[dict[str, object]]:
-        now = utc_now()
-        result = await self.session.execute(
-            select(
-                Category.id,
-                Category.name,
-                Category.slug,
-                func.count(Post.id).label("post_count"),
-            )
-            .join(PostCategory, PostCategory.category_id == Category.id)
-            .join(Post, Post.id == PostCategory.post_id)
-            .where(*_public_post_filters(now))
-            .group_by(Category.id, Category.name, Category.slug, Category.sort_order)
-            .order_by(Category.sort_order, Category.name)
-            .limit(limit)
-            .offset(offset),
-        )
-        return [dict(row) for row in result.mappings().all()]
-
-    async def get_public_category_by_slug(self, slug: str) -> dict[str, object] | None:
-        now = utc_now()
-        result = await self.session.execute(
-            select(
-                Category.id,
-                Category.name,
-                Category.slug,
-                func.count(Post.id).label("post_count"),
-            )
-            .join(PostCategory, PostCategory.category_id == Category.id)
-            .join(Post, Post.id == PostCategory.post_id)
-            .where(Category.slug == slug, *_public_post_filters(now))
-            .group_by(Category.id, Category.name, Category.slug),
-        )
-        row = result.mappings().one_or_none()
-        return dict(row) if row is not None else None
-
-    async def list_public_tags(
-        self,
-        *,
-        limit: int,
-        offset: int,
-    ) -> Sequence[dict[str, object]]:
-        now = utc_now()
-        result = await self.session.execute(
-            select(
-                Tag.id,
-                Tag.name,
-                Tag.slug,
-                func.count(Post.id).label("post_count"),
-            )
-            .join(PostTag, PostTag.tag_id == Tag.id)
-            .join(Post, Post.id == PostTag.post_id)
-            .where(*_public_post_filters(now))
-            .group_by(Tag.id, Tag.name, Tag.slug)
-            .order_by(Tag.name)
-            .limit(limit)
-            .offset(offset),
-        )
-        return [dict(row) for row in result.mappings().all()]
-
-    async def get_public_tag_by_slug(self, slug: str) -> dict[str, object] | None:
-        now = utc_now()
-        result = await self.session.execute(
-            select(
-                Tag.id,
-                Tag.name,
-                Tag.slug,
-                func.count(Post.id).label("post_count"),
-            )
-            .join(PostTag, PostTag.tag_id == Tag.id)
-            .join(Post, Post.id == PostTag.post_id)
-            .where(Tag.slug == slug, *_public_post_filters(now))
-            .group_by(Tag.id, Tag.name, Tag.slug),
-        )
-        row = result.mappings().one_or_none()
-        return dict(row) if row is not None else None
-
     async def get_post(self, post_id: int) -> Post | None:
         result = await self.session.execute(
             select(Post).where(Post.id == post_id, Post.deleted_at.is_(None)),
@@ -188,18 +40,6 @@ class ContentRepository:
     async def get_post_by_slug(self, slug: str) -> Post | None:
         result = await self.session.execute(
             select(Post).where(Post.slug == slug, Post.deleted_at.is_(None)),
-        )
-        post = result.scalar_one_or_none()
-        await self._attach_post_taxonomy([post] if post is not None else [])
-        return post
-
-    async def get_public_post_by_slug(self, slug: str) -> Post | None:
-        now = utc_now()
-        result = await self.session.execute(
-            select(Post).where(
-                Post.slug == slug,
-                *_public_post_filters(now),
-            ),
         )
         post = result.scalar_one_or_none()
         await self._attach_post_taxonomy([post] if post is not None else [])
@@ -252,7 +92,7 @@ class ContentRepository:
         await self.session.execute(
             delete(PostCategory).where(PostCategory.post_id == post_id),
         )
-        for name in _normalize_labels(category_names):
+        for name in normalize_labels(category_names):
             category = await self._get_or_create_category(name)
             self.session.add(
                 PostCategory(post_id=post_id, category_id=category.id),
@@ -268,7 +108,7 @@ class ContentRepository:
         await self.session.execute(
             delete(PostTag).where(PostTag.post_id == post_id),
         )
-        for name in _normalize_labels(tag_names):
+        for name in normalize_labels(tag_names):
             tag = await self._get_or_create_tag(name)
             self.session.add(PostTag(post_id=post_id, tag_id=tag.id))
         await self.session.flush()
@@ -329,16 +169,6 @@ class ContentRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_public_page_by_slug(self, slug: str) -> Page | None:
-        result = await self.session.execute(
-            select(Page).where(
-                Page.slug == slug,
-                Page.deleted_at.is_(None),
-                Page.status == "published",
-            ),
-        )
-        return result.scalar_one_or_none()
-
     async def create_page(
         self,
         *,
@@ -374,7 +204,7 @@ class ContentRepository:
         await self.session.refresh(instance)
 
     async def _get_or_create_category(self, name: str) -> Category:
-        slug = _slug_from_label(name, prefix="category")
+        slug = slug_from_label(name, prefix="category")
         result = await self.session.execute(
             select(Category).where(Category.slug == slug),
         )
@@ -387,7 +217,7 @@ class ContentRepository:
         return category
 
     async def _get_or_create_tag(self, name: str) -> Tag:
-        slug = _slug_from_label(name, prefix="tag")
+        slug = slug_from_label(name, prefix="tag")
         result = await self.session.execute(select(Tag).where(Tag.slug == slug))
         tag = result.scalar_one_or_none()
         if tag is not None:
@@ -414,49 +244,8 @@ class ContentRepository:
             .where(PostTag.post_id.in_(post_ids))
             .order_by(Tag.name),
         )
-        category_map = _rows_to_map(categories.all())
-        tag_map = _rows_to_map(tags.all())
+        category_map = rows_to_map(categories.all())
+        tag_map = rows_to_map(tags.all())
         for post in posts:
             post.category_names = category_map.get(post.id, [])
             post.tag_names = tag_map.get(post.id, [])
-
-
-def _normalize_labels(labels: Sequence[str]) -> list[str]:
-    normalized: list[str] = []
-    seen: set[str] = set()
-    for label in labels:
-        value = label.strip()
-        key = value.casefold()
-        if not value or key in seen:
-            continue
-        seen.add(key)
-        normalized.append(value[:64])
-    return normalized
-
-
-def _slug_from_label(label: str, *, prefix: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
-    if slug:
-        return slug[:80]
-    digest = sha1(label.encode("utf-8")).hexdigest()[:12]
-    return f"{prefix}-{digest}"
-
-
-def _public_post_filters(now) -> tuple[object, ...]:
-    return (
-        Post.deleted_at.is_(None),
-        or_(
-            Post.status == "published",
-            Post.status == "scheduled",
-        ),
-        Post.visibility == "public",
-        Post.published_at.is_not(None),
-        Post.published_at <= now,
-    )
-
-
-def _rows_to_map(rows: Sequence[tuple[int, str]]) -> dict[int, list[str]]:
-    mapped: dict[int, list[str]] = {}
-    for post_id, name in rows:
-        mapped.setdefault(post_id, []).append(name)
-    return mapped
