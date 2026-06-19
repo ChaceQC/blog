@@ -61,14 +61,15 @@
 - P4 前端 CSS 大文件已继续拆分：`public.css`、`forms.css`、`admin.css` 和 `base.css` 改为职责聚合入口，新增 public、forms、admin、base 分层 CSS 文件；当前 `frontend/src/styles` 下已无 400 行以上 CSS 文件。该修复不涉及数据库迁移或服务器配置。
 - P4 `FileService` 大文件已继续拆分：新增 `file_downloads.py` 承载公开/后台下载、文章图片渲染、缩略图和预览访问策略，新增 `file_maintenance.py` 承载软删除文件清理与孤儿文件扫描；`files.py` 降到 379 行，保留文件用例编排和对外兼容导出。该修复不涉及数据库迁移或服务器配置。
 - P4 `LogService` 大文件已继续拆分：新增 `access_log_dedupe.py` 承载访问日志短时去重后端和 Redis/内存策略，新增 `log_sanitizers.py` 承载日志 JSON allowlist 清洗；`logs.py` 降到 316 行，并通过 `__all__` 保持旧导入路径兼容。该修复不涉及数据库迁移或服务器配置。
+- P4 `ContentService` 大文件已继续拆分：新增 `content_commands.py`、`content_errors.py`、`content_protocols.py` 和 `content_post_helpers.py`，分别承载内容命令对象、异常、Repository 协议和文章文件引用/发布时间/标签归一化 helper；`content.py` 降到 380 行，并通过 `__all__` 保持旧导入路径兼容。该修复不涉及数据库迁移或服务器配置。
 
 ### 待修复清单
 
-- P4：仍有多个源码文件超过项目单文件体量建议，后续维护和安全回归成本偏高。当前统计中 `frontend/src/styles/public.css` 约 1010 行，`forms.css` 约 570 行，`backend/app/services/files.py` 约 568 行，`backend/app/services/content.py` 约 513 行，`frontend/src/styles/admin.css` 约 499 行，`backend/app/api/admin/content.py` 约 477 行，`backend/app/repositories/content.py`、`backend/app/services/links.py`、`backend/app/services/logs.py` 等也超过 400 行或接近 400 行。建议继续按职责拆分 CSS 分层、内容用例、日志保留/查询、文件下载/预览和内容 repository 查询。
+- P4：仍有多个源码文件超过项目单文件体量建议，后续维护和安全回归成本偏高。当前统计中 `backend/app/services/links.py` 约 589 行，`backend/app/api/admin/content.py` 约 516 行，`backend/app/repositories/content.py` 约 462 行，`backend/app/api/public/feeds.py` 约 438 行，`backend/app/services/files.py` 约 418 行，`backend/app/api/admin/files.py` 约 398 行，`frontend/src/features/posts/PublicPostArchivePage.tsx` 约 394 行。建议继续按职责拆分链接用例、后台内容路由、内容 repository 查询、RSS/sitemap 渲染和文件服务剩余编排。
 
 ### 进行中
 
-- 正在处理 P4 后台日志真分页、前端测试补齐、文件 DTO 边界和大文件拆分。
+- 正在处理 P4 大文件拆分；下一块聚焦 `LinkService` 的链接命令、异常、Repository 协议和 URL 规范化 helper 分离。
 
 ### 阻塞与风险
 
@@ -84,7 +85,7 @@
 
 ### 下一步
 
-- 继续修复 P3 日志 detail/after payload 最小化、公开 href 敏感路径 denylist 和访问日志残留配置漂移。
+- 继续拆分 `backend/app/services/links.py`，先把命令对象、异常、Repository 协议、公开友链申请策略和 URL 规范化 helper 拆成独立模块，并保持 `app.services.links` 的旧导入兼容。
 
 ### 验证
 
@@ -113,6 +114,8 @@
 - 访问日志短时去重调整后已运行 `uv run ruff check .`，通过。
 - 访问日志短时去重调整后已运行 `uv run pytest tests/test_log_service.py tests/test_public_content_api.py tests/test_admin_files_api.py`，51 个测试通过；仍存在 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 状态常量的上游弃用警告。
 - 访问日志短时去重调整后已运行 `uv run pytest`，154 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 7 个 FastAPI/Starlette 上游弃用警告。
+- `ContentService` 拆分后已运行 `uv run ruff check app/services/content.py app/services/content_commands.py app/services/content_errors.py app/services/content_protocols.py app/services/content_post_helpers.py`，通过。
+- `ContentService` 拆分后已运行 `uv run pytest tests/test_content_service.py tests/test_admin_content_api.py tests/test_public_content_api.py`，45 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - `FileService` 拆分后已运行 `uv run ruff check app/services/file_errors.py app/services/file_tokens.py app/services/file_uploads.py app/services/file_storage.py app/services/files.py tests/test_admin_files_api.py tests/test_file_cleanup.py`，通过。
 - `FileService` 拆分后已运行 `uv run pytest tests/test_admin_files_api.py tests/test_file_cleanup.py tests/test_public_content_api.py tests/test_content_service.py`，60 个测试通过；仍存在 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 状态常量的上游弃用警告。
 - 公开读取 read model 边界调整后已运行 `uv run ruff check app/schemas/content.py app/services/content_read_models.py app/services/file_read_models.py app/services/content.py app/services/files.py app/api/public tests/test_public_content_api.py tests/test_content_service.py tests/test_admin_files_api.py`，通过。

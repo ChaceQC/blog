@@ -1,12 +1,25 @@
-import re
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Protocol
+from collections.abc import Sequence
 
 from app.core.auth import utc_now
 from app.models.content import Page, Post
 from app.providers.markdown import MarkdownRenderer, count_words
+from app.services.content_commands import (
+    CreatePageCommand,
+    CreatePostCommand,
+    UpdatePageCommand,
+    UpdatePostCommand,
+)
+from app.services.content_errors import (
+    ContentFileNotFoundError,
+    ContentNotFoundError,
+    ContentSlugExistsError,
+)
+from app.services.content_post_helpers import (
+    build_post_file_usages,
+    normalize_labels,
+    published_at_for_status,
+)
+from app.services.content_protocols import ContentRepositoryProtocol
 from app.services.content_read_models import (
     AdminPageRead,
     AdminPostRead,
@@ -24,199 +37,7 @@ from app.services.content_read_models import (
     public_taxonomy_read,
     public_taxonomy_reads,
 )
-from app.services.update_commands import UNSET, UnsetType, is_set
-
-
-class ContentNotFoundError(Exception):
-    pass
-
-
-class ContentSlugExistsError(Exception):
-    pass
-
-
-class ContentFileNotFoundError(Exception):
-    pass
-
-
-class ContentRepositoryProtocol(Protocol):
-    async def list_posts(self, *, limit: int, offset: int) -> Sequence[Post]: ...
-
-    async def list_public_posts(
-        self,
-        *,
-        limit: int,
-        offset: int,
-        category_slug: str | None = None,
-        tag_slug: str | None = None,
-    ) -> Sequence[Post]: ...
-
-    async def count_public_posts(
-        self,
-        *,
-        category_slug: str | None = None,
-        tag_slug: str | None = None,
-    ) -> int: ...
-
-    async def list_public_feed_posts(self, *, limit: int) -> Sequence[Post]: ...
-
-    async def list_public_categories(
-        self,
-        *,
-        limit: int,
-        offset: int,
-    ) -> Sequence[Mapping[str, object]]: ...
-
-    async def get_public_category_by_slug(
-        self,
-        slug: str,
-    ) -> Mapping[str, object] | None: ...
-
-    async def list_public_tags(
-        self,
-        *,
-        limit: int,
-        offset: int,
-    ) -> Sequence[Mapping[str, object]]: ...
-
-    async def get_public_tag_by_slug(
-        self,
-        slug: str,
-    ) -> Mapping[str, object] | None: ...
-
-    async def get_post(self, post_id: int) -> Post | None: ...
-
-    async def get_post_by_slug(self, slug: str) -> Post | None: ...
-
-    async def get_public_post_by_slug(self, slug: str) -> Post | None: ...
-
-    async def create_post(
-        self,
-        *,
-        title: str,
-        slug: str,
-        summary: str | None,
-        content_md: str,
-        content_html: str,
-        author_id: int,
-        status: str,
-        visibility: str,
-        cover_file_id: int | None,
-        word_count: int,
-        seo_title: str | None,
-        seo_description: str | None,
-        seo_keywords: str | None,
-        published_at: datetime | None,
-    ) -> Post: ...
-
-    async def replace_post_categories(
-        self,
-        *,
-        post_id: int,
-        category_names: Sequence[str],
-    ) -> None: ...
-
-    async def replace_post_tags(
-        self,
-        *,
-        post_id: int,
-        tag_names: Sequence[str],
-    ) -> None: ...
-
-    async def file_exists(self, file_id: int) -> bool: ...
-
-    async def replace_file_usages(
-        self,
-        *,
-        entity_type: str,
-        entity_id: int,
-        usages: Sequence[tuple[int, str]],
-    ) -> None: ...
-
-    async def list_pages(self, *, limit: int, offset: int) -> Sequence[Page]: ...
-
-    async def get_page(self, page_id: int) -> Page | None: ...
-
-    async def get_page_by_slug(self, slug: str) -> Page | None: ...
-
-    async def get_public_page_by_slug(self, slug: str) -> Page | None: ...
-
-    async def create_page(
-        self,
-        *,
-        title: str,
-        slug: str,
-        content_md: str,
-        content_html: str,
-        status: str,
-        show_in_nav: bool,
-        sort_order: int,
-        seo_title: str | None,
-        seo_description: str | None,
-    ) -> Page: ...
-
-    async def commit(self) -> None: ...
-
-    async def refresh(self, instance: object) -> None: ...
-
-
-@dataclass(frozen=True)
-class CreatePostCommand:
-    title: str
-    slug: str
-    summary: str | None
-    content_md: str
-    author_id: int
-    status: str
-    visibility: str
-    cover_file_id: int | None
-    seo_title: str | None
-    seo_description: str | None
-    seo_keywords: str | None = None
-    category_names: Sequence[str] = ()
-    tag_names: Sequence[str] = ()
-    published_at: datetime | None = None
-
-
-@dataclass(frozen=True)
-class CreatePageCommand:
-    title: str
-    slug: str
-    content_md: str
-    status: str
-    show_in_nav: bool
-    sort_order: int
-    seo_title: str | None
-    seo_description: str | None
-
-
-@dataclass(frozen=True)
-class UpdatePostCommand:
-    title: str | UnsetType = UNSET
-    slug: str | UnsetType = UNSET
-    summary: str | None | UnsetType = UNSET
-    content_md: str | UnsetType = UNSET
-    status: str | UnsetType = UNSET
-    visibility: str | UnsetType = UNSET
-    cover_file_id: int | None | UnsetType = UNSET
-    seo_title: str | None | UnsetType = UNSET
-    seo_description: str | None | UnsetType = UNSET
-    seo_keywords: str | None | UnsetType = UNSET
-    category_names: Sequence[str] | None | UnsetType = UNSET
-    tag_names: Sequence[str] | None | UnsetType = UNSET
-    published_at: datetime | None | UnsetType = UNSET
-
-
-@dataclass(frozen=True)
-class UpdatePageCommand:
-    title: str | UnsetType = UNSET
-    slug: str | UnsetType = UNSET
-    content_md: str | UnsetType = UNSET
-    status: str | UnsetType = UNSET
-    show_in_nav: bool | UnsetType = UNSET
-    sort_order: int | UnsetType = UNSET
-    seo_title: str | None | UnsetType = UNSET
-    seo_description: str | None | UnsetType = UNSET
+from app.services.update_commands import is_set
 
 
 class ContentService:
@@ -338,7 +159,7 @@ class ContentService:
             seo_title=command.seo_title,
             seo_description=command.seo_description,
             seo_keywords=command.seo_keywords,
-            published_at=_published_at_for_status(
+            published_at=published_at_for_status(
                 status=command.status,
                 requested_at=command.published_at,
             ),
@@ -385,14 +206,14 @@ class ContentService:
                 post_id=post.id,
                 category_names=category_names,
             )
-            post.category_names = _normalize_labels(category_names)
+            post.category_names = normalize_labels(category_names)
         if is_set(command.tag_names):
             tag_names = command.tag_names or []
             await self.repository.replace_post_tags(
                 post_id=post.id,
                 tag_names=tag_names,
             )
-            post.tag_names = _normalize_labels(tag_names)
+            post.tag_names = normalize_labels(tag_names)
         if is_set(command.published_at):
             post.published_at = command.published_at
 
@@ -402,7 +223,7 @@ class ContentService:
             post.word_count = count_words(post.content_md)
 
         if is_set(command.status) and not is_set(command.published_at):
-            post.published_at = _published_at_for_status(
+            post.published_at = published_at_for_status(
                 status=post.status,
                 requested_at=post.published_at,
             )
@@ -512,7 +333,7 @@ class ContentService:
             raise ContentSlugExistsError("page slug already exists")
 
     async def _sync_post_file_usages(self, post: Post) -> None:
-        usages = _build_post_file_usages(
+        usages = build_post_file_usages(
             content_md=post.content_md,
             cover_file_id=post.cover_file_id,
         )
@@ -532,8 +353,8 @@ class ContentService:
         category_names: Sequence[str],
         tag_names: Sequence[str],
     ) -> None:
-        normalized_categories = _normalize_labels(category_names)
-        normalized_tags = _normalize_labels(tag_names)
+        normalized_categories = normalize_labels(category_names)
+        normalized_tags = normalize_labels(tag_names)
         await self.repository.replace_post_categories(
             post_id=post.id,
             category_names=normalized_categories,
@@ -546,54 +367,14 @@ class ContentService:
         post.tag_names = normalized_tags
 
 
-def _build_post_file_usages(
-    *,
-    content_md: str,
-    cover_file_id: int | None,
-) -> list[tuple[int, str]]:
-    usages: list[tuple[int, str]] = []
-    if cover_file_id is not None:
-        usages.append((cover_file_id, "cover"))
-
-    for file_id in _extract_post_body_file_ids(content_md):
-        usages.append((file_id, "post_body"))
-
-    seen: set[tuple[int, str]] = set()
-    deduped: list[tuple[int, str]] = []
-    for usage in usages:
-        if usage not in seen:
-            seen.add(usage)
-            deduped.append(usage)
-    return deduped
-
-
-def _extract_post_body_file_ids(content_md: str) -> list[int]:
-    pattern = re.compile(
-        r"/?api/public/posts/[a-z0-9][a-z0-9_-]*/files/(?P<file_id>\d+)/render",
-    )
-    return [int(match.group("file_id")) for match in pattern.finditer(content_md)]
-
-
-def _published_at_for_status(
-    *,
-    status: str,
-    requested_at: datetime | None,
-) -> datetime | None:
-    if status == "published":
-        return requested_at or utc_now()
-    if status == "scheduled":
-        return requested_at
-    return None
-
-
-def _normalize_labels(labels: Sequence[str]) -> list[str]:
-    normalized: list[str] = []
-    seen: set[str] = set()
-    for label in labels:
-        value = label.strip()
-        key = value.casefold()
-        if not value or key in seen:
-            continue
-        seen.add(key)
-        normalized.append(value[:64])
-    return normalized
+__all__ = [
+    "ContentFileNotFoundError",
+    "ContentNotFoundError",
+    "ContentRepositoryProtocol",
+    "ContentService",
+    "ContentSlugExistsError",
+    "CreatePageCommand",
+    "CreatePostCommand",
+    "UpdatePageCommand",
+    "UpdatePostCommand",
+]
