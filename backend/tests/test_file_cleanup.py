@@ -1,8 +1,10 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
+from PIL import Image
 
 from app.services.files import FileService, FileValidationError, UploadFileCommand
 
@@ -259,6 +261,31 @@ def test_upload_rejects_image_with_too_many_pixels() -> None:
         )
 
 
+def test_upload_reads_webp_dimensions_during_validation() -> None:
+    repository = FakeCleanupRepository([])
+    service = FileService(repository=repository, storage=FakeStorage())
+
+    result = asyncio.run(
+        service.upload_file(
+            UploadFileCommand(
+                original_name="cover.webp",
+                content_type="image/webp",
+                data=_webp_bytes(width=3, height=2),
+                visibility="public",
+                public_listed=False,
+                uploader_id=1,
+                alt_text=None,
+                max_size_bytes=1024,
+            ),
+        ),
+    )
+
+    assert result.width == 3
+    assert result.height == 2
+    assert repository.created_payload["width"] == 3
+    assert repository.created_payload["height"] == 2
+
+
 def test_upload_reuses_existing_file_only_when_metadata_matches() -> None:
     existing = _uploaded_file_item(
         file_id=7,
@@ -336,6 +363,15 @@ def _png_header(*, width: int, height: int) -> bytes:
         + b"\x08\x02\x00\x00\x00"
         + b"\x90wS\xde"
     )
+
+
+def _webp_bytes(*, width: int, height: int) -> bytes:
+    buffer = BytesIO()
+    Image.new("RGB", (width, height), color=(255, 255, 255)).save(
+        buffer,
+        format="WEBP",
+    )
+    return buffer.getvalue()
 
 
 def _file_item(file_id: int, object_key: str, sha256: str) -> object:

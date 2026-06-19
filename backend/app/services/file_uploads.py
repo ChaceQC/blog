@@ -1,6 +1,8 @@
 import struct
 import tempfile
+import warnings
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 
 from PIL import Image
@@ -148,6 +150,8 @@ def read_image_size(data: bytes, mime_type: str) -> tuple[int | None, int | None
         return width, height
     if mime_type == "image/jpeg":
         return read_jpeg_size(data)
+    if mime_type == "image/webp":
+        return read_pillow_image_size(data)
     return None, None
 
 
@@ -197,3 +201,18 @@ def read_jpeg_size(data: bytes) -> tuple[int | None, int | None]:
             return width, height
         index += length
     return None, None
+
+
+def read_pillow_image_size(data: bytes) -> tuple[int, int]:
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(BytesIO(data)) as image:
+                return image.width, image.height
+    except (
+        OSError,
+        ValueError,
+        Image.DecompressionBombError,
+        Image.DecompressionBombWarning,
+    ) as exc:
+        raise InvalidFileTypeError("invalid image file") from exc

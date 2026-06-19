@@ -78,10 +78,10 @@
 - P2 日志字段长度边界已修复：新增统一日志字段裁剪 helper，`LogService` 写入 access/audit/security 日志、`AuthService` 写入登录日志前都会按数据库列宽截断 `ip`、`path` 和 `user_agent`，避免超长 UA、异常代理头或长路径让日志记录本身触发数据库错误。该修复不涉及数据库字段变化，不需要新增 Alembic 迁移。
 - P2 后台加密 GET 前置会话校验已补齐：新增后台 `content-v1` / `sensitive-v1` 加密 session 预校验 dependency，内容、页面、文件列表/临时链接、友链、站点导航、设置和日志的加密 GET 会在业务列表、详情、计数或临时链接创建前先验证 `X-Encryption-Session`。该修复不涉及数据库迁移或服务器环境变量。
 - P3 后台加密会话单 IP 活跃上限已补齐：`/api/admin/encryption/sessions` 现在会向 `EncryptionSessionManager` 传入后台 scope 的活跃 session 上限，超过阈值返回 `429` 并写入 `security_events`；新增 `BLOG_ADMIN_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`，默认 `10`，已同步本地/部署 env 示例、README 和计划文档。该修复不涉及数据库迁移。
+- P3 WebP 上传阶段尺寸读取已补齐：`read_image_size()` 对 `image/webp` 使用 Pillow 在 warning-as-error 模式下读取宽高，并复用现有单边和总像素限制；无效 WebP 或解压炸弹警告会在上传校验阶段转为文件类型错误。该修复不涉及数据库迁移或服务器配置。
 
 ### 待修复清单
 
-- P3：WebP 上传未在上传阶段读取尺寸。上传校验会读取 PNG/GIF/JPEG 尺寸并限制单边和总像素，但 WebP 目前只校验 `RIFF/WEBP` 文件头，像素边界主要等到缩略图生成时由 Pillow 触发。建议在上传校验阶段用 Pillow 以 warning-as-error 方式读取 WebP 尺寸，提前拒绝超大像素图片。
 - P3：站点导航 `icon_url` 复用了 href validator。`SiteNavItemCreateRequest` / `SiteNavItemUpdateRequest` 对 `icon_url` 使用 `validate_public_href()`，当前测试也允许 `mailto:`；该字段进入前端 `<img src>`，应改用 `validate_public_image_src()`，只允许 `http/https/站内公开路径`。该修复需同步更新 `test_url_validation.py` 和前端预览边界。
 - P3：前端公开非文章查询的取消链路不完整。文章、页面、归档和分类/标签查询已透传 React Query `AbortSignal`；但公开文件、友链、站点目录和站点资料 API 还没有 signal 参数，`createEncryptionSession()` 内部 fetch 也没有接收 signal，当前只是让调用方 Promise 提前 reject，协商请求本身仍可能继续在网络层完成。建议统一把 signal 透传到公开 API 和加密会话协商 fetch。
 - P4：文章分类/标签请求缺少单项字符串长度上限。`category_names` 和 `tag_names` 只限制数组长度，Service/Repository 会在后续 normalize 时截断到 64 字符；建议在 Pydantic schema 层就限制每个名称长度，避免无意义的大字符串进入业务层。
@@ -90,7 +90,7 @@
 
 ### 进行中
 
-- 正在按待修复清单逐项推进；下一项处理 WebP 上传阶段的图片尺寸读取和像素限制。
+- 正在按待修复清单逐项推进；下一项处理站点导航 `icon_url` 的图片源 validator。
 
 ### 阻塞与风险
 
@@ -111,7 +111,7 @@
 
 - 在已部署服务器上按最新 `main` 发布后端和前端静态产物，并执行 Alembic 迁移到 `20260619_0009_friend_link_status_index.py`。
 - 服务器重新拉取最新 `main` 后，重新执行 `docker compose ... build nginx`，确认 Linux 镜像内 `npm ci` 不再缺少 `@emnapi/core` / `@emnapi/runtime`。
-- 处理 P3 WebP 上传阶段尺寸读取；该项预计不涉及数据库迁移或服务器配置。
+- 处理 P3 站点导航 `icon_url` 图片源 validator；该项预计不涉及数据库迁移或服务器配置。
 
 ### 验证
 
@@ -130,6 +130,8 @@
 - 后台加密 GET 前置校验修复后已运行 `uv run pytest tests/test_admin_content_api.py tests/test_admin_files_api.py tests/test_admin_links_api.py tests/test_admin_settings_api.py tests/test_admin_logs_api.py tests/test_admin_encryption_api.py`，53 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 后台加密会话活跃上限修复后已运行 `uv run ruff check app/api/admin/encryption.py app/core/config.py tests/test_admin_encryption_api.py tests/test_rate_limit_redis_integration.py`，通过。
 - 后台加密会话活跃上限修复后已运行 `uv run pytest tests/test_admin_encryption_api.py tests/test_rate_limit_redis_integration.py tests/test_public_content_api.py`，44 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- WebP 上传尺寸读取修复后已运行 `uv run ruff check app/services/file_uploads.py tests/test_file_cleanup.py`，通过。
+- WebP 上传尺寸读取修复后已运行 `uv run pytest tests/test_file_cleanup.py tests/test_admin_files_api.py`，27 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - P1 上传静态暴露修复后已运行文本检查，确认 `deploy/nginx/templates/blog.conf.template`、`deploy/docker-compose.yml` 和 `deploy/nginx/Dockerfile` 不再包含 `/uploads/` 静态 location、上传目录挂载或 nginx 镜像内上传目录创建。
 - 已运行 `uv run ruff check .`，通过。
 - 已运行 `uv run pytest tests/test_public_content_api.py tests/test_admin_files_api.py tests/test_request_client_ip.py tests/test_log_service.py tests/test_admin_logs_api.py`，53 个测试通过；仍存在 FastAPI/Starlette TestClient 与 per-request cookies 的上游弃用警告。
