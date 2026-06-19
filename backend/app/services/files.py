@@ -8,6 +8,8 @@ from typing import Protocol
 from app.core.auth import utc_now
 from app.core.storage import StorageProvider
 from app.models.file import BlogFile
+from app.services import file_downloads
+from app.services.file_downloads import FileDownload
 from app.services.file_errors import (
     FileAccessDeniedError,
     FileTooLargeError,
@@ -17,19 +19,17 @@ from app.services.file_errors import (
     InvalidFileVisibilityError,
     ManagedFileNotFoundError,
 )
+from app.services.file_maintenance import (
+    DeletedFileCleanupResult,
+    OrphanFileCleanupResult,
+    cleanup_deleted_files,
+    cleanup_orphan_files,
+)
 from app.services.file_read_models import (
     AdminFileRead,
     PublicFileRead,
     admin_file_read,
     public_file_read,
-)
-from app.services.file_storage import (
-    article_render_reference_exists,
-    create_thumbnail,
-    iter_managed_storage_files,
-    resolve_storage_path,
-    storage_path_to_object_key,
-    thumbnail_path,
 )
 from app.services.file_tokens import (
     ArticleRenderToken,
@@ -40,7 +40,6 @@ from app.services.file_tokens import (
     sign_file_token,
     verify_admin_file_preview_token,
     verify_article_render_token,
-    verify_file_token,
 )
 from app.services.file_uploads import (
     UploadFileCommand,
@@ -85,33 +84,6 @@ class TemporaryFileAccess:
     file: BlogFile
     token: str
     expires_at: datetime
-
-
-@dataclass(frozen=True)
-class FileDownload:
-    path: Path
-    media_type: str
-    filename: str
-
-
-@dataclass(frozen=True)
-class DeletedFileCleanupResult:
-    scanned_files: int
-    deleted_records: int
-    deleted_objects: int
-    missing_objects: int
-    skipped_files: int
-
-
-@dataclass(frozen=True)
-class OrphanFileCleanupResult:
-    scanned_files: int
-    tracked_files: int
-    orphan_files: int
-    deleted_files: int
-    skipped_files: int
-    dry_run: bool
-    orphan_object_keys: tuple[str, ...]
 
 
 class FileRepositoryProtocol(Protocol):
@@ -273,51 +245,11 @@ class FileService:
         deleted_before: datetime,
         limit: int,
     ) -> DeletedFileCleanupResult:
-        candidates = await self.repository.list_deleted_files_for_cleanup(
+        return await cleanup_deleted_files(
+            self.repository,
+            upload_root=upload_root,
             deleted_before=deleted_before,
             limit=limit,
-        )
-        deleted_records = 0
-        deleted_objects = 0
-        missing_objects = 0
-        skipped_files = 0
-
-        for file, usage_count in candidates:
-            if usage_count > 0:
-                skipped_files += 1
-                continue
-
-            path = resolve_storage_path(
-                upload_root,
-                file.object_key,
-                public_only=False,
-            )
-            if path is None:
-                skipped_files += 1
-                continue
-
-            if path.is_file():
-                path.unlink()
-                deleted_objects += 1
-            else:
-                missing_objects += 1
-
-            file_thumbnail_path = thumbnail_path(upload_root, file)
-            if file_thumbnail_path.is_file():
-                file_thumbnail_path.unlink()
-
-            await self.repository.delete_file_record(file.id)
-            deleted_records += 1
-
-        if deleted_records > 0:
-            await self.repository.commit()
-
-        return DeletedFileCleanupResult(
-            scanned_files=len(candidates),
-            deleted_records=deleted_records,
-            deleted_objects=deleted_objects,
-            missing_objects=missing_objects,
-            skipped_files=skipped_files,
         )
 
     async def cleanup_orphan_files(
@@ -327,52 +259,11 @@ class FileService:
         limit: int,
         dry_run: bool = True,
     ) -> OrphanFileCleanupResult:
-        tracked_object_keys = set(await self.repository.list_storage_object_keys())
-        scanned_files = 0
-        tracked_files = 0
-        orphan_files = 0
-        deleted_files = 0
-        skipped_files = 0
-        orphan_object_keys: list[str] = []
-
-        for path in iter_managed_storage_files(upload_root):
-            if scanned_files >= limit:
-                break
-            scanned_files += 1
-
-            object_key = storage_path_to_object_key(upload_root, path)
-            if object_key is None:
-                skipped_files += 1
-                continue
-
-            if object_key in tracked_object_keys:
-                tracked_files += 1
-                continue
-
-            orphan_files += 1
-            orphan_object_keys.append(object_key)
-            if dry_run:
-                continue
-
-            resolved_path = resolve_storage_path(
-                upload_root,
-                object_key,
-                public_only=False,
-            )
-            if resolved_path != path:
-                skipped_files += 1
-                continue
-            path.unlink()
-            deleted_files += 1
-
-        return OrphanFileCleanupResult(
-            scanned_files=scanned_files,
-            tracked_files=tracked_files,
-            orphan_files=orphan_files,
-            deleted_files=deleted_files,
-            skipped_files=skipped_files,
+        return await cleanup_orphan_files(
+            self.repository,
+            upload_root=upload_root,
+            limit=limit,
             dry_run=dry_run,
-            orphan_object_keys=tuple(orphan_object_keys),
         )
 
     async def delete_file(self, file_id: int) -> AdminFileRead:
@@ -432,27 +323,12 @@ class FileService:
         secret_key: str,
         upload_root: Path,
     ) -> FileDownload:
-        file = await self.repository.get_file(file_id)
-        if file is None:
-            raise ManagedFileNotFoundError("file not found")
-        if file.visibility != "public" or file.status != "active":
-            raise FileAccessDeniedError("file is not public")
-        if not verify_file_token(
-            token,
-            file_id=file.id,
-            sha256=file.sha256,
+        return await file_downloads.prepare_public_download(
+            self.repository,
+            file_id=file_id,
+            token=token,
             secret_key=secret_key,
-        ):
-            raise InvalidFileAccessTokenError("invalid temporary file token")
-
-        path = resolve_storage_path(upload_root, file.object_key)
-        if path is None or not path.is_file():
-            raise ManagedFileNotFoundError("stored file not found")
-
-        return FileDownload(
-            path=path,
-            media_type=file.mime_type,
-            filename=file.original_name,
+            upload_root=upload_root,
         )
 
     async def prepare_admin_download(
@@ -461,20 +337,10 @@ class FileService:
         file_id: int,
         upload_root: Path,
     ) -> FileDownload:
-        file = await self.repository.get_file(file_id)
-        if file is None:
-            raise ManagedFileNotFoundError("file not found")
-        if file.status != "active":
-            raise FileAccessDeniedError("file is not downloadable")
-
-        path = resolve_storage_path(upload_root, file.object_key, public_only=False)
-        if path is None or not path.is_file():
-            raise ManagedFileNotFoundError("stored file not found")
-
-        return FileDownload(
-            path=path,
-            media_type=file.mime_type,
-            filename=file.original_name,
+        return await file_downloads.prepare_admin_download(
+            self.repository,
+            file_id=file_id,
+            upload_root=upload_root,
         )
 
     async def prepare_article_render(
@@ -487,32 +353,14 @@ class FileService:
         post_content_html: str,
         upload_root: Path,
     ) -> FileDownload:
-        file = await self.repository.get_file(file_id)
-        if file is None:
-            raise ManagedFileNotFoundError("file not found")
-        if (
-            file.visibility != "public"
-            or file.status != "active"
-            or not file.mime_type.startswith("image/")
-        ):
-            raise FileAccessDeniedError("file is not renderable")
-        if not article_render_reference_exists(
+        return await file_downloads.prepare_article_render(
+            self.repository,
+            file_id=file_id,
             post_slug=post_slug,
-            file_id=file.id,
-            cover_file_id=post_cover_file_id,
-            content_md=post_content_md,
-            content_html=post_content_html,
-        ):
-            raise FileAccessDeniedError("file is not referenced by post")
-
-        path = resolve_storage_path(upload_root, file.object_key)
-        if path is None or not path.is_file():
-            raise ManagedFileNotFoundError("stored file not found")
-
-        return FileDownload(
-            path=path,
-            media_type=file.mime_type,
-            filename=file.original_name,
+            post_cover_file_id=post_cover_file_id,
+            post_content_md=post_content_md,
+            post_content_html=post_content_html,
+            upload_root=upload_root,
         )
 
     async def prepare_article_thumbnail(
@@ -526,40 +374,15 @@ class FileService:
         upload_root: Path,
         max_side: int = 360,
     ) -> FileDownload:
-        file = await self.repository.get_file(file_id)
-        if file is None:
-            raise ManagedFileNotFoundError("file not found")
-        if (
-            file.visibility != "public"
-            or file.status != "active"
-            or not file.mime_type.startswith("image/")
-        ):
-            raise FileAccessDeniedError("file is not thumbnailable")
-        if not article_render_reference_exists(
+        return await file_downloads.prepare_article_thumbnail(
+            self.repository,
+            file_id=file_id,
             post_slug=post_slug,
-            file_id=file.id,
-            cover_file_id=post_cover_file_id,
-            content_md=post_content_md,
-            content_html=post_content_html,
-        ):
-            raise FileAccessDeniedError("file is not referenced by post")
-
-        source_path = resolve_storage_path(upload_root, file.object_key)
-        if source_path is None or not source_path.is_file():
-            raise ManagedFileNotFoundError("stored file not found")
-
-        file_thumbnail_path = thumbnail_path(upload_root, file)
-        if not file_thumbnail_path.is_file():
-            create_thumbnail(
-                source_path=source_path,
-                target_path=file_thumbnail_path,
-                max_side=max_side,
-            )
-
-        return FileDownload(
-            path=file_thumbnail_path,
-            media_type="image/jpeg",
-            filename=f"{Path(file.original_name).stem}-thumb.jpg",
+            post_cover_file_id=post_cover_file_id,
+            post_content_md=post_content_md,
+            post_content_html=post_content_html,
+            upload_root=upload_root,
+            max_side=max_side,
         )
 
     async def prepare_admin_preview(
@@ -571,27 +394,13 @@ class FileService:
         secret_key: str,
         upload_root: Path,
     ) -> FileDownload:
-        file = await self.repository.get_file(file_id)
-        if file is None:
-            raise ManagedFileNotFoundError("file not found")
-        if file.status != "active" or not file.mime_type.startswith("image/"):
-            raise FileAccessDeniedError("file is not previewable")
-        if not verify_admin_file_preview_token(
+        return await file_downloads.prepare_admin_preview(
+            self.repository,
+            file_id=file_id,
             token=token,
             expires=expires,
-            file_id=file.id,
             secret_key=secret_key,
-        ):
-            raise InvalidFileAccessTokenError("invalid preview token")
-
-        path = resolve_storage_path(upload_root, file.object_key, public_only=False)
-        if path is None or not path.is_file():
-            raise ManagedFileNotFoundError("stored file not found")
-
-        return FileDownload(
-            path=path,
-            media_type=file.mime_type,
-            filename=file.original_name,
+            upload_root=upload_root,
         )
 
     async def prepare_admin_thumbnail(
@@ -601,30 +410,9 @@ class FileService:
         upload_root: Path,
         max_side: int = 360,
     ) -> FileDownload:
-        file = await self.repository.get_file(file_id)
-        if file is None:
-            raise ManagedFileNotFoundError("file not found")
-        if file.status != "active" or not file.mime_type.startswith("image/"):
-            raise FileAccessDeniedError("file is not thumbnailable")
-
-        source_path = resolve_storage_path(
-            upload_root,
-            file.object_key,
-            public_only=False,
-        )
-        if source_path is None or not source_path.is_file():
-            raise ManagedFileNotFoundError("stored file not found")
-
-        file_thumbnail_path = thumbnail_path(upload_root, file)
-        if not file_thumbnail_path.is_file():
-            create_thumbnail(
-                source_path=source_path,
-                target_path=file_thumbnail_path,
-                max_side=max_side,
-            )
-
-        return FileDownload(
-            path=file_thumbnail_path,
-            media_type="image/jpeg",
-            filename=f"{Path(file.original_name).stem}-thumb.jpg",
+        return await file_downloads.prepare_admin_thumbnail(
+            self.repository,
+            file_id=file_id,
+            upload_root=upload_root,
+            max_side=max_side,
         )
