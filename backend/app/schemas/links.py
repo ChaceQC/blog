@@ -4,7 +4,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.site_nav_tags import normalize_site_nav_tags_json
-from app.core.url_validation import validate_http_url, validate_public_href
+from app.core.url_validation import (
+    validate_http_url,
+    validate_public_href,
+    validate_public_image_src,
+)
 
 FriendLinkStatus = Literal["pending", "healthy", "rejected"]
 SiteNavOpenTarget = Literal["blank", "self"]
@@ -287,12 +291,19 @@ class SiteNavItemCreateRequest(BaseModel):
     def _normalize_tags_json(cls, value: object) -> dict[str, list[str]] | None:
         return normalize_site_nav_tags_json(value)
 
-    @field_validator("url", "icon_url")
+    @field_validator("url")
     @classmethod
     def _validate_public_href(cls, value: str | None) -> str | None:
         if value is None:
             return value
         return validate_public_href(value)
+
+    @field_validator("icon_url")
+    @classmethod
+    def _validate_public_image_src(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return validate_public_image_src(value)
 
 
 class SiteNavItemUpdateRequest(BaseModel):
@@ -313,9 +324,16 @@ class SiteNavItemUpdateRequest(BaseModel):
     def _normalize_tags_json(cls, value: object) -> dict[str, list[str]] | None:
         return normalize_site_nav_tags_json(value)
 
-    @field_validator("url", "icon_url")
+    @field_validator("url")
     @classmethod
     def _validate_public_href(cls, value: str | None) -> str | None:
         if value is None:
             return value
         return validate_public_href(value)
+
+    @field_validator("icon_url")
+    @classmethod
+    def _validate_public_image_src(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return validate_public_image_src(value)

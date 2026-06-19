@@ -11,6 +11,7 @@ from app.schemas.links import (
     FriendLinkCreateRequest,
     PublicFriendLinkApplicationRequest,
     SiteNavItemCreateRequest,
+    SiteNavItemUpdateRequest,
 )
 
 
@@ -39,17 +40,25 @@ def test_public_friend_application_rejects_invalid_http_port() -> None:
         )
 
 
-def test_site_nav_item_allows_site_path_and_mailto_but_rejects_script() -> None:
+def test_site_nav_item_allows_site_path_and_mailto_href_but_rejects_script() -> None:
     item = SiteNavItemCreateRequest(
         title="站内入口",
-        url="/posts",
-        icon_url="mailto:admin@example.com",
+        url="mailto:admin@example.com",
+        icon_url="/favicon.svg",
     )
 
-    assert item.url == "/posts"
-    assert item.icon_url == "mailto:admin@example.com"
+    assert item.url == "mailto:admin@example.com"
+    assert item.icon_url == "/favicon.svg"
     with pytest.raises(ValueError):
         SiteNavItemCreateRequest(title="坏入口", url="javascript:alert(1)")
+    with pytest.raises(ValueError):
+        SiteNavItemCreateRequest(
+            title="坏图标",
+            url="/posts",
+            icon_url="mailto:admin@example.com",
+        )
+    with pytest.raises(ValueError):
+        SiteNavItemUpdateRequest(icon_url="mailto:admin@example.com")
 
 
 @pytest.mark.parametrize(
