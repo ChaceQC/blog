@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from app.api.admin.dependencies import (
     AdminCsrfDependency,
     AuthServiceDependency,
-    CurrentAdminUserDependency,
+    EncryptedCurrentAdminUserDependency,
 )
 from app.api.admin.session import (
     clear_admin_session_cookies,
@@ -21,7 +21,6 @@ from app.api.dependencies import (
 )
 from app.api.encrypted_response import (
     encrypted_response,
-    require_encryption_session,
     validate_encryption_session,
 )
 from app.api.limits import enforce_rate_limit
@@ -161,13 +160,12 @@ async def logout(
 
 @router.get("/me", response_model=EncryptedApiResponse)
 async def me(
-    current_user: CurrentAdminUserDependency,
+    current_user: EncryptedCurrentAdminUserDependency,
     request: Request,
     response: Response,
     settings: SettingsDependency,
     encryption_manager: EncryptionSessionManagerDependency,
 ) -> EncryptedApiResponse:
-    require_encryption_session(request)
     csrf_token = ensure_csrf_cookie(request, response, settings=settings)
     return await encrypted_response(
         session_response(

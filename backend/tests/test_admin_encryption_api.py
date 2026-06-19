@@ -144,6 +144,13 @@ class RaisingAuthService:
     ) -> TokenPair:
         raise AssertionError("login service should not be called")
 
+    async def authenticate_access_token(
+        self,
+        *,
+        access_token: str,
+    ) -> AuthenticatedUser:
+        raise AssertionError("auth service should not be called")
+
 
 class FakeLogService:
     async def record_security_event(self, **_: object) -> None:
@@ -278,6 +285,51 @@ def test_login_rejects_public_encryption_session_before_authentication() -> None
             "/api/admin/auth/login",
             headers={"X-Encryption-Session": session_payload["session_id"]},
             json={"username": "admin", "password": "correct-password"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid encryption session"
+
+
+def test_me_rejects_public_encryption_session_before_authentication() -> None:
+    client_private_key = ec.generate_private_key(ec.SECP256R1())
+    client = TestClient(app)
+    encryption_repository = FakeEncryptionSessionRepository()
+    encryption_manager = EncryptionSessionManager(
+        repository=encryption_repository,
+        settings=get_settings(),
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        encryption_manager
+    )
+    try:
+        session_response = client.post(
+            "/api/public/encryption/sessions",
+            json={
+                "client_public_key": _export_public_key(
+                    client_private_key.public_key(),
+                ),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert session_response.status_code == 200
+    session_payload = session_response.json()
+
+    app.dependency_overrides[get_auth_service] = lambda: RaisingAuthService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        encryption_manager
+    )
+    try:
+        response = client.get(
+            "/api/admin/auth/me",
+            headers={
+                "X-Encryption-Session": session_payload["session_id"],
+                "Authorization": "Bearer token-that-must-not-be-checked",
+            },
         )
     finally:
         app.dependency_overrides.clear()

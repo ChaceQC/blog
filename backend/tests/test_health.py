@@ -29,12 +29,13 @@ def test_admin_auth_login_endpoint_is_mounted() -> None:
     assert response.status_code == 422
 
 
-def test_admin_auth_me_requires_bearer_token() -> None:
+def test_admin_auth_me_requires_encryption_session_before_bearer_token() -> None:
     client = TestClient(app)
 
     response = client.get("/api/admin/auth/me")
 
-    assert response.status_code == 401
+    assert response.status_code == 400
+    assert response.json()["detail"] == "missing encryption session"
 
 
 def test_admin_cors_allows_encryption_session_header() -> None:

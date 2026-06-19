@@ -9,7 +9,13 @@ from app.api.admin.session import (
     csrf_token_from_request,
     verify_csrf_tokens,
 )
-from app.api.dependencies import SessionDependency, SettingsDependency
+from app.api.dependencies import (
+    EncryptionSessionManagerDependency,
+    SessionDependency,
+    SettingsDependency,
+)
+from app.api.encrypted_response import validate_encryption_session
+from app.core.encryption import EncryptionProfile
 from app.policies.auth import AuthPolicy
 from app.repositories.auth import AuthRepository
 from app.repositories.link_groups import LinkGroupRepository
@@ -69,6 +75,30 @@ async def get_current_admin_user(
 CurrentAdminUserDependency = Annotated[
     AuthenticatedUser,
     Depends(get_current_admin_user),
+]
+
+
+async def get_current_admin_user_with_encryption(
+    credentials: BearerCredentials,
+    request: Request,
+    service: AuthServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+) -> AuthenticatedUser:
+    await validate_encryption_session(
+        request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.SENSITIVE,
+    )
+    return await get_current_admin_user(
+        credentials=credentials,
+        request=request,
+        service=service,
+    )
+
+
+EncryptedCurrentAdminUserDependency = Annotated[
+    AuthenticatedUser,
+    Depends(get_current_admin_user_with_encryption),
 ]
 
 

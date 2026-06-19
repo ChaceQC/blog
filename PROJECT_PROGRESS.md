@@ -50,11 +50,11 @@
 - P2 公开站点跳转写放大已收敛：`/api/public/site-items/{item_id}/visit` 会先只读确认公开站点项，再用现有 Redis/内存去重后端按 `IP + item_id` 和 `BLOG_ACCESS_LOG_DEDUPE_SECONDS` 短窗口判断是否递增点击计数、写访问日志；窗口内重复访问仍正常返回 `302`，但不重复写 `click_count` 和 `access_logs`，访问日志不再记录 `click_count/open_target` 明细。
 - P2 日志保留清理任务已补齐：新增 `cleanup-logs` CLI、`blog-cleanup-logs.service/timer`、日志保留 Service 和四张日志表按 `created_at` 批量删除能力；默认访问日志保留 30 天，审计/登录/安全事件保留 180 天，每张表单次最多删除 5000 条，天数传 `0` 可跳过对应表。新增 Alembic 迁移 `20260619_0008_log_retention_indexes.py`，为 `audit_logs`、`login_logs` 和 `security_events` 补 `created_at` 索引，`access_logs` 已有索引。
 - P2 公开友链申请 URL/域名去重和待审上限已补齐：公开申请入口改用 `create_public_friend_link_application()`，会规范化 URL、拒绝与现有 `pending/healthy` 友链重复的 URL，并限制全站待审数量和同域待审数量；公开申请成功日志不再记录申请 name/url 明细。新增 Alembic 迁移 `20260619_0009_friend_link_status_index.py`，为 `friend_links.status` 补查询索引；未添加 URL 唯一约束，避免历史重复数据阻塞迁移。
+- P3 后台 `/api/admin/auth/me` 已前置校验加密会话：新增 `EncryptedCurrentAdminUserDependency`，会先验证 admin scope 的 `sensitive-v1` session，再解析 Access Token 和查询当前用户；缺少或无效 `X-Encryption-Session` 不再触发认证查询。该修复不涉及数据库迁移或服务器环境变量。
 
 ### 待修复清单
 
 - P3：访问日志和审计日志的 detail/after payload 仍不够最小化。公开日志仍记录列表 limit/offset/count/total、文章/分类/标签 slug、文件名和 media_type；后台审计仍记录友链 URL、站点 URL/icon/tags、内容 title/slug/status、文件 original_name/mime/visibility/status 等实体摘要。日志只在后台可读，但一旦日志泄露或被误导出，会暴露内容结构、URL、文件名和管理操作摘要。建议公开访问日志只保留 type/status/entity_id/path/IP/UA/时间，audit 只保留 changed_fields、状态类摘要或哈希，避免记录正文、URL、文件名等可复原业务信息。
-- P3：后台 `/api/admin/auth/me` 仍未在依赖查询前校验加密会话有效性。`backend/app/api/admin/auth.py` 先解析当前用户/JWT 并触发认证查询，函数内只调用 `require_encryption_session()` 检查 header 是否存在，真正 session scope/profile 有效性在 `encrypted_response()` 时才校验。无有效 session 不会泄露数据，但拒绝太晚，已登录请求可在无效加密会话下白白触发认证和权限查询。建议像 public 加密 GET 一样增加前置 `validate_encryption_session(profile=SENSITIVE, scope=admin)` dependency，并确保顺序早于业务查询。
 - P3：logout 仍兼容请求体中的 `refresh_token`，刷新接口已收敛为只读 HttpOnly Cookie。`backend/app/api/admin/auth.py` 的 logout 会读取 `payload.refresh_token` 或 Cookie，`backend/app/schemas/auth.py` 仍保留 `LogoutRequest.refresh_token`；前端实际发送空 body。该路径不是直接漏洞，CSRF 仍会校验，但与“刷新令牌不进入 JS、请求体、代理日志”的原则不一致。建议 logout 也只读取 HttpOnly Cookie，删除 body token 兼容面。
 - P3：公开 href validator 允许任意站内路径，管理员配置可把公开入口指向后台或 API 路径。`backend/app/core/url_validation.py` 在 `allow_site_path=True` 时接受任意 `/...`，用于站点导航和社交链接。由于 URL 需要管理员配置/审核，风险较低；但公开页面可出现 `/api/admin/...`、`/admin/...` 等不适合访客点击的同站入口，造成边界混淆或误操作诱导。建议区分“公开 href”和“内部功能入口”，对 `/api/admin`、`/admin` 等敏感前缀做 denylist 或显式 allowlist。
 - P3：配置/计划文档存在访问日志策略漂移。`PROJECT_PLAN.md` 仍提到高频成功访问可通过 `BLOG_ACCESS_LOG_SKIP_TYPES` 跳过写库，`backend/app/core/config.py` 也保留未使用的 `access_log_skip_types` 字段；当前真实策略已改为 `BLOG_ACCESS_LOG_DEDUPE_SECONDS` 短时去重。风险是运维误以为 skip types 生效，实际配置不会改变行为。建议删除残留配置字段并同步计划文档。
@@ -81,7 +81,7 @@
 
 ### 下一步
 
-- 继续修复 P3 日志 detail/after payload 最小化、后台 `/api/admin/auth/me` 加密会话前置校验、logout 只读 HttpOnly Cookie、公开 href 敏感路径 denylist 和访问日志残留配置漂移。
+- 继续修复 P3 日志 detail/after payload 最小化、logout 只读 HttpOnly Cookie、公开 href 敏感路径 denylist 和访问日志残留配置漂移。
 
 ### 验证
 
@@ -140,6 +140,8 @@
 - 公开友链申请去重/上限修复后已运行 `uv run ruff check app/core/url_validation.py app/api/public/links.py app/models/link.py app/repositories/links.py app/services/links.py tests/test_link_service.py tests/test_public_content_api.py tests/test_url_validation.py`，通过。
 - 公开友链申请去重/上限修复后已运行 `uv run alembic downgrade 20260619_0009:20260619_0008 --sql`，可正常生成回滚 SQL。
 - 公开友链申请去重/上限修复后已运行 `uv run alembic upgrade head --sql`，可正常生成从空库到 `20260619_0009` 的 MySQL 迁移 SQL。
+- 后台 `/api/admin/auth/me` 加密会话前置校验修复后已运行 `uv run pytest tests/test_admin_encryption_api.py tests/test_health.py tests/test_admin_security.py`，23 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- 后台 `/api/admin/auth/me` 加密会话前置校验修复后已运行 `uv run ruff check app/api/admin/dependencies.py app/api/admin/auth.py tests/test_admin_encryption_api.py tests/test_health.py`，通过。
 - API 共享依赖状态迁移后已运行 `uv run pytest tests/test_rate_limit.py tests/test_log_service.py tests/test_public_content_api.py tests/test_admin_encryption_api.py`，49 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run lint`，通过。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
