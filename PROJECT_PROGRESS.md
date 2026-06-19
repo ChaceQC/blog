@@ -83,14 +83,15 @@
 - P3 前端公开非文章查询取消链路已补齐：底层 `apiGet` / `apiPost` 会把 `AbortSignal` 传入 fetch，加密会话协商 fetch 也接收 signal；公开文件、友链、站点目录、站点资料 API 以及对应页面/SEO/标题查询会透传 React Query 的 signal，切换页面时可取消仍在等待的公开请求。该修复不涉及数据库迁移或服务器配置。
 - P4 文章分类/标签请求单项长度上限已补齐：`category_names` 和 `tag_names` 的数组元素在 Pydantic schema 层限制为 1 到 64 字符，和 Service/Repository 的 taxonomy 名称归一化上限保持一致，避免超长单项进入业务层。该修复不涉及数据库迁移或服务器配置。
 - P4 FastAPI 根路径环境信息已最小化：`GET /` 只返回 `service` 和 `version`，不再返回 `environment`，降低后端端口误暴露时的环境信息泄露面。该修复不涉及数据库迁移或服务器配置。
+- P4 前端页面和面板体量已收敛：后台日志浏览器抽为 `AdminLogBrowser`，后台文件上传表单抽为 `AdminFileUploadPanel`，`AdminLogsPage` 和 `AdminFilesPage` 回到页面编排职责；当前 `frontend/src` 下未发现 400 行以上源码文件。该重构不涉及数据库迁移或服务器配置。
 
 ### 待修复清单
 
-- P4：前端部分页面和面板仍接近继续拆分阈值。当前无 400 行以上源码文件，但 `AdminPostsPage.tsx`、`AdminFilesPage.tsx`、`AdminLogsPage.tsx`、`AdminFriendLinksPanel.tsx`、`FileDetail.tsx`、`useAdminPostEditor.ts` 等已在 250-333 行区间；后续新增功能时应优先抽出表单块、列表块或 hook，避免重新回到大页面。
+- 暂无立即待修复项；前端文件体量继续作为后续新增功能的工程约束，新增表单、列表或复杂状态时优先抽出组件、hook 或纯工具，避免页面重新堆积。
 
 ### 进行中
 
-- 正在按待修复清单逐项推进；下一项复查前端文件体量阈值并处理需要立即拆分的文件。
+- 本轮待修复项已全部处理，正在执行最终全量验证和 `dev` 到 `main` 的合并收尾。
 
 ### 阻塞与风险
 
@@ -111,7 +112,7 @@
 
 - 在已部署服务器上按最新 `main` 发布后端和前端静态产物，并执行 Alembic 迁移到 `20260619_0009_friend_link_status_index.py`。
 - 服务器重新拉取最新 `main` 后，重新执行 `docker compose ... build nginx`，确认 Linux 镜像内 `npm ci` 不再缺少 `@emnapi/core` / `@emnapi/runtime`。
-- 复查 P4 前端页面和面板体量阈值；若仍无超过 400 行源码文件，则将该项收敛为持续约束并从待修复清单移除。
+- 完成最终全量验证后，将 `dev` 快进合并到 `main` 并推送，随后回到 `dev` 继续日常开发。
 
 ### 验证
 
@@ -142,6 +143,10 @@
 - 文章分类/标签单项长度修复后已运行 `uv run pytest tests/test_url_validation.py tests/test_content_service.py tests/test_admin_content_api.py`，30 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - FastAPI 根路径环境信息最小化后已运行 `uv run ruff check app/main.py tests/test_health.py tests/test_admin_security.py`，通过。
 - FastAPI 根路径环境信息最小化后已运行 `uv run pytest tests/test_health.py tests/test_admin_security.py`，17 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- 前端页面和面板体量收敛后已运行源码体量扫描，`frontend/src` 下未发现 400 行以上源码文件；当前最高为 `AdminPostsPage.tsx` 333 行，`AdminFilesPage.tsx` 253 行，`AdminLogBrowser.tsx` 252 行。
+- 前端页面和面板体量收敛后已运行 `npm.cmd run lint`，通过。
+- 前端页面和面板体量收敛后已运行 `npm.cmd test`，3 个测试文件 6 个测试通过。
+- 前端页面和面板体量收敛后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - P1 上传静态暴露修复后已运行文本检查，确认 `deploy/nginx/templates/blog.conf.template`、`deploy/docker-compose.yml` 和 `deploy/nginx/Dockerfile` 不再包含 `/uploads/` 静态 location、上传目录挂载或 nginx 镜像内上传目录创建。
 - 已运行 `uv run ruff check .`，通过。
 - 已运行 `uv run pytest tests/test_public_content_api.py tests/test_admin_files_api.py tests/test_request_client_ip.py tests/test_log_service.py tests/test_admin_logs_api.py`，53 个测试通过；仍存在 FastAPI/Starlette TestClient 与 per-request cookies 的上游弃用警告。

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileUp, LockKeyhole, Search, UploadCloud } from 'lucide-react'
-import { useMemo, useState, type ChangeEvent } from 'react'
+import { Search, UploadCloud } from 'lucide-react'
+import { useMemo, useState } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
 import { AdminModal } from '../../components/AdminModal.tsx'
@@ -12,6 +12,7 @@ import {
   listAdminFiles,
   uploadAdminFile,
 } from '../../features/files/api.ts'
+import { AdminFileUploadPanel } from '../../features/files/AdminFileUploadPanel.tsx'
 import { FileDetail } from '../../features/files/FileDetail.tsx'
 import { useAuth } from '../../features/auth/useAuth.ts'
 import { parseApiTime } from '../../utils/datetime.ts'
@@ -221,82 +222,21 @@ export function AdminFilesPage() {
           ) : null}
         </section>
 
-        <section className="admin-panel admin-panel--editor">
-          <div className="section-heading">
-            <span>上传说明</span>
-            <small>
-              <LockKeyhole size={14} strokeWidth={1.8} aria-hidden="true" />
-              文件夹
-            </small>
-          </div>
-          <form className="content-form">
-            <label>
-              文件
-              <span className="file-picker">
-                <input
-                  accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
-                  className="file-picker__input"
-                  onChange={(event) => handleFileChange(event, setUploadFile)}
-                  type="file"
-                />
-                <span className="file-picker__action" aria-hidden="true">
-                  <FileUp size={17} strokeWidth={1.8} />
-                  {uploadFile ? '重新选择' : '选择文件'}
-                </span>
-                <span className="file-picker__summary">
-                  <strong>{uploadFile?.name ?? '尚未选择文件'}</strong>
-                  <small>
-                    {uploadFile
-                      ? `${formatFileSize(uploadFile.size)} · ${
-                          uploadFile.type || '未知类型'
-                        }`
-                      : 'JPEG、PNG、GIF、WebP 或 PDF，最大 20MB'}
-                  </small>
-                </span>
-              </span>
-            </label>
-            <div className="form-grid form-grid--two">
-              <label>
-                可见性
-                <select
-                  onChange={(event) => {
-                    const nextVisibility = event.target.value as FileVisibility
-                    setVisibility(nextVisibility)
-                    if (nextVisibility === 'private') {
-                      setPublicListed(false)
-                    }
-                  }}
-                  value={visibility}
-                >
-                  <option value="public">公开</option>
-                  <option value="private">私有</option>
-                </select>
-              </label>
-              <label className="checkbox-field">
-                <input
-                  checked={publicListed}
-                  disabled={visibility !== 'public'}
-                  onChange={(event) => setPublicListed(event.target.checked)}
-                  type="checkbox"
-                />
-                展示在公开文件栏
-              </label>
-              <label>
-                替代文本
-                <input
-                  onChange={(event) => setAltText(event.target.value)}
-                  placeholder="用于图片说明"
-                  value={altText}
-                />
-              </label>
-            </div>
-          </form>
-          <div className="admin-note-list">
-            <p>可以上传 JPEG、PNG、GIF、WebP 和 PDF，单个文件不超过 20MB。</p>
-            <p>文章图片使用渲染接口，公开文件栏下载才生成短时链接。</p>
-            <p>删除后会先从列表移走，后面再统一清理原文件。</p>
-          </div>
-        </section>
+        <AdminFileUploadPanel
+          uploadFile={uploadFile}
+          visibility={visibility}
+          publicListed={publicListed}
+          altText={altText}
+          onUploadFileChange={setUploadFile}
+          onVisibilityChange={(nextVisibility) => {
+            setVisibility(nextVisibility)
+            if (nextVisibility === 'private') {
+              setPublicListed(false)
+            }
+          }}
+          onPublicListedChange={setPublicListed}
+          onAltTextChange={setAltText}
+        />
       </div>
       <AdminModal
         className="admin-modal--detail"
@@ -324,21 +264,4 @@ export function AdminFilesPage() {
       </AdminModal>
     </div>
   )
-}
-
-function handleFileChange(
-  event: ChangeEvent<HTMLInputElement>,
-  setUploadFile: (file: File | null) => void,
-) {
-  setUploadFile(event.target.files?.[0] ?? null)
-}
-
-function formatFileSize(sizeBytes: number): string {
-  if (sizeBytes < 1024) {
-    return `${sizeBytes} B`
-  }
-  if (sizeBytes < 1024 * 1024) {
-    return `${(sizeBytes / 1024).toFixed(1)} KB`
-  }
-  return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`
 }
