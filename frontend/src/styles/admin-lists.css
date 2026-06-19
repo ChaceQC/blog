@@ -1,0 +1,213 @@
+﻿.admin-workspace--files {
+  grid-template-columns: minmax(280px, 0.42fr) minmax(0, 1fr);
+  grid-template-areas: "list editor";
+}
+
+.admin-table__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 14px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.admin-table__row:first-child {
+  border-top: 0;
+}
+
+.admin-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: rgba(254, 254, 251, 0.72);
+  color: var(--color-neutral-6);
+}
+
+.admin-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-neutral-9);
+}
+
+.file-row {
+  width: 100%;
+  min-width: 0;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--color-neutral-2);
+}
+
+.file-list,
+.file-row span {
+  min-width: 0;
+}
+
+.file-row svg {
+  flex: 0 0 auto;
+}
+
+.file-row small {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.content-list {
+  display: grid;
+  gap: 8px;
+}
+
+.content-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  min-height: 66px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-neutral-8);
+  text-align: left;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.content-row.active,
+.content-row:hover {
+  color: var(--color-neutral-10);
+}
+
+.content-row.active {
+  border-color: rgba(197, 100, 115, 0.24);
+  background: rgba(254, 254, 251, 0.7);
+  box-shadow:
+    inset 3px 0 0 var(--color-accent),
+    0 8px 24px rgba(20, 19, 18, 0.045);
+}
+
+.content-row:hover {
+  border-color: rgba(20, 19, 18, 0.08);
+  background: rgba(254, 254, 251, 0.56);
+  box-shadow: 0 8px 22px rgba(20, 19, 18, 0.045);
+  transform: translateX(2px);
+}
+
+.content-row:active {
+  transform: translateX(1px) scale(0.997);
+}
+
+.content-row span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.content-row small,
+.empty-state {
+  color: var(--color-neutral-7);
+}
+
+.content-row code {
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+  color: var(--color-neutral-7);
+}
+
+.admin-tabs {
+  display: inline-flex;
+  gap: 6px;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 5px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-neutral-2);
+}
+
+.admin-tab {
+  flex: 0 0 auto;
+  min-width: 68px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-neutral-7);
+  font: inherit;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.admin-tab:hover,
+.admin-tab.active {
+  background: rgba(254, 254, 251, 0.86);
+  color: var(--color-neutral-10);
+  box-shadow: var(--shadow-whisper);
+  transform: translateY(-1px);
+}
+
+.log-browser {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+  gap: 18px;
+  min-height: 0;
+}
+
+.log-list {
+  max-height: min(62vh, 640px);
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.log-detail {
+  max-height: min(62vh, 640px);
+  overflow: auto;
+  padding: 14px;
+  border-left: 1px solid var(--color-border);
+}
+
+.log-json {
+  overflow: auto;
+  max-height: 220px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-neutral-2);
+  color: var(--color-neutral-8);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 920px) {
+  .log-browser {
+    grid-template-columns: 1fr;
+  }
+
+  .log-list,
+  .log-detail {
+    max-height: none;
+  }
+
+  .log-detail {
+    border-left: 0;
+    border-top: 1px solid var(--color-border);
+  }
+}

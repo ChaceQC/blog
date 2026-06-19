@@ -1,0 +1,121 @@
+﻿.admin-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.28fr) minmax(320px, 0.72fr);
+  gap: 22px;
+}
+
+.admin-panel {
+  display: grid;
+  min-width: 0;
+  gap: 20px;
+  padding: 22px;
+  animation: admin-panel-in 540ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.admin-panel:hover,
+.metric:hover {
+  border-color: rgba(20, 19, 18, 0.14);
+  background: rgba(254, 254, 251, 0.82);
+  box-shadow: 0 14px 42px rgba(20, 19, 18, 0.07);
+}
+
+.admin-workspace .admin-panel--list,
+.admin-columns .admin-panel:nth-child(1),
+.admin-workspace--two .admin-panel:nth-child(1) {
+  animation-delay: 150ms;
+}
+
+.admin-workspace .admin-panel--editor,
+.admin-columns .admin-panel:nth-child(2),
+.admin-workspace--two .admin-panel:nth-child(2) {
+  animation-delay: 210ms;
+}
+
+.admin-workspace .admin-panel--preview,
+.admin-workspace .admin-panel--groups {
+  animation-delay: 270ms;
+}
+
+.metric-grid .metric {
+  animation: admin-panel-in 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.metric-grid .metric:nth-child(1) {
+  animation-delay: 120ms;
+}
+
+.metric-grid .metric:nth-child(2) {
+  animation-delay: 170ms;
+}
+
+.metric-grid .metric:nth-child(3) {
+  animation-delay: 220ms;
+}
+
+.admin-panel--list,
+.admin-panel--editor,
+.admin-panel--preview,
+.admin-panel--groups {
+  align-content: start;
+}
+
+.admin-workspace {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.34fr) minmax(0, 1fr);
+  grid-template-areas:
+    "list editor"
+    "list preview";
+  gap: 22px;
+  align-items: start;
+}
+
+.admin-list-column {
+  position: sticky;
+  top: 24px;
+  grid-area: list;
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  max-height: calc(100svh - 48px);
+  overflow: auto;
+}
+
+.admin-list-column .admin-panel--list {
+  position: static;
+  grid-area: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.admin-list-column .admin-panel {
+  animation-name: admin-list-panel-in;
+}
+
+.admin-panel--list {
+  position: sticky;
+  top: 24px;
+  grid-area: list;
+  max-height: calc(100svh - 48px);
+  overflow: auto;
+}
+
+.admin-panel--editor {
+  grid-area: editor;
+}
+
+.admin-panel--preview {
+  grid-area: preview;
+}
+
+.admin-workspace--two {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.42fr);
+  grid-template-areas: "editor preview";
+}
+
+.admin-workspace--two .admin-panel--preview {
+  position: sticky;
+  top: 24px;
+  max-height: calc(100svh - 48px);
+  overflow: auto;
+}
+

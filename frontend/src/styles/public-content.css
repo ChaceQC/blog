@@ -1,0 +1,349 @@
+﻿.content-section {
+  display: grid;
+  gap: 18px;
+}
+
+.section-heading {
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.section-heading--stacked {
+  display: grid;
+  align-items: start;
+  justify-content: start;
+  gap: 2px;
+}
+
+.section-heading span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-neutral-10);
+  font-family: var(--font-serif);
+  font-size: 1.35rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.section-heading a,
+.section-heading small {
+  font-size: 0.9rem;
+}
+
+.section-heading small:first-child {
+  color: var(--color-neutral-6);
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+}
+
+.section-heading a,
+.inline-link {
+  flex-shrink: 0;
+  color: var(--color-neutral-8);
+  text-decoration: underline;
+  text-decoration-color: var(--color-neutral-5);
+  text-underline-offset: 4px;
+}
+
+.public-application-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 18px 0 4px;
+  border-top: 1px solid var(--color-border);
+}
+
+.public-application-form label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: var(--color-neutral-7);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.public-application-form input,
+.public-application-form textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  outline: 0;
+  background: rgba(254, 254, 251, 0.76);
+  color: var(--color-neutral-9);
+}
+
+.public-application-form input {
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.public-application-form textarea {
+  resize: vertical;
+  padding: 10px 12px;
+}
+
+.public-application-form input:focus,
+.public-application-form textarea:focus {
+  border-color: var(--color-accent);
+}
+
+.public-application-form__wide,
+.public-application-form button {
+  grid-column: 1 / -1;
+}
+
+.public-application-form button {
+  width: fit-content;
+  min-height: 42px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: #fff;
+  font-weight: 500;
+}
+
+.public-application-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.recent-section {
+  width: 100%;
+}
+
+.recent-list,
+.post-list,
+.compact-list,
+.admin-table,
+.file-list,
+.gateway-list {
+  display: grid;
+}
+
+.recent-item,
+.post-row,
+.compact-row {
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.recent-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 84px;
+  gap: 16px;
+  align-items: start;
+  min-height: 78px;
+  padding: 0 0 18px;
+  color: var(--color-neutral-9);
+}
+
+.recent-item:hover,
+.post-row:hover,
+.compact-row:hover,
+.site-tile:hover,
+.gateway-list a:hover {
+  background: transparent;
+  transform: translateY(-2px);
+}
+
+.recent-list {
+  position: relative;
+  gap: 0;
+  padding-top: 8px;
+}
+
+.recent-list::before {
+  position: absolute;
+  top: 20px;
+  bottom: 18px;
+  left: 18px;
+  width: 1px;
+  background: var(--color-neutral-4);
+  content: "";
+  transform-origin: top;
+}
+
+.recent-item:first-child::before {
+  position: absolute;
+  top: 12px;
+  bottom: 10px;
+  left: 18px;
+  width: 2px;
+  background: var(--color-accent);
+  content: "";
+  transform-origin: top;
+}
+
+.recent-item__index,
+.post-row__index {
+  color: var(--color-neutral-6);
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  transition:
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.recent-item:first-child .recent-item__index {
+  color: var(--color-accent);
+}
+
+.recent-item:hover .recent-item__index,
+.post-row:hover .post-row__index {
+  color: var(--color-accent);
+  transform: translateY(-1px) scale(1.04);
+}
+
+.recent-item__body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.recent-item strong,
+.post-row h2,
+.compact-row strong,
+.site-tile strong,
+.gateway-list strong,
+.admin-table__row strong,
+.file-row strong {
+  color: var(--color-neutral-10);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.recent-item strong {
+  font-family: var(--font-serif);
+  font-size: 1.12rem;
+  transition: color 180ms ease;
+}
+
+.recent-item:hover strong,
+.post-row:hover h2,
+.compact-row:hover strong,
+.site-tile:hover strong,
+.gateway-list a:hover strong {
+  color: var(--color-accent);
+}
+
+.recent-item time {
+  color: var(--color-neutral-6);
+  font-size: 0.9rem;
+  text-align: right;
+}
+
+.recent-item small {
+  color: var(--color-neutral-7);
+  font-size: 0.9rem;
+}
+
+.home-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr);
+  gap: 54px;
+  align-items: start;
+  width: min(1080px, 100%);
+  margin: 0 auto;
+}
+
+.side-column {
+  display: grid;
+  gap: 32px;
+  padding-left: 34px;
+  border-left: 1px solid var(--color-border);
+}
+
+.note-panel {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-height: 0;
+  padding: 0 0 28px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.note-panel p {
+  margin: 0;
+  color: var(--color-neutral-8);
+  font-family: var(--font-serif);
+}
+
+.note-panel--letter {
+  border-bottom: 0;
+}
+
+.musing-list {
+  display: grid;
+  gap: 14px;
+}
+
+.musing-item {
+  display: grid;
+  gap: 7px;
+  padding-left: 18px;
+  border-left: 1px solid var(--color-border);
+  transition:
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.musing-item:hover {
+  border-left-color: rgba(197, 100, 115, 0.42);
+  transform: translateX(2px);
+}
+
+.inline-link {
+  width: fit-content;
+  gap: 7px;
+  margin-top: auto;
+  font-size: 0.92rem;
+}
+
+.gateway-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: min(860px, 100%);
+}
+
+.gateway-list a {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-height: 112px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: rgba(254, 254, 251, 0.6);
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.gateway-list a:hover {
+  border-color: rgba(197, 100, 115, 0.28);
+  box-shadow: 0 10px 32px rgba(20, 19, 18, 0.055);
+}
+
+.gateway-list a svg {
+  transition:
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.gateway-list a:hover svg {
+  transform: translate(2px, -2px) rotate(-5deg);
+}
+

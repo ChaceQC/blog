@@ -58,6 +58,7 @@
 - P4 后台日志页已改为后端真分页：前端不再固定拉每类前 50 条后本地分页，而是按当前 tab 和页码请求 `limit=pageSize+1`、`offset=page*pageSize`，用额外一条探测是否还有下一页；日志超过 50 条时可继续翻页。该修复不涉及数据库迁移或服务器配置。
 - P4 文件服务返回边界已显式化：删除 `FileWithUsage.__getattr__` 动态代理，文件列表、上传和删除用例直接返回 `AdminFileRead`，API 层不再依赖“半 ORM、半 DTO”的隐式属性透传。该修复不涉及数据库迁移或服务器配置。
 - P4 前端自动化测试基础已补齐：新增 Vitest、Testing Library 和 jsdom，提供 `npm.cmd test`，并补充 URL 白名单、分页纯函数和后台日志 API `limit/offset` 参数测试，先覆盖本轮安全与分页回归点。该修复不涉及数据库迁移或服务器配置。
+- P4 前端 CSS 大文件已继续拆分：`public.css`、`forms.css`、`admin.css` 和 `base.css` 改为职责聚合入口，新增 public、forms、admin、base 分层 CSS 文件；当前 `frontend/src/styles` 下已无 400 行以上 CSS 文件。该修复不涉及数据库迁移或服务器配置。
 
 ### 待修复清单
 
@@ -160,6 +161,8 @@
 - 前端测试基础补齐后已运行 `npm.cmd test`，3 个测试文件、6 个测试通过。
 - 前端测试基础补齐后已运行 `npm.cmd run lint`，通过。
 - 前端测试基础补齐后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
+- 前端 CSS 大文件拆分后已运行 `npm.cmd run lint`，通过。
+- 前端 CSS 大文件拆分后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - API 共享依赖状态迁移后已运行 `uv run pytest tests/test_rate_limit.py tests/test_log_service.py tests/test_public_content_api.py tests/test_admin_encryption_api.py`，49 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run lint`，通过。
 - 前端分页和表单文本工具抽取后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。

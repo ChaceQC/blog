@@ -1,0 +1,240 @@
+﻿.content-form {
+  display: grid;
+  gap: 18px;
+}
+
+.content-form label,
+.field-group,
+.checkbox-field {
+  display: grid;
+  gap: 8px;
+  color: var(--color-neutral-7);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.field-label {
+  display: block;
+}
+
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.content-form input,
+.content-form textarea,
+.content-form select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  outline: 0;
+  background: rgba(254, 254, 251, 0.72);
+  color: var(--color-neutral-9);
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.content-form input,
+.content-form select {
+  min-height: 44px;
+  padding: 0 13px;
+}
+
+.content-form textarea {
+  min-height: 0;
+  resize: vertical;
+  padding: 12px 13px;
+}
+
+.markdown-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.markdown-toolbar--end {
+  justify-content: flex-end;
+}
+
+.markdown-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.markdown-toolbar .text-button,
+.markdown-toolbar .icon-button {
+  margin-top: 0;
+}
+
+.admin-preview-trigger {
+  flex: 0 0 auto;
+}
+
+.content-form input:focus,
+.content-form textarea:focus,
+.content-form select:focus {
+  background: rgba(254, 254, 251, 0.88);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(197, 100, 115, 0.12);
+}
+
+.form-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.form-grid--two {
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+}
+
+.form-grid--three {
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+}
+
+.checkbox-field {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  align-self: end;
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: rgba(254, 254, 251, 0.72);
+}
+
+.checkbox-field input {
+  width: 16px;
+  min-height: 16px;
+  accent-color: var(--color-accent);
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.inline-field {
+  display: grid;
+  gap: 7px;
+  color: var(--color-neutral-7);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.inline-field input {
+  width: 100%;
+  min-height: 40px;
+  min-width: 0;
+  padding: 0 11px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  outline: 0;
+  background: rgba(254, 254, 251, 0.72);
+  color: var(--color-neutral-9);
+}
+
+.inline-field input:focus {
+  border-color: var(--color-accent);
+}
+
+.admin-detail,
+.admin-note-list,
+.admin-stack-list,
+.detail-list,
+.settings-preview {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-detail,
+.settings-preview {
+  animation: soft-rise 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.admin-title-row,
+.file-inspector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-title-row {
+  justify-content: space-between;
+}
+
+.admin-title-row span,
+.file-inspector span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.admin-title-row strong,
+.file-inspector strong,
+.settings-grid strong,
+.settings-preview strong {
+  color: var(--color-neutral-10);
+  font-weight: 500;
+}
+
+.admin-title-row small,
+.file-inspector small,
+.settings-grid small,
+.settings-preview small {
+  color: var(--color-neutral-7);
+}
+
+.detail-list {
+  margin: 0;
+}
+
+.detail-list div,
+.settings-grid span {
+  display: grid;
+  gap: 4px;
+  padding: 11px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.detail-list dt {
+  color: var(--color-neutral-6);
+  font-size: 0.78rem;
+}
+
+.detail-list dd {
+  margin: 0;
+  color: var(--color-neutral-9);
+  overflow-wrap: anywhere;
+}
+
+.admin-inline-section {
+  display: grid;
+  gap: 14px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.admin-panel--groups .admin-inline-section {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.admin-note-list p {
+  margin: 0;
+  color: var(--color-neutral-7);
+  line-height: 1.7;
+}
+

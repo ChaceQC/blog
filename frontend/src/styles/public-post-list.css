@@ -1,0 +1,241 @@
+﻿.post-row__meta {
+  flex-wrap: wrap;
+}
+
+.post-categories {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.post-categories span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-neutral-7);
+}
+
+.post-categories span::before {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(197, 100, 115, 0.55);
+  content: "";
+}
+
+.post-row__footer {
+  align-self: end;
+  justify-content: space-between;
+}
+
+.post-row__footer span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.post-taxonomy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.post-taxonomy span {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-neutral-6);
+  font-size: 0.82rem;
+}
+
+.post-taxonomy span:hover {
+  border-bottom-color: rgba(197, 100, 115, 0.42);
+  color: var(--color-neutral-8);
+}
+
+.archive-filter-panel {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.archive-filter-group {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.archive-filter-group > span {
+  min-height: 32px;
+  color: var(--color-neutral-7);
+  font-size: 0.86rem;
+  line-height: 32px;
+}
+
+.archive-filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.archive-filter-chip {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--color-neutral-7);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  padding: 0 12px;
+  text-decoration: none;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.archive-filter-chip:hover {
+  background: rgba(254, 254, 251, 0.78);
+  border-color: rgba(197, 100, 115, 0.36);
+  color: var(--color-neutral-9);
+  transform: translateY(-1px);
+}
+
+.archive-filter-chip:disabled {
+  cursor: wait;
+  opacity: 0.62;
+  transform: none;
+}
+
+.archive-filter-chip.is-active {
+  border-color: rgba(197, 100, 115, 0.42);
+  color: var(--color-neutral-10);
+}
+
+.archive-filter-chip small {
+  color: var(--color-neutral-6);
+  font-size: 0.76rem;
+}
+
+.archive-filter-more {
+  min-width: 54px;
+  justify-content: center;
+}
+
+.taxonomy-modal-overlay {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(34, 31, 28, 0.18);
+  backdrop-filter: blur(8px);
+}
+
+.taxonomy-modal {
+  display: grid;
+  width: min(620px, 100%);
+  max-height: min(680px, calc(100vh - 48px));
+  gap: 18px;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: rgba(255, 254, 250, 0.96);
+  box-shadow: 0 24px 72px rgba(32, 29, 26, 0.16);
+  padding: 22px;
+}
+
+.taxonomy-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.taxonomy-modal__header small {
+  color: var(--color-neutral-6);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+}
+
+.taxonomy-modal__header h2 {
+  margin: 4px 0 0;
+  color: var(--color-neutral-10);
+  font-family: var(--font-serif);
+  font-size: clamp(1.35rem, 2.6vw, 1.8rem);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.taxonomy-modal__close {
+  flex-shrink: 0;
+}
+
+.taxonomy-modal__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 10px;
+}
+
+.taxonomy-modal__chip {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.pagination-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding-top: 18px;
+  color: var(--color-neutral-7);
+  font-size: 0.92rem;
+}
+
+.pagination-bar--compact {
+  justify-content: flex-start;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.84rem;
+}
+
+.pagination-bar--compact .text-button {
+  min-height: 32px;
+  margin-top: 0;
+  padding: 0 10px;
+}
+
+.timeline-link {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 38px;
+  gap: 7px;
+  color: var(--color-neutral-7);
+  font-size: 0.92rem;
+  transition:
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.timeline-link:hover {
+  color: var(--color-neutral-10);
+  transform: translateX(3px);
+}
+
