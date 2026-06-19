@@ -1,5 +1,9 @@
 from typing import Any
 
+LOG_IP_MAX_LENGTH = 64
+LOG_PATH_MAX_LENGTH = 500
+LOG_USER_AGENT_MAX_LENGTH = 500
+
 AUDIT_PAYLOAD_ALLOWED_KEYS = frozenset(
     {
         "changed_fields",
@@ -14,6 +18,18 @@ AUDIT_PAYLOAD_ALLOWED_KEYS = frozenset(
     },
 )
 SECURITY_EVENT_DETAIL_ALLOWED_KEYS = frozenset({"scope", "profile", "credential"})
+
+
+def sanitize_log_ip(value: str | None) -> str | None:
+    return _truncate_text(value, LOG_IP_MAX_LENGTH)
+
+
+def sanitize_log_path(value: str | None) -> str | None:
+    return _truncate_text(value, LOG_PATH_MAX_LENGTH)
+
+
+def sanitize_log_user_agent(value: str | None) -> str | None:
+    return _truncate_text(value, LOG_USER_AGENT_MAX_LENGTH)
 
 
 def sanitize_audit_log_payload(
@@ -62,3 +78,9 @@ def _safe_json_value(*, key: str, value: Any) -> Any:
     if isinstance(value, (str, bool, int, float)):
         return value
     return None
+
+
+def _truncate_text(value: str | None, max_length: int) -> str | None:
+    if value is None:
+        return None
+    return value[:max_length]

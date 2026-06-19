@@ -25,6 +25,9 @@ class FakeLogRepository:
     async def record_access_log(self, **kwargs: object) -> None:
         self.items.append(dict(kwargs))
 
+    async def record_security_event(self, **kwargs: object) -> None:
+        self.items.append(dict(kwargs))
+
     async def commit(self) -> None:
         self.commit_count += 1
 
@@ -279,6 +282,49 @@ def test_record_access_log_keeps_post_operations(monkeypatch) -> None:
 
     assert len(repository.items) == 2
     assert repository.commit_count == 2
+
+
+def test_record_access_log_truncates_fixed_length_fields(monkeypatch) -> None:
+    monkeypatch.setattr(logs_module, "get_settings", lambda: FakeSettings())
+    repository = FakeLogRepository()
+    service = LogService(repository=repository)
+
+    asyncio.run(
+        service.record_access_log(
+            access_type="public_posts_list",
+            method="POST",
+            path="/" + "p" * 800,
+            status_code=200,
+            ip="1" * 120,
+            user_agent="ua" * 400,
+        ),
+    )
+
+    item = repository.items[0]
+    assert len(item["path"]) == 500
+    assert len(item["ip"]) == 64
+    assert len(item["user_agent"]) == 500
+
+
+def test_record_security_event_truncates_fixed_length_fields() -> None:
+    repository = FakeLogRepository()
+    service = LogService(repository=repository)
+
+    asyncio.run(
+        service.record_security_event(
+            event_type="rate_limit.admin_login",
+            severity="medium",
+            ip="2" * 120,
+            user_agent="agent" * 200,
+            path="/api/" + "x" * 800,
+            detail_json={"credential": "username"},
+        ),
+    )
+
+    item = repository.items[0]
+    assert len(item["ip"]) == 64
+    assert len(item["user_agent"]) == 500
+    assert len(item["path"]) == 500
 
 
 def test_list_logs_sanitizes_historical_json_payloads() -> None:

@@ -16,6 +16,7 @@ from app.core.config import Settings
 from app.models.auth import RefreshToken, User
 from app.policies.auth import AuthPolicy
 from app.repositories.auth import Authorization
+from app.services.log_sanitizers import sanitize_log_ip, sanitize_log_user_agent
 
 
 class AuthenticationError(Exception):
@@ -137,8 +138,8 @@ class AuthService:
             username=user.username,
             success=True,
             user_id=user.id,
-            ip=ip,
-            user_agent=user_agent,
+            ip=sanitize_log_ip(ip),
+            user_agent=sanitize_log_user_agent(user_agent),
             reason=None,
         )
         await self.repository.commit()
@@ -254,8 +255,8 @@ class AuthService:
             username=username,
             success=False,
             user_id=user_id,
-            ip=ip,
-            user_agent=user_agent,
+            ip=sanitize_log_ip(ip),
+            user_agent=sanitize_log_user_agent(user_agent),
             reason=reason,
         )
         await self.repository.commit()

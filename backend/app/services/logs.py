@@ -16,6 +16,9 @@ from app.services.access_log_dedupe import (
 from app.services.log_sanitizers import (
     sanitize_access_log_detail,
     sanitize_audit_log_payload,
+    sanitize_log_ip,
+    sanitize_log_path,
+    sanitize_log_user_agent,
     sanitize_security_event_detail,
 )
 
@@ -237,9 +240,9 @@ class LogService:
             event_type=event_type,
             severity=severity,
             actor_id=actor_id,
-            ip=ip,
-            user_agent=user_agent,
-            path=path,
+            ip=sanitize_log_ip(ip),
+            user_agent=sanitize_log_user_agent(user_agent),
+            path=sanitize_log_path(path),
             detail_json=sanitize_security_event_detail(detail_json),
         )
         await self.repository.commit()
@@ -261,8 +264,8 @@ class LogService:
             entity_type=entity_type,
             entity_id=entity_id,
             actor_id=actor_id,
-            ip=ip,
-            user_agent=user_agent,
+            ip=sanitize_log_ip(ip),
+            user_agent=sanitize_log_user_agent(user_agent),
             before_json=sanitize_audit_log_payload(before_json),
             after_json=sanitize_audit_log_payload(after_json),
         )
@@ -291,12 +294,12 @@ class LogService:
         await self.repository.record_access_log(
             access_type=access_type,
             method=method,
-            path=path,
+            path=sanitize_log_path(path),
             status_code=status_code,
             entity_type=entity_type,
             entity_id=entity_id,
-            ip=ip,
-            user_agent=user_agent,
+            ip=sanitize_log_ip(ip),
+            user_agent=sanitize_log_user_agent(user_agent),
             detail_json=sanitize_access_log_detail(detail_json),
         )
         await self.repository.commit()

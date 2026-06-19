@@ -201,6 +201,23 @@ async def test_login_rejects_wrong_password_and_records_failure() -> None:
 
 
 @pytest.mark.anyio
+async def test_login_truncates_log_ip_and_user_agent() -> None:
+    settings = make_settings()
+    repository = FakeAuthRepository(make_user())
+    service = AuthService(repository=repository, settings=settings)
+
+    await service.login(
+        username="admin",
+        password="correct-password",
+        ip="3" * 120,
+        user_agent="ua" * 400,
+    )
+
+    assert len(repository.login_logs[0]["ip"]) == 64
+    assert len(repository.login_logs[0]["user_agent"]) == 500
+
+
+@pytest.mark.anyio
 async def test_refresh_rotates_refresh_token() -> None:
     repository = FakeAuthRepository(make_user())
     service = AuthService(repository=repository, settings=make_settings())
