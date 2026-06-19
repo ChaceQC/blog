@@ -70,6 +70,7 @@
 - P4 前台文章归档页已按展示职责拆分：新增 `TaxonomyFilters.tsx` 承载分类/标签筛选与更多弹窗，新增 `archiveHelpers.ts` 承载归档标题、SEO path 和筛选文案 helper；`PublicPostArchivePage.tsx` 降到 153 行，只保留数据查询、SEO 和页面编排。该修复不涉及数据库迁移或服务器配置。
 - P4 后台文件路由已按访问职责拆分：`backend/app/api/admin/files.py` 缩减为聚合器，新增 `files_common.py` 承载权限/表单/响应/下载日志 helper，新增 `file_management.py` 承载列表、上传、删除和临时 URL，新增 `file_access.py` 承载后台下载、预览和缩略图；原 `/api/admin/files*` URL、权限和响应契约保持不变。该修复不涉及数据库迁移或服务器配置。
 - 修复生产 Linux 镜像 `npm ci` 锁文件缺口：`frontend/package-lock.json` 补齐 `@napi-rs/wasm-runtime` 在 Linux/optional 依赖解析时需要的顶层 `@emnapi/core@1.11.1` 和 `@emnapi/runtime@1.11.1` 条目；同时在 `AGENT.md` 明确后续前端依赖变更必须考虑 Linux 镜像内 `npm ci`，避免 Windows 本地通过但 Docker 构建失败。
+- 修复后台日志分页总页数显示：四类后台日志列表接口现在返回真实 `total`，前端日志页改为每页请求 10 条并使用真实总数计算“第 X / Y 页”；日志页即使只有一页也会显示分页条，且当日志清理导致当前页越界时会自动回到最后一页。该修复不涉及数据库迁移或服务器配置。
 
 ### 待修复清单
 
@@ -77,7 +78,7 @@
 
 ### 进行中
 
-- 本轮 P4 工程结构和体量修复已完成，正在将 `dev` 的已验证结果合并到 `main`。
+- 无。后台日志分页总页数修复已完成并通过提交前验证。
 
 ### 阻塞与风险
 
@@ -118,6 +119,13 @@
 - 继续全量审计新增修复后已运行 `uv run pytest`，150 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 7 个 FastAPI/Starlette 上游弃用警告。
 - Linux `npm ci` 锁文件缺口修复后已运行 `npm.cmd ci --ignore-scripts`，通过并提示 0 个漏洞。
 - Linux `npm ci` 锁文件缺口修复后已运行 `npm.cmd run lint`，通过。
+- 后台日志分页总页数修复后已运行 `uv run pytest tests/test_admin_logs_api.py tests/test_log_service.py`，16 个测试通过；仍存在 FastAPI/Starlette TestClient 的上游弃用警告。
+- 后台日志分页总页数修复后已运行 `npm.cmd test -- src/features/logs/api.test.ts`，2 个测试通过。
+- 后台日志分页总页数修复后已运行 `uv run ruff check .`，通过。
+- 后台日志分页总页数修复后已运行 `npm.cmd run lint`，通过。
+- 后台日志分页总页数修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
+- 后台日志分页总页数修复后已运行 `uv run pytest`，210 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 7 个 FastAPI/Starlette 上游弃用警告。
+- 后台日志分页总页数修复后已运行 `npm.cmd test`，6 个测试通过。
 - Linux `npm ci` 锁文件缺口修复后已运行 `npm.cmd run build`，通过；Vite 仍提示单个主 chunk 超过 500 kB 的既有体积告警。
 - 尝试使用 Docker 验证 `node:24-alpine` 时，本机 Docker Desktop 未运行，无法连接 `dockerDesktopLinuxEngine`；Linux 容器内 `npm ci` 需在服务器或 Docker 可用环境复核。
 - 继续全量审计新增修复后已运行 `uv run alembic upgrade head --sql`，可正常生成从空库到 `20260619_0007` 的 MySQL 迁移 SQL；本轮新增修复未产生新迁移文件。

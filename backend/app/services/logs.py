@@ -95,6 +95,8 @@ class LogRepositoryProtocol(Protocol):
     async def list_audit_logs(self, *, limit: int, offset: int) -> Sequence[AuditLog]:
         ...
 
+    async def count_audit_logs(self) -> int: ...
+
     async def list_access_logs(
         self,
         *,
@@ -102,8 +104,12 @@ class LogRepositoryProtocol(Protocol):
         offset: int,
     ) -> Sequence[AccessLog]: ...
 
+    async def count_access_logs(self) -> int: ...
+
     async def list_login_logs(self, *, limit: int, offset: int) -> Sequence[LoginLog]:
         ...
+
+    async def count_login_logs(self) -> int: ...
 
     async def list_security_events(
         self,
@@ -111,6 +117,8 @@ class LogRepositoryProtocol(Protocol):
         limit: int,
         offset: int,
     ) -> Sequence[SecurityEvent]: ...
+
+    async def count_security_events(self) -> int: ...
 
     async def record_security_event(
         self,
@@ -172,6 +180,9 @@ class LogService:
         logs = await self.repository.list_audit_logs(limit=limit, offset=offset)
         return [audit_log_read(log) for log in logs]
 
+    async def count_audit_logs(self) -> int:
+        return await self.repository.count_audit_logs()
+
     async def list_access_logs(
         self,
         *,
@@ -181,6 +192,9 @@ class LogService:
         logs = await self.repository.list_access_logs(limit=limit, offset=offset)
         return [access_log_read(log) for log in logs]
 
+    async def count_access_logs(self) -> int:
+        return await self.repository.count_access_logs()
+
     async def list_login_logs(
         self,
         *,
@@ -189,6 +203,9 @@ class LogService:
     ) -> Sequence[LoginLogRead]:
         logs = await self.repository.list_login_logs(limit=limit, offset=offset)
         return [login_log_read(log) for log in logs]
+
+    async def count_login_logs(self) -> int:
+        return await self.repository.count_login_logs()
 
     async def list_security_events(
         self,
@@ -201,6 +218,9 @@ class LogService:
             offset=offset,
         )
         return [security_event_read(event) for event in events]
+
+    async def count_security_events(self) -> int:
+        return await self.repository.count_security_events()
 
     async def record_security_event(
         self,

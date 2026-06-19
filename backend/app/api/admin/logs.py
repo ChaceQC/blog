@@ -43,9 +43,11 @@ async def list_audit_logs(
     offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
     logs = await service.list_audit_logs(limit=limit, offset=offset)
+    total = await service.count_audit_logs()
     return await _logs_response(
         AuditLogListResponse(
             items=[AuditLogItem.model_validate(item) for item in logs],
+            total=total,
         ),
         request=request,
         encryption_manager=encryption_manager,
@@ -62,9 +64,11 @@ async def list_access_logs(
     offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
     logs = await service.list_access_logs(limit=limit, offset=offset)
+    total = await service.count_access_logs()
     return await _logs_response(
         AccessLogListResponse(
             items=[AccessLogItem.model_validate(item) for item in logs],
+            total=total,
         ),
         request=request,
         encryption_manager=encryption_manager,
@@ -81,9 +85,11 @@ async def list_login_logs(
     offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
     logs = await service.list_login_logs(limit=limit, offset=offset)
+    total = await service.count_login_logs()
     return await _logs_response(
         LoginLogListResponse(
             items=[LoginLogItem.model_validate(item) for item in logs],
+            total=total,
         ),
         request=request,
         encryption_manager=encryption_manager,
@@ -100,9 +106,11 @@ async def list_security_events(
     offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ) -> EncryptedApiResponse:
     events = await service.list_security_events(limit=limit, offset=offset)
+    total = await service.count_security_events()
     return await _logs_response(
         SecurityEventListResponse(
             items=[SecurityEventItem.model_validate(item) for item in events],
+            total=total,
         ),
         request=request,
         encryption_manager=encryption_manager,

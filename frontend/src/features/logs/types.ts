@@ -50,16 +50,20 @@ export type SecurityEventItem = {
 
 export type AccessLogListResponse = {
   items: AccessLogItem[]
+  total: number
 }
 
 export type AuditLogListResponse = {
   items: AuditLogItem[]
+  total: number
 }
 
 export type LoginLogListResponse = {
   items: LoginLogItem[]
+  total: number
 }
 
 export type SecurityEventListResponse = {
   items: SecurityEventItem[]
+  total: number
 }

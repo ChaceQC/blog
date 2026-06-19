@@ -38,7 +38,7 @@ export function AdminLogsPage() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [listPage, setListPage] = useState(0)
   const logQueryParams = {
-    limit: LIST_PAGE_SIZE + 1,
+    limit: LIST_PAGE_SIZE,
     offset: listPage * LIST_PAGE_SIZE,
   }
   const auditLogsQuery = useQuery({
@@ -97,13 +97,13 @@ export function AdminLogsPage() {
     loginLogsQuery.data,
     securityEventsQuery.data,
   ])
-  const hasNextPage = allFetchedRecords.length > LIST_PAGE_SIZE
-  const records = allFetchedRecords.slice(0, LIST_PAGE_SIZE)
-  const currentPageItemCount =
-    records.length === 0 && listPage > 0 ? LIST_PAGE_SIZE : records.length
-  const estimatedTotalItems = Math.max(
-    0,
-    listPage * LIST_PAGE_SIZE + currentPageItemCount + (hasNextPage ? 1 : 0),
+  const records = allFetchedRecords
+  const exactTotalItems = activeQuery.data?.total
+  const totalItems =
+    exactTotalItems ?? (listPage > 0 ? listPage * LIST_PAGE_SIZE + 1 : records.length)
+  const pagerPage = Math.min(
+    listPage,
+    Math.max(0, Math.ceil(totalItems / LIST_PAGE_SIZE) - 1),
   )
   const selectedRecord =
     records.find((record) => logKey(record) === selectedKey) ??
@@ -166,9 +166,10 @@ export function AdminLogsPage() {
               <p className="empty-state">暂无{tabLabels[activeTab]}日志。</p>
             ) : null}
             <ListPager
-              page={listPage}
+              page={pagerPage}
               pageSize={LIST_PAGE_SIZE}
-              totalItems={estimatedTotalItems}
+              totalItems={totalItems}
+              showWhenSinglePage
               isLoading={activeQuery.isLoading || activeQuery.isFetching}
               variant="admin"
               onPageChange={(nextPage) => {

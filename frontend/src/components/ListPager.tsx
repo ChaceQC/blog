@@ -4,6 +4,7 @@ type ListPagerProps = {
   page: number
   pageSize: number
   totalItems: number
+  showWhenSinglePage?: boolean
   isLoading?: boolean
   variant?: 'public' | 'admin'
   onPageChange: (page: number) => void
@@ -13,6 +14,7 @@ export function ListPager({
   page,
   pageSize,
   totalItems,
+  showWhenSinglePage = false,
   isLoading = false,
   variant = 'public',
   onPageChange,
@@ -21,7 +23,7 @@ export function ListPager({
   const hasPreviousPage = page > 0
   const hasNextPage = page < totalPages - 1
 
-  if (totalItems <= pageSize && page === 0) {
+  if (!showWhenSinglePage && totalItems <= pageSize && page === 0) {
     return null
   }
 

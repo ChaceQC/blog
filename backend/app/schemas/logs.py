@@ -64,23 +64,27 @@ class SecurityEventItem(BaseModel):
 
 class AuditLogListResponse(BaseModel):
     items: list[AuditLogItem]
+    total: int
 
     model_config = ConfigDict(extra="forbid")
 
 
 class AccessLogListResponse(BaseModel):
     items: list[AccessLogItem]
+    total: int
 
     model_config = ConfigDict(extra="forbid")
 
 
 class LoginLogListResponse(BaseModel):
     items: list[LoginLogItem]
+    total: int
 
     model_config = ConfigDict(extra="forbid")
 
 
 class SecurityEventListResponse(BaseModel):
     items: list[SecurityEventItem]
+    total: int
 
     model_config = ConfigDict(extra="forbid")

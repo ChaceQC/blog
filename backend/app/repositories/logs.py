@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.log import AccessLog, AuditLog, LoginLog, SecurityEvent
@@ -21,6 +21,10 @@ class LogRepository:
         )
         return result.scalars().all()
 
+    async def count_audit_logs(self) -> int:
+        result = await self.session.execute(select(func.count(AuditLog.id)))
+        return int(result.scalar_one())
+
     async def list_access_logs(
         self,
         *,
@@ -35,6 +39,10 @@ class LogRepository:
         )
         return result.scalars().all()
 
+    async def count_access_logs(self) -> int:
+        result = await self.session.execute(select(func.count(AccessLog.id)))
+        return int(result.scalar_one())
+
     async def list_login_logs(self, *, limit: int, offset: int) -> Sequence[LoginLog]:
         result = await self.session.execute(
             select(LoginLog)
@@ -43,6 +51,10 @@ class LogRepository:
             .offset(offset),
         )
         return result.scalars().all()
+
+    async def count_login_logs(self) -> int:
+        result = await self.session.execute(select(func.count(LoginLog.id)))
+        return int(result.scalar_one())
 
     async def list_security_events(
         self,
@@ -57,6 +69,10 @@ class LogRepository:
             .offset(offset),
         )
         return result.scalars().all()
+
+    async def count_security_events(self) -> int:
+        result = await self.session.execute(select(func.count(SecurityEvent.id)))
+        return int(result.scalar_one())
 
     async def record_security_event(
         self,

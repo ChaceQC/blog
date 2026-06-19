@@ -30,6 +30,9 @@ class FakeLogService:
             ),
         ]
 
+    async def count_audit_logs(self) -> int:
+        return 23
+
     async def list_access_logs(self, *, limit: int, offset: int) -> list[object]:
         assert limit == 1
         assert offset == 0
@@ -49,6 +52,9 @@ class FakeLogService:
             ),
         ]
 
+    async def count_access_logs(self) -> int:
+        return 17
+
     async def list_login_logs(self, *, limit: int, offset: int) -> list[object]:
         assert limit == 1
         assert offset == 0
@@ -65,8 +71,14 @@ class FakeLogService:
             ),
         ]
 
+    async def count_login_logs(self) -> int:
+        return 11
+
     async def list_security_events(self, *, limit: int, offset: int) -> list[object]:
         return []
+
+    async def count_security_events(self) -> int:
+        return 0
 
 
 class FakeEncryptionSessionManager:
@@ -166,6 +178,7 @@ def test_login_logs_return_items_for_audit_reader() -> None:
                 "created_at": "2026-06-16T00:00:00Z",
             },
         ],
+        "total": 11,
     }
 
 
@@ -207,6 +220,7 @@ def test_audit_logs_return_items_for_audit_reader() -> None:
                 "created_at": "2026-06-16T00:00:00Z",
             },
         ],
+        "total": 23,
     }
 
 
@@ -249,4 +263,5 @@ def test_access_logs_return_detail_for_audit_reader() -> None:
                 "created_at": "2026-06-16T00:00:00Z",
             },
         ],
+        "total": 17,
     }

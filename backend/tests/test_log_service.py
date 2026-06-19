@@ -94,6 +94,18 @@ class FakeReadableLogRepository(FakeLogRepository):
             ),
         ]
 
+    async def count_audit_logs(self) -> int:
+        return 23
+
+    async def count_access_logs(self) -> int:
+        return 17
+
+    async def count_login_logs(self) -> int:
+        return 11
+
+    async def count_security_events(self) -> int:
+        return 5
+
 
 class FakeLogRetentionRepository:
     def __init__(
@@ -287,6 +299,20 @@ def test_list_logs_sanitizes_historical_json_payloads() -> None:
     }
     assert access_log.detail_json is None
     assert security_event.detail_json == {"credential": "username"}
+
+
+def test_count_logs_reads_repository_totals() -> None:
+    service = LogService(repository=FakeReadableLogRepository())
+
+    async def run() -> tuple[int, int, int, int]:
+        return (
+            await service.count_audit_logs(),
+            await service.count_access_logs(),
+            await service.count_login_logs(),
+            await service.count_security_events(),
+        )
+
+    assert asyncio.run(run()) == (23, 17, 11, 5)
 
 
 def test_in_memory_access_log_dedupe_allows_after_window() -> None:
