@@ -55,16 +55,13 @@ function useCachedAvatarUrl(sourceUrl: string | null | undefined): {
     }
 
     let cancelled = false
-    let objectUrl: string | null = null
     const controller = new AbortController()
 
     void loadCachedAvatarUrl(avatarUrl, controller.signal)
       .then((loadedUrl) => {
         if (cancelled) {
-          revokeAvatarObjectUrl(loadedUrl)
           return
         }
-        objectUrl = loadedUrl
         setCachedAvatar({ sourceUrl: avatarUrl, resolvedUrl: loadedUrl })
       })
       .catch(() => {
@@ -76,9 +73,6 @@ function useCachedAvatarUrl(sourceUrl: string | null | undefined): {
     return () => {
       cancelled = true
       controller.abort()
-      if (objectUrl) {
-        revokeAvatarObjectUrl(objectUrl)
-      }
     }
   }, [avatarUrl])
 
@@ -91,7 +85,7 @@ function useCachedAvatarUrl(sourceUrl: string | null | undefined): {
 
   return {
     discardCachedAvatar: (failedUrl: string) => {
-      if (!failedUrl.startsWith('blob:')) {
+      if (!failedUrl.startsWith('data:')) {
         return
       }
       void discardCachedAvatar(avatarUrl)
@@ -112,7 +106,7 @@ async function loadCachedAvatarUrl(
   const request = avatarCacheRequest(sourceUrl)
   const cached = await cache.match(request)
   if (cached && isFreshCachedAvatar(cached)) {
-    return responseToObjectUrl(cached)
+    return responseToDataUrl(cached)
   }
   if (cached) {
     await cache.delete(request)
@@ -138,7 +132,7 @@ async function loadCachedAvatarUrl(
     },
   })
   await cache.put(request, cachedResponse.clone())
-  return URL.createObjectURL(blob)
+  return blobToDataUrl(blob)
 }
 
 function avatarCacheRequest(sourceUrl: string): Request {
@@ -149,7 +143,6 @@ function shouldUseFrontendAvatarCache(sourceUrl: string): boolean {
   const url = frontendCacheUrl(sourceUrl)
   return (
     typeof caches !== 'undefined' &&
-    typeof URL.createObjectURL === 'function' &&
     sourceUrl !== DEFAULT_AVATAR_URL &&
     !sourceUrl.startsWith('blob:') &&
     !sourceUrl.startsWith('data:') &&
@@ -164,14 +157,25 @@ function isFreshCachedAvatar(response: Response): boolean {
   return Number.isFinite(cachedAt) && Date.now() - cachedAt < AVATAR_CACHE_TTL_MS
 }
 
-async function responseToObjectUrl(response: Response): Promise<string> {
-  return URL.createObjectURL(await response.blob())
+async function responseToDataUrl(response: Response): Promise<string> {
+  return blobToDataUrl(await response.blob())
 }
 
-function revokeAvatarObjectUrl(url: string): void {
-  if (url.startsWith('blob:')) {
-    URL.revokeObjectURL(url)
-  }
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.addEventListener('load', () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+      } else {
+        reject(new Error('头像缓存读取失败'))
+      }
+    })
+    reader.addEventListener('error', () => {
+      reject(reader.error ?? new Error('头像缓存读取失败'))
+    })
+    reader.readAsDataURL(blob)
+  })
 }
 
 async function discardCachedAvatar(sourceUrl: string): Promise<void> {

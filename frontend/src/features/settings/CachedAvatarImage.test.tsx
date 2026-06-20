@@ -12,19 +12,13 @@ describe('CachedAvatarImage', () => {
   let entries: CacheEntry[]
   let deletedKeys: string[]
   let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>
-  let objectUrlIndex: number
 
   beforeEach(() => {
     entries = []
     deletedKeys = []
-    objectUrlIndex = 0
     fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
     vi.stubGlobal('caches', createCachesStub(entries, deletedKeys))
-    vi.spyOn(URL, 'createObjectURL').mockImplementation(
-      () => `blob:avatar-${++objectUrlIndex}`,
-    )
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
   })
 
   afterEach(() => {
@@ -36,9 +30,8 @@ describe('CachedAvatarImage', () => {
   it('uses a fresh frontend cached avatar before fetching', async () => {
     entries.push({
       request: avatarRequest('/api/public/avatar-cache/token'),
-      response: new Response(new Blob(['cached'], { type: 'image/png' }), {
+      response: avatarResponse('cached', {
         headers: {
-          'Content-Type': 'image/png',
           'X-Blog-Avatar-Cached-At': String(Date.now()),
         },
       }),
@@ -53,7 +46,7 @@ describe('CachedAvatarImage', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('img', { name: '头像' }).getAttribute('src')).toBe(
-        'blob:avatar-1',
+        'data:image/png;base64,Y2FjaGVk',
       )
     })
     expect(fetchMock).not.toHaveBeenCalled()
@@ -61,9 +54,8 @@ describe('CachedAvatarImage', () => {
 
   it('fetches and stores an avatar when the frontend cache misses', async () => {
     fetchMock.mockResolvedValue(
-      new Response(new Blob(['fresh'], { type: 'image/png' }), {
+      avatarResponse('fresh', {
         status: 200,
-        headers: { 'Content-Type': 'image/png' },
       }),
     )
 
@@ -80,7 +72,7 @@ describe('CachedAvatarImage', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('img', { name: '头像' }).getAttribute('src')).toBe(
-        'blob:avatar-1',
+        'data:image/png;base64,ZnJlc2g=',
       )
     })
     expect(fetchMock).toHaveBeenCalledWith(
@@ -109,12 +101,11 @@ describe('CachedAvatarImage', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('deletes a broken frontend cached avatar when the blob fails to load', async () => {
+  it('deletes a broken frontend cached avatar when the cached image fails to load', async () => {
     entries.push({
       request: avatarRequest('/api/public/avatar-cache/token'),
-      response: new Response(new Blob(['broken'], { type: 'image/png' }), {
+      response: avatarResponse('broken', {
         headers: {
-          'Content-Type': 'image/png',
           'X-Blog-Avatar-Cached-At': String(Date.now()),
         },
       }),
@@ -129,7 +120,7 @@ describe('CachedAvatarImage', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('img', { name: '头像' }).getAttribute('src')).toBe(
-        'blob:avatar-1',
+        'data:image/png;base64,YnJva2Vu',
       )
     })
 
@@ -180,4 +171,13 @@ function avatarRequest(request: RequestInfo | URL): Request {
     return request
   }
   return new Request(new URL(String(request), window.location.origin))
+}
+
+function avatarResponse(
+  body: string,
+  init: ResponseInit = {},
+): Response {
+  const headers = new Headers(init.headers)
+  headers.set('Content-Type', 'image/png')
+  return new Response(body, { ...init, headers })
 }
