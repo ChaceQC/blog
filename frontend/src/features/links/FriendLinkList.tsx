@@ -1,9 +1,7 @@
 import { ExternalLink } from 'lucide-react'
 
-import {
-  DEFAULT_AVATAR_URL,
-  fallbackToDefaultAvatar,
-} from '../settings/avatar.ts'
+import { DEFAULT_AVATAR_URL } from '../settings/avatar.ts'
+import { CachedAvatarImage } from '../settings/CachedAvatarImage.tsx'
 import type { FriendLink } from './types.ts'
 
 type FriendLinkListProps = {
@@ -21,11 +19,10 @@ export function FriendLinkList({ links }: FriendLinkListProps) {
           rel="noreferrer"
           target="_blank"
         >
-          <img
+          <CachedAvatarImage
             alt={`${link.name} 的头像`}
             className="friend-link-row__avatar"
             loading="lazy"
-            onError={fallbackToDefaultAvatar}
             src={link.avatar_url ?? DEFAULT_AVATAR_URL}
           />
           <span className="friend-link-row__body">

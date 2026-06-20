@@ -16,8 +16,8 @@ import {
   formatRelativePostDate,
 } from '../../features/posts/postMeta.ts'
 import { usePageSeo } from '../../features/seo/usePageSeo.ts'
-import { fallbackToDefaultAvatar } from '../../features/settings/avatar.ts'
 import { getPublicSiteProfile } from '../../features/settings/api.ts'
+import { CachedAvatarImage } from '../../features/settings/CachedAvatarImage.tsx'
 import { siteSettings } from '../../features/settings/siteSettings.ts'
 import {
   listPublicSiteItems,
@@ -80,11 +80,10 @@ export function HomePage() {
     <div className="page-flow">
       <section className="hero-section">
         <div className="hero-identity">
-          <img
+          <CachedAvatarImage
             className="hero-avatar"
             src={profile.avatarUrl}
             alt={`${profile.owner} 的头像`}
-            onError={fallbackToDefaultAvatar}
           />
           <h1>{profile.description}</h1>
           <p className="hero-lead">

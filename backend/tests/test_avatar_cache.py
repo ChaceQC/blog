@@ -8,6 +8,7 @@ import pytest
 from app.services import avatar_cache as avatar_cache_module
 from app.services.avatar_cache import AvatarCacheService, public_avatar_cache_url
 from app.services.avatar_cache_fetch import (
+    AvatarCacheFetchError,
     FetchedAvatar,
     UnsafeAvatarSourceError,
     safe_http_target,
@@ -101,6 +102,31 @@ def test_avatar_cache_refreshes_expired_file(tmp_path, monkeypatch) -> None:
     assert contents == []
 
 
+def test_avatar_cache_retries_transient_fetch_failures(tmp_path, monkeypatch) -> None:
+    settings = _settings(tmp_path)
+    token = create_avatar_cache_token(
+        "https://example.com/avatar.png",
+        secret_key=settings.secret_key,
+    )
+    attempts = 0
+
+    def fake_fetch(url: str, **_: object) -> FetchedAvatar:
+        nonlocal attempts
+        assert url == "https://example.com/avatar.png"
+        attempts += 1
+        if attempts < 3:
+            raise AvatarCacheFetchError("temporary failure")
+        return FetchedAvatar(content=b"retried", media_type="image/png")
+
+    monkeypatch.setattr(avatar_cache_module, "fetch_avatar", fake_fetch)
+    service = AvatarCacheService(settings=settings)
+
+    cached = asyncio.run(service.get_cached_avatar(token))
+
+    assert attempts == 3
+    assert cached.path.read_bytes() == b"retried"
+
+
 def test_avatar_cache_rejects_private_targets(monkeypatch) -> None:
     monkeypatch.setattr(
         "app.services.avatar_cache_fetch.socket.getaddrinfo",
@@ -128,4 +154,5 @@ def _settings(tmp_path):
         avatar_cache_ttl_seconds=3600,
         avatar_cache_max_size_bytes=1024 * 1024,
         avatar_cache_request_timeout_seconds=5.0,
+        avatar_cache_retry_attempts=2,
     )

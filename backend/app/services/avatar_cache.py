@@ -58,10 +58,11 @@ class AvatarCacheService:
             )
 
         try:
-            fetched = fetch_avatar(
+            fetched = _fetch_avatar_with_retries(
                 source_url,
                 timeout_seconds=self.settings.avatar_cache_request_timeout_seconds,
                 max_size_bytes=self.settings.avatar_cache_max_size_bytes,
+                retry_attempts=self.settings.avatar_cache_retry_attempts,
             )
         except AvatarCacheFetchError:
             if _is_usable_cached_avatar(
@@ -116,6 +117,28 @@ def _public_origin(*, settings: Settings, request_base_url: str) -> str:
 def _cache_paths(cache_root: Path, source_url: str) -> tuple[Path, Path]:
     cache_key = hashlib.sha256(source_url.encode("utf-8")).hexdigest()
     return cache_root / f"{cache_key}.bin", cache_root / f"{cache_key}.json"
+
+
+def _fetch_avatar_with_retries(
+    source_url: str,
+    *,
+    timeout_seconds: float,
+    max_size_bytes: int,
+    retry_attempts: int,
+) -> FetchedAvatar:
+    last_error: AvatarCacheFetchError | None = None
+    for _ in range(retry_attempts + 1):
+        try:
+            return fetch_avatar(
+                source_url,
+                timeout_seconds=timeout_seconds,
+                max_size_bytes=max_size_bytes,
+            )
+        except AvatarCacheFetchError as exc:
+            last_error = exc
+    if last_error is not None:
+        raise last_error
+    raise AvatarCacheFetchError("avatar source cannot be fetched")
 
 
 def _read_cache_metadata(path: Path) -> dict[str, str] | None:

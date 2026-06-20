@@ -181,6 +181,7 @@ npm.cmd run build
 - `BLOG_AVATAR_CACHE_TTL_SECONDS`：公开首页头像和友链头像的本地缓存有效期，默认 `3600` 秒；过期后由下一次访问触发重新拉取。
 - `BLOG_AVATAR_CACHE_MAX_SIZE_BYTES`：单个远程头像缓存拉取大小上限，默认 `2097152`。
 - `BLOG_AVATAR_CACHE_REQUEST_TIMEOUT_SECONDS`：远程头像拉取超时时间，默认 `5` 秒。
+- `BLOG_AVATAR_CACHE_RETRY_ATTEMPTS`：远程头像拉取失败后的重试次数，默认 `2`。
 - `BLOG_RATE_LIMIT_BACKEND`：限流后端，支持 `memory` 和 `redis`。
 - `BLOG_REDIS_URL`：Redis 连接串，生产示例为 `redis://redis:6379/0`。
 - `BLOG_ADMIN_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`：后台加密会话单 IP 活跃数量上限，默认 `10`。
@@ -189,6 +190,8 @@ npm.cmd run build
 - `BLOG_ACCESS_LOG_DEDUPE_SECONDS`：成功 `GET/HEAD` 访问日志短时去重窗口，默认 `60`；同一 IP 在窗口内重复访问同一 path 只写入第一条，错误和写操作仍逐条记录。
 
 访问日志只保留类型、方法、path、状态码、实体类型/id、IP、UA 和时间，不保存 query、临时 token、签名参数、slug、文件名或 MIME 摘要；后台审计日志只保留动作、实体 id、操作者和最小状态/字段名摘要，不保存标题、URL、文件名、正文或完整设置值。后端所有响应都会设置 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 和 `Permissions-Policy`；生产环境额外设置 HSTS 与 Content Security Policy，Nginx 仍保留同等安全响应头作为公网入口兜底。
+
+公开首页头像和友链头像会先通过后端签名缓存地址读取服务器本地缓存，前端再写入浏览器 Cache Storage；默认前后端都按 1 小时缓存窗口复用头像，减少访客浏览器直接触达原头像站点和重复请求。
 
 真实 `.env`、密钥、证书私钥、备份文件和上传文件不得提交到 Git。
 
@@ -363,6 +366,7 @@ BLOG_UPLOAD_MAX_SIZE_BYTES=20971520
 BLOG_AVATAR_CACHE_TTL_SECONDS=3600
 BLOG_AVATAR_CACHE_MAX_SIZE_BYTES=2097152
 BLOG_AVATAR_CACHE_REQUEST_TIMEOUT_SECONDS=5
+BLOG_AVATAR_CACHE_RETRY_ATTEMPTS=2
 BLOG_ADMIN_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP=10
 BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP=10
 BLOG_ACCESS_LOG_DEDUPE_SECONDS=60

@@ -73,6 +73,7 @@ class Settings(BaseSettings):
         ge=1.0,
         le=30.0,
     )
+    avatar_cache_retry_attempts: int = Field(default=2, ge=0, le=5)
 
     dev_server_host: str
     dev_server_port: int = Field(ge=1024, le=65535)

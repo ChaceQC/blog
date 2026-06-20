@@ -11,6 +11,8 @@
 - 头像缓存拉取补充 SSRF 与内容边界：token 只能由后端按已配置头像 URL 生成，接口不接受任意 URL 查询；远程拉取前拒绝 localhost、内网、链路本地和保留地址，限制头像大小、图片格式、MIME 与像素数量。
 - 前端首页默认头像从 GitHub 外链切换为本地 `/default-avatar.svg`，首页头像和友链头像加载失败时会回落到本地默认头像，避免首屏短暂访问原站头像或出现破图。
 - 新增头像缓存配置项 `BLOG_AVATAR_CACHE_TTL_SECONDS`、`BLOG_AVATAR_CACHE_MAX_SIZE_BYTES` 和 `BLOG_AVATAR_CACHE_REQUEST_TIMEOUT_SECONDS`，并同步本地与部署环境变量模板、README、后端 README 和计划书。
+- 头像缓存远程拉取已增加失败重试：新增 `BLOG_AVATAR_CACHE_RETRY_ATTEMPTS`，默认失败后重试 2 次；若仍失败且存在旧缓存，会继续回落使用旧缓存。
+- 前端首页头像和友链头像已接入 `CachedAvatarImage`，会优先读取浏览器 Cache Storage 中 1 小时内的新鲜头像响应；未命中时再请求后端头像缓存地址并写入前端缓存，失败时回落到本地默认头像。
 
 ### 进行中
 
@@ -28,8 +30,8 @@
 ### 验证
 
 - 已运行 `uv run ruff check app/api/public/avatar_cache.py app/api/public/links.py app/api/public/settings.py app/api/dependencies.py app/core/config.py app/services/avatar_cache.py app/services/avatar_cache_fetch.py app/services/avatar_cache_tokens.py app/services/link_records.py app/services/settings.py tests/test_avatar_cache.py tests/test_public_links_api.py tests/test_public_settings_api.py`，通过。
-- 已运行 `uv run pytest tests/test_avatar_cache.py tests/test_public_links_api.py tests/test_public_settings_api.py tests/test_link_health.py`，21 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
-- 已运行 `npm.cmd test -- FriendLinkList`，2 个组件测试通过。
+- 已运行 `uv run pytest tests/test_avatar_cache.py tests/test_public_links_api.py tests/test_public_settings_api.py tests/test_link_health.py`，22 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- 已运行 `npm.cmd test -- CachedAvatarImage FriendLinkList`，4 个组件测试通过。
 - 已运行 `npm.cmd run lint`，通过。
 - 已运行 `npm.cmd run build`，通过；Vite 仍提示主 chunk 大于 500 kB。
 
