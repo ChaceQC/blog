@@ -4,7 +4,11 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
+from fastapi.testclient import TestClient
 
+from app.api.dependencies import get_avatar_cache_service
+from app.core.config import Settings, get_settings
+from app.main import create_app
 from app.services import avatar_cache as avatar_cache_module
 from app.services.avatar_cache import AvatarCacheService, public_avatar_cache_url
 from app.services.avatar_cache_fetch import (
@@ -127,6 +131,34 @@ def test_avatar_cache_retries_transient_fetch_failures(tmp_path, monkeypatch) ->
     assert cached.path.read_bytes() == b"retried"
 
 
+def test_avatar_cache_api_returns_default_avatar_when_source_fails(tmp_path) -> None:
+    settings = _app_settings(tmp_path)
+    token = create_avatar_cache_token(
+        "https://example.com/avatar.png",
+        secret_key=settings.secret_key,
+    )
+
+    class FailingAvatarCacheService:
+        async def get_cached_avatar(self, _: str) -> None:
+            raise AvatarCacheFetchError("temporary failure")
+
+    app = create_app(settings=settings)
+    app.dependency_overrides[get_avatar_cache_service] = (
+        lambda: FailingAvatarCacheService()
+    )
+    client = TestClient(app)
+
+    try:
+        response = client.get(f"/api/public/avatar-cache/{token}")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/svg+xml")
+    assert response.headers["x-avatar-fallback"] == "1"
+    assert "默认头像" in response.text
+
+
 def test_avatar_cache_rejects_private_targets(monkeypatch) -> None:
     monkeypatch.setattr(
         "app.services.avatar_cache_fetch.socket.getaddrinfo",
@@ -156,3 +188,23 @@ def _settings(tmp_path):
         avatar_cache_request_timeout_seconds=5.0,
         avatar_cache_retry_attempts=2,
     )
+
+
+def _app_settings(tmp_path) -> Settings:
+    settings_data = get_settings().model_dump()
+    settings_data.update(
+        {
+            "environment": "development",
+            "debug": True,
+            "docs_enabled": True,
+            "public_base_url": "https://example.com",
+            "allowed_hosts": ["testserver"],
+            "cors_origins": [],
+            "upload_root": tmp_path,
+            "avatar_cache_ttl_seconds": 3600,
+            "avatar_cache_max_size_bytes": 1024 * 1024,
+            "avatar_cache_request_timeout_seconds": 5.0,
+            "avatar_cache_retry_attempts": 2,
+        },
+    )
+    return Settings(**settings_data)

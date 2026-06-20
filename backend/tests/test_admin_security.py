@@ -171,6 +171,9 @@ def test_production_response_uses_hsts_and_content_security_policy() -> None:
         "max-age=31536000; includeSubDomains"
     )
     assert "default-src 'self'" in response.headers["content-security-policy"]
+    assert "img-src 'self' https: data: blob:" in response.headers[
+        "content-security-policy"
+    ]
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
     assert client.get("/docs").status_code == 404
 

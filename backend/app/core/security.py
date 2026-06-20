@@ -10,7 +10,7 @@ from app.core.config import Settings
 
 CONTENT_SECURITY_POLICY = (
     "default-src 'self'; "
-    "img-src 'self' https: data:; "
+    "img-src 'self' https: data: blob:; "
     "style-src 'self' 'unsafe-inline'; "
     "script-src 'self'; "
     "connect-src 'self'; "
