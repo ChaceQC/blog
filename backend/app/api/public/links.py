@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 
@@ -28,6 +30,7 @@ from app.schemas.links import (
     PublicSiteNavItemListResponse,
 )
 from app.schemas.pagination import PAGE_OFFSET_MAX
+from app.services.avatar_cache import public_avatar_cache_url
 from app.services.links import (
     CreateFriendLinkCommand,
     DuplicateFriendLinkApplicationError,
@@ -46,11 +49,20 @@ async def list_public_friend_links(
     service: PublicLinkServiceDependency,
     encryption_manager: EncryptionSessionManagerDependency,
     logs: LogServiceDependency,
+    settings: SettingsDependency,
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=PAGE_OFFSET_MAX),
 ):
     await validate_public_content_session(request, encryption_manager)
     links = await service.list_public_friend_links(limit=limit, offset=offset)
+    links = [
+        _with_public_avatar_cache_url(
+            link,
+            settings=settings,
+            request_base_url=str(request.base_url),
+        )
+        for link in links
+    ]
     total = await service.count_public_friend_links()
     response = await encrypted_response(
         PublicFriendLinkListResponse(
@@ -235,3 +247,22 @@ def _should_record_site_item_visit(
         key=f"public-site-item-visit:{client_ip(request) or 'unknown'}:{item_id}",
         rule=AccessLogDedupeRule(window_seconds=window_seconds),
     )
+
+
+def _with_public_avatar_cache_url(
+    link: object,
+    *,
+    settings: SettingsDependency,
+    request_base_url: str,
+) -> object:
+    avatar_url = getattr(link, "avatar_url", None)
+    cached_url = public_avatar_cache_url(
+        avatar_url,
+        settings=settings,
+        request_base_url=request_base_url,
+    )
+    if hasattr(link, "with_avatar_url"):
+        return link.with_avatar_url(cached_url)
+    values = getattr(link, "__dict__", {}).copy()
+    values["avatar_url"] = cached_url
+    return SimpleNamespace(**values)

@@ -62,6 +62,17 @@ class Settings(BaseSettings):
     upload_root: Path
     upload_max_size_bytes: int = Field(default=20 * 1024 * 1024, ge=1024)
     file_temporary_url_expire_seconds: int = Field(default=300, ge=30, le=3600)
+    avatar_cache_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
+    avatar_cache_max_size_bytes: int = Field(
+        default=2 * 1024 * 1024,
+        ge=1024,
+        le=10 * 1024 * 1024,
+    )
+    avatar_cache_request_timeout_seconds: float = Field(
+        default=5.0,
+        ge=1.0,
+        le=30.0,
+    )
 
     dev_server_host: str
     dev_server_port: int = Field(ge=1024, le=65535)

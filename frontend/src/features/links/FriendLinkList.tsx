@@ -1,8 +1,10 @@
 import { ExternalLink } from 'lucide-react'
 
+import {
+  DEFAULT_AVATAR_URL,
+  fallbackToDefaultAvatar,
+} from '../settings/avatar.ts'
 import type { FriendLink } from './types.ts'
-
-const DEFAULT_FRIEND_LINK_AVATAR_URL = '/default-avatar.svg'
 
 type FriendLinkListProps = {
   links: FriendLink[]
@@ -23,7 +25,8 @@ export function FriendLinkList({ links }: FriendLinkListProps) {
             alt={`${link.name} 的头像`}
             className="friend-link-row__avatar"
             loading="lazy"
-            src={link.avatar_url ?? DEFAULT_FRIEND_LINK_AVATAR_URL}
+            onError={fallbackToDefaultAvatar}
+            src={link.avatar_url ?? DEFAULT_AVATAR_URL}
           />
           <span className="friend-link-row__body">
             <strong>{link.name}</strong>

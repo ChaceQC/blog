@@ -335,7 +335,7 @@ class FakePublicLinkService:
                 group_name="朋友",
                 name="ChaceQC",
                 url="https://github.com/ChaceQC",
-                avatar_url=None,
+                avatar_url="https://example.com/friend-avatar.png",
                 description="项目记录",
                 sort_order=0,
             ),

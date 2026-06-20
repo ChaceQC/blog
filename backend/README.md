@@ -101,6 +101,7 @@ uv run python -m app.cli cleanup-logs --access-days 30 --audit-days 180 --login-
 - `GET /api/public/posts`：返回已公开且已到发布时间的文章列表，支持通过 `category={slug}` 和 `tag={slug}` 按分类、标签筛选；列表响应包含 `items` 和 `total`，供前台直接显示总页数。
 - `GET /api/public/friend-links`、`GET /api/public/site-items` 和 `GET /api/public/files`：公开友链、站点目录和公开文件列表响应同样包含 `items` 和 `total`，前台分页不需要额外多取一条记录判断下一页；站点目录条目会返回 `icon_url`、`tags_json` 和 `open_target` 供前台展示图标、标签和打开方式。
 - `GET /api/public/site-items/{id}/visit`：公开导航跳转入口，只有公开条目会递增 `click_count` 并 302 跳转到真实 URL，隐藏或私有条目返回 404。友链 URL 只允许 `http/https`；站点导航、站点资料头像和社交入口允许 `http`、`https`、`mailto` 和站内路径，禁止 `javascript:` 等危险协议。
+- `GET /api/public/avatar-cache/{token}`：公开头像缓存读取入口。公开站点资料头像和公开友链头像会在列表响应中改写为本站签名缓存 URL，浏览器访问时由后端下载并保存到 `BLOG_UPLOAD_ROOT/avatar-cache`；默认 1 小时内直接复用本地文件，过期后由下一次访问触发重新拉取。该入口只接受后端签名 token，不提供任意 URL 代理，并在拉取前拒绝 localhost、内网、链路本地和保留地址目标。
 - `GET /api/public/categories`：返回已公开且已到发布时间文章使用到的分类，包含 `id`、`name`、`slug` 和 `post_count`。
 - `GET /api/public/categories/{slug}`：返回单个公开分类归档信息；分类不存在或没有公开文章时返回 404。
 - `GET /api/public/tags`：返回已公开且已到发布时间文章使用到的标签，包含 `id`、`name`、`slug` 和 `post_count`。

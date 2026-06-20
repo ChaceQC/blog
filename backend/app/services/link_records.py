@@ -20,6 +20,24 @@ class AdminFriendLinkRecord:
     created_at: datetime | None
     updated_at: datetime | None
 
+    def with_avatar_url(self, avatar_url: str | None) -> "AdminFriendLinkRecord":
+        return AdminFriendLinkRecord(
+            id=self.id,
+            group_id=self.group_id,
+            group_name=self.group_name,
+            name=self.name,
+            url=self.url,
+            avatar_url=avatar_url,
+            description=self.description,
+            rss_url=self.rss_url,
+            status=self.status,
+            sort_order=self.sort_order,
+            last_checked_at=self.last_checked_at,
+            last_status_code=self.last_status_code,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
+
 
 @dataclass(frozen=True)
 class AdminSiteNavItemRecord:

@@ -97,6 +97,17 @@ class PublicSiteProfileRead:
     musings: list[dict[str, str]]
     social_links: list[dict[str, str]]
 
+    def with_avatar_url(self, avatar_url: str | None) -> "PublicSiteProfileRead":
+        return PublicSiteProfileRead(
+            title=self.title,
+            owner=self.owner,
+            avatar_url=avatar_url or self.avatar_url,
+            description=self.description,
+            quote=self.quote,
+            musings=self.musings,
+            social_links=self.social_links,
+        )
+
 
 class SettingService:
     def __init__(self, repository: SettingRepositoryProtocol) -> None:

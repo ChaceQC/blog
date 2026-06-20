@@ -16,6 +16,7 @@ from app.repositories.files import FileRepository
 from app.repositories.links import LinkRepository
 from app.repositories.logs import LogRepository
 from app.repositories.settings import SettingRepository
+from app.services.avatar_cache import AvatarCacheService
 from app.services.content import ContentService
 from app.services.encryption import EncryptionSessionManager
 from app.services.files import FileService
@@ -56,6 +57,16 @@ def get_link_service(session: SessionDependency) -> LinkService:
 
 
 LinkServiceDependency = Annotated[LinkService, Depends(get_link_service)]
+
+
+def get_avatar_cache_service(settings: SettingsDependency) -> AvatarCacheService:
+    return AvatarCacheService(settings=settings)
+
+
+AvatarCacheServiceDependency = Annotated[
+    AvatarCacheService,
+    Depends(get_avatar_cache_service),
+]
 
 
 def get_encryption_session_manager(

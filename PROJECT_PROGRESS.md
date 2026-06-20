@@ -7,22 +7,28 @@
 - 修复公开友链列表不展示头像的问题：`FriendLinkList` 现在会渲染友链 `avatar_url`，未配置头像时使用本地默认头像资源 `/default-avatar.svg`。
 - 公开友链头像统一改为圆形展示，并补充移动端响应式布局，避免头像、文本和右侧外链图标在窄屏下挤压错位。
 - 新增前端组件测试，覆盖“有头像用配置头像、无头像用默认头像”的回归场景。
+- 新增公开头像本地缓存：公开站点资料头像和公开友链头像会在响应中改写为 `/api/public/avatar-cache/{token}` 签名缓存地址，后端保存到 `BLOG_UPLOAD_ROOT/avatar-cache`，默认 1 小时内复用本地文件，过期后由下一次访问触发重新拉取。
+- 头像缓存拉取补充 SSRF 与内容边界：token 只能由后端按已配置头像 URL 生成，接口不接受任意 URL 查询；远程拉取前拒绝 localhost、内网、链路本地和保留地址，限制头像大小、图片格式、MIME 与像素数量。
+- 前端首页默认头像从 GitHub 外链切换为本地 `/default-avatar.svg`，首页头像和友链头像加载失败时会回落到本地默认头像，避免首屏短暂访问原站头像或出现破图。
+- 新增头像缓存配置项 `BLOG_AVATAR_CACHE_TTL_SECONDS`、`BLOG_AVATAR_CACHE_MAX_SIZE_BYTES` 和 `BLOG_AVATAR_CACHE_REQUEST_TIMEOUT_SECONDS`，并同步本地与部署环境变量模板、README、后端 README 和计划书。
 
 ### 进行中
 
-- 当前友链公开页头像展示修复已完成，等待真实公开数据环境复查线上视觉效果。
+- 当前公开头像本地缓存功能已完成，等待真实前后端环境复查首页头像和友链头像缓存命中情况。
 
 ### 阻塞与风险
 
-- 本次未启动后端读取真实友链数据；头像展示逻辑已通过组件测试、lint 和生产构建验证。
-- 前端生产构建仍存在既有 Vite 大 chunk 提醒，暂不影响本次友链头像修复。
+- 本次未启动真实后端服务读取线上头像；缓存签名、TTL、SSRF 拒绝、公开响应改写和前端兜底已通过单元测试、lint 和生产构建验证。
+- 前端生产构建仍存在既有 Vite 大 chunk 提醒，暂不影响本次头像缓存优化。
 
 ### 下一步
 
-- 在本地前后端联调环境下打开 `/links`，使用真实友链数据复查头像圆形裁切、默认头像兜底和移动端列表对齐。
+- 在本地前后端联调环境下打开 `/` 与 `/links`，使用真实头像 URL 复查首次拉取、本地缓存文件生成、1 小时内复用和移动端列表对齐。
 
 ### 验证
 
+- 已运行 `uv run ruff check app/api/public/avatar_cache.py app/api/public/links.py app/api/public/settings.py app/api/dependencies.py app/core/config.py app/services/avatar_cache.py app/services/avatar_cache_fetch.py app/services/avatar_cache_tokens.py app/services/link_records.py app/services/settings.py tests/test_avatar_cache.py tests/test_public_links_api.py tests/test_public_settings_api.py`，通过。
+- 已运行 `uv run pytest tests/test_avatar_cache.py tests/test_public_links_api.py tests/test_public_settings_api.py tests/test_link_health.py`，21 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 已运行 `npm.cmd test -- FriendLinkList`，2 个组件测试通过。
 - 已运行 `npm.cmd run lint`，通过。
 - 已运行 `npm.cmd run build`，通过；Vite 仍提示主 chunk 大于 500 kB。

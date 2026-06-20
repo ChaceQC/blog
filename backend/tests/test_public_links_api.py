@@ -1,3 +1,5 @@
+from app.core.config import get_settings
+from app.services.avatar_cache_tokens import verify_avatar_cache_token
 from tests.public_content_api_helpers import (
     FakeEncryptionSessionManager,
     FakeLogService,
@@ -35,6 +37,14 @@ def test_public_friend_links_return_encrypted_list() -> None:
     assert manager.payload is not None
     assert manager.payload["total"] == 1
     assert manager.payload["items"][0]["name"] == "ChaceQC"
+    avatar_url = manager.payload["items"][0]["avatar_url"]
+    assert isinstance(avatar_url, str)
+    assert avatar_url.startswith("http://testserver/api/public/avatar-cache/")
+    token = avatar_url.rsplit("/", 1)[1]
+    assert (
+        verify_avatar_cache_token(token, secret_key=get_settings().secret_key)
+        == "https://example.com/friend-avatar.png"
+    )
     assert logs.items[0]["access_type"] == "public_friend_links_list"
     assert logs.items[0]["path"] == "/api/public/friend-links"
 

@@ -1,3 +1,5 @@
+from app.core.config import get_settings
+from app.services.avatar_cache_tokens import verify_avatar_cache_token
 from tests.public_content_api_helpers import (
     FakeEncryptionSessionManager,
     FakeLogService,
@@ -77,7 +79,14 @@ def test_public_site_profile_filters_unsafe_social_href() -> None:
 
     assert response.status_code == 200
     assert manager.payload is not None
-    assert manager.payload["avatar_url"] == "https://github.com/ChaceQC.png"
+    avatar_url = manager.payload["avatar_url"]
+    assert isinstance(avatar_url, str)
+    assert avatar_url.startswith("http://testserver/api/public/avatar-cache/")
+    token = avatar_url.rsplit("/", 1)[1]
+    assert (
+        verify_avatar_cache_token(token, secret_key=get_settings().secret_key)
+        == "https://github.com/ChaceQC.png"
+    )
     assert manager.payload["social_links"] == [{"label": "RSS", "url": "/rss.xml"}]
 
 def test_public_site_profile_bounds_legacy_oversized_values() -> None:
