@@ -251,6 +251,21 @@
     flex-direction: column;
   }
 
+  .friend-link-row {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 12px;
+  }
+
+  .friend-link-row__avatar {
+    width: 40px;
+  }
+
+  .friend-link-row .compact-row__meta {
+    align-items: flex-end;
+  }
+
   .content-row,
   .admin-stack-list a,
   .admin-stack-list button {

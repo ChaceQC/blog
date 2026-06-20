@@ -72,6 +72,32 @@
   gap: 10px;
 }
 
+.friend-link-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.friend-link-row__avatar {
+  width: 42px;
+  aspect-ratio: 1;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: rgba(254, 254, 251, 0.72);
+  box-shadow: 0 8px 22px rgba(20, 19, 18, 0.04);
+  object-fit: cover;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.friend-link-row:hover .friend-link-row__avatar {
+  border-color: rgba(197, 100, 115, 0.28);
+  box-shadow: 0 10px 28px rgba(20, 19, 18, 0.075);
+  transform: translateY(-2px);
+}
+
 .site-grid {
   display: grid;
   gap: 0;
