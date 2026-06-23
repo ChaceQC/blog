@@ -16,6 +16,7 @@
 - 加密会话新增 `esid` Cookie 绑定：前端在 `/api/{scope}/encryption/sessions` 协商后使用 ECDH shared secret、`session_id`、scope 和过期时间做可逆数组变换并写入 `esid`，后端后续根据 `X-Encryption-Session` 查表取得 `key_material`，逆运算并校验 HMAC、session、scope 和过期时间，缺少或篡改 `esid` 会在认证或业务查询前返回 400。
 - 前端开发服务器已改为同源 `/api` 代理到 `config/development.json` 的后端地址，避免跨端口开发时浏览器无法为后端 API 写入 `esid` Cookie。
 - 前端生产 build 新增 JavaScript chunk 混淆后处理，提升前端 `esid` 生成算法的阅读和复刻成本；安全边界仍以后端数据库会话密钥和 HMAC 校验为准。
+- 修复 nginx 镜像 frontend-build 阶段 `npm ci` 因 lock 缺少 Linux/optional peer 依赖失败的问题：显式锁定 `@emnapi/core@1.11.1` 与 `@emnapi/runtime@1.11.1` 为前端 dev 依赖，使 `package.json` 与 `package-lock.json` 在 clean install 下保持同步。
 
 ### 进行中
 
@@ -26,6 +27,7 @@
 - 本机未启动生产容器做端到端日志截图验证；已通过单元测试覆盖 Uvicorn 可信代理配置和日志格式，并通过 Compose 配置展开检查。后端镜像新增 `tzdata` 和 Debian 镜像源配置，需要服务器或 Docker 可用环境在构建时拉取 Debian 包。
 - 服务器真实 `deploy/env/backend.env` 仍必须保留后端看到的代理 IP/CIDR，例如宿主机 Nginx 场景常用 `BLOG_TRUSTED_PROXY_HOSTS=["172.16.0.0/12"]`；如果配置为空或不匹配，运行日志仍会显示 Docker 网关地址。
 - `esid` 由前端 JavaScript 写入，不能设置 `HttpOnly`；因此已用 ECDH shared secret 派生密钥和 HMAC 防伪，前端混淆仅作为门槛提升，不作为密码学安全边界。混淆后生产主 JS chunk 体积变大，当前 build 通过但 Vite 仍提示单 chunk 超过 500 kB。
+- 本机 Docker Desktop 仍未运行，无法在本机完成 Linux nginx 镜像构建复验；已用 `npm.cmd ci` 验证 lock 与 package 在 clean install 下同步，服务器或 Docker 可用环境仍需重新执行 nginx 镜像构建确认。
 
 ### 下一步
 
@@ -44,6 +46,9 @@
 - 已运行 `uv run pytest tests\test_admin_encryption_api.py tests\test_public_encryption_api.py tests\test_admin_content_api.py tests\test_public_content_api.py tests\test_admin_settings_api.py tests\test_admin_logs_api.py -q`，44 个测试通过；仍存在 FastAPI/Starlette TestClient 与 HTTP 状态常量的上游弃用警告。
 - 已运行 `npm.cmd test -- src/api/encryption.test.ts`，1 个前端加密会话测试通过。
 - 已运行 `npm.cmd run build`，通过；生产 build 已执行混淆插件，Vite 提示混淆插件耗时较高且主 JS chunk 超过 500 kB。
+- 已运行 `npm.cmd ci`，通过，确认新增前端 lock 依赖后 clean install 不再提示 `package.json` 与 `package-lock.json` 不同步。
+- 修复 `npm ci` lock 后重新运行 `npm.cmd run build`，通过；仍存在混淆插件耗时和主 JS chunk 超过 500 kB 提示。
+- 尝试运行 `docker compose -f deploy\docker-compose.yml -f deploy\docker-compose.prod.yml build nginx` 复验 Docker 内 Linux `npm ci`，本机 Docker Desktop 未运行，无法连接 `dockerDesktopLinuxEngine`；服务器或 Docker 可用环境仍需执行构建确认。
 
 ## 2026-06-20
 
