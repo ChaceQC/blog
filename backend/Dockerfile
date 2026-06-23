@@ -16,11 +16,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN printf '%s\n' \
-      'deb https://mirrors.cloud.tencent.com/debian/ trixie main contrib non-free non-free-firmware' \
-      'deb https://mirrors.cloud.tencent.com/debian/ trixie-updates main contrib non-free non-free-firmware' \
-      'deb https://mirrors.cloud.tencent.com/debian-security trixie-security main contrib non-free non-free-firmware' \
-      > /etc/apt/sources.list \
+RUN rm -f /etc/apt/sources.list \
+    && printf '%s\n' \
+      'Types: deb' \
+      'URIs: https://mirrors.cloud.tencent.com/debian' \
+      'Suites: trixie trixie-updates' \
+      'Components: main contrib non-free non-free-firmware' \
+      'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+      '' \
+      'Types: deb' \
+      'URIs: https://mirrors.cloud.tencent.com/debian-security' \
+      'Suites: trixie-security' \
+      'Components: main contrib non-free non-free-firmware' \
+      'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+      > /etc/apt/sources.list.d/debian.sources \
     && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata \
     && rm -rf /var/lib/apt/lists/* \
