@@ -2,6 +2,37 @@
 
 ## 2026-06-24
 
+### 本轮计划
+
+- 加强前端生产构建防逆向：提高字符串加密、控制流混淆和死代码注入强度，并保留“只混淆项目源码、不混淆第三方 vendor”的边界。
+- 将加密协议状态机从单个 `encryption.ts` 拆成多个异步 chunk：WSS salt lease 状态机、`esid` 生成/变换、JSON 请求/响应信封分别动态加载，降低静态分析时的一次性可见性。
+- 把 `esid` 可逆数组变换中的字节置换核心迁移到一个前端 WASM 模块，TS 侧只保留密钥派生、HMAC 和协议编排；WASM 仍只作为防逆向成本提升，不替代服务端校验。
+- 同步更新文档和测试，确保生产 build 继续输出纯 hash 文件名、gzip 预压缩产物和可运行的加密请求链路。
+
+### 本轮进度
+
+- 已确认当前混淆插件已有字符串数组、控制流、死代码、字符串拆分和 self-defending，但阈值偏保守，且核心加密状态机仍主要集中在 `frontend/src/api/encryption.ts`。
+- 已确认本轮不改变后端协议字段和校验语义，安全边界继续依赖服务端 `key_material`、一次性 salt lease、HMAC、Redis 原子消费和 HTTPS。
+- 已将 `frontend/src/api/encryption.ts` 收敛为薄协调层，并拆出 `encryptionSaltSocket.ts`、`encryptionEnvelope.ts`、`encryptionEsid.ts`、`encryptionWasm.ts`、`encryptionCore.ts` 和 `encryptionTypes.ts`；WSS salt 状态机、JSON 信封和 `esid` 生成都通过动态 import 异步加载。
+- 已把 `esid` 字节混合/旋转核心放入前端 WASM 字节模块，TS 侧只负责 HKDF/HMAC、随机 nonce、payload 编排和 Cookie 写入。
+- 已增强生产构建混淆参数：提高控制流混淆阈值，启用 debug protection、console 输出禁用、更强字符串数组包装、base64 字符串编码、对象 key 变换和死代码注入；仍只混淆项目源码 chunk，第三方 vendor 不混淆。
+
+### 阻塞与风险
+
+- WASM、混淆和动态 chunk 只能提升逆向成本，无法阻止浏览器端代码被下载和动态调试；上线后仍必须依赖后端状态和 HTTPS。
+- 提高混淆强度可能增加 build 时间与 JS 体积，需通过 `npm.cmd run build` 复查输出大小和 gzip 结果。
+
+### 验证
+
+- 已运行 `npm.cmd test -- src/api/encryption.test.ts`，5 个前端加密会话测试通过。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；生产 build 完成异步 chunk 拆分、源码 chunk 混淆和 `.gz` 预压缩，最大 JS chunk 约 847.73 kB，仍提示混淆插件耗时较高。
+- 已运行 `uv run ruff check .`，通过。
+- 已运行 `uv run pytest tests/test_encryption.py tests/test_admin_encryption_api.py -q`，21 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- 已运行 `git diff --check`，未发现空白或行尾问题。
+
+## 2026-06-24
+
 ### 已完成
 
 - 修复公开页并发请求偶发 400 的后续方案已从 `esid` bundle 改为小型稳定 `esid` Cookie + 每请求一次性 `purpose=esid` salt lease：Cookie 不再按请求增长，也不再被并发请求反复覆盖。
