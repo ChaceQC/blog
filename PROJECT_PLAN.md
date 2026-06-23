@@ -262,6 +262,7 @@ deploy/
 - MySQL 不开放 `3306` 到公网，Redis 不开放 `6379` 到公网。
 - Docker Compose 使用独立网络，例如 `blog_public` 和 `blog_private`。只有 Nginx 同时连接 public/private，MySQL 只连接 private。
 - 生产环境禁用 FastAPI docs 或仅在后台鉴权后访问 `/docs`。
+- 前端生产构建必须先拆分第三方 vendor chunk 与项目源码 chunk；第三方依赖不混淆，包含 `src/` 项目源码的 JavaScript chunk 必须混淆。构建完成后为文本型静态资源生成 `.gz` 预压缩文件，Nginx 使用 `gzip_static` 优先返回压缩资源。
 
 ### 3.6 配置与密钥
 

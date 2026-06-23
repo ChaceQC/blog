@@ -154,7 +154,7 @@ npm install
 npm run dev
 ```
 
-本地开发时前端 dev server 使用同源 `/api` 代理到 `config/development.json` 中的后端地址，保证应用层加密协商后前端可写入并随请求携带 `esid` Cookie。
+本地开发时前端 dev server 使用同源 `/api` 代理到 `config/development.json` 中的后端地址，保证应用层加密协商后前端可写入并随请求携带 `esid` Cookie。`esid` 按 `/api/public` 和 `/api/admin` 路径隔离，避免前台和后台切换时不同 scope 的加密会话互相覆盖。
 
 常用命令：
 
@@ -165,7 +165,7 @@ npm.cmd run lint
 npm.cmd run build
 ```
 
-生产构建会对输出的 JavaScript chunk 做混淆；混淆只提高前端算法阅读和复刻成本，后端仍以数据库中的加密会话 `key_material`、`X-Encryption-Session` 和 `esid` Cookie 校验作为安全边界。
+生产构建会先把 React、Query、KaTeX、图标等第三方依赖拆成 vendor chunk，再只对包含 `src/` 项目源码的 JavaScript chunk 做混淆；随后会为文本型静态资源生成 `.gz` 预压缩文件，Nginx 通过 `gzip_static` 优先传输压缩资源。混淆只提高前端算法阅读和复刻成本，后端仍以数据库中的加密会话 `key_material`、`X-Encryption-Session` 和 `esid` Cookie 校验作为安全边界。
 
 ### 联调约束
 

@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 type FetchResolve = (response: Response) => void
 
+let restoreDocumentCookie: (() => void) | undefined
+
 describe('getEncryptionSession', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -10,6 +12,8 @@ describe('getEncryptionSession', () => {
   })
 
   afterEach(() => {
+    restoreDocumentCookie?.()
+    restoreDocumentCookie = undefined
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })
@@ -17,6 +21,7 @@ describe('getEncryptionSession', () => {
   it('keeps shared session negotiation alive when one caller aborts', async () => {
     vi.setSystemTime(new Date('2026-06-23T00:00:00Z'))
     window.history.replaceState({}, '', '/api/test')
+    const cookieWrites = captureCookieWrites()
     let resolveFetch: FetchResolve | undefined
     const fetchPromise = new Promise<Response>((resolve) => {
       resolveFetch = resolve
@@ -77,8 +82,78 @@ describe('getEncryptionSession', () => {
       profiles: ['content-v1'],
     })
     expect(document.cookie).toContain('esid=')
+    expect(cookieWrites.at(-1)).toContain('Path=/api/public')
+  })
+
+  it('writes scoped esid cookies again when reusing cached sessions', async () => {
+    vi.setSystemTime(new Date('2026-06-23T00:00:00Z'))
+    window.history.replaceState({}, '', '/')
+    const cookieWrites = captureCookieWrites()
+    const fetchMock = vi.fn<typeof fetch>((input) => {
+      const url = String(input)
+      const scope = url.includes('/admin/') ? 'admin' : 'public'
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            session_id: `${scope}-session`,
+            scope,
+            server_public_key: {
+              kty: 'EC',
+              crv: 'P-256',
+              x: 'server-x',
+              y: 'server-y',
+            },
+            profiles:
+              scope === 'admin' ? ['sensitive-v1', 'content-v1'] : ['content-v1'],
+            expires_at: '2099-01-01T00:00:00Z',
+          }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { getEncryptionSession } = await import('./encryption.ts')
+
+    await getEncryptionSession('content-v1', 'public')
+    await getEncryptionSession('sensitive-v1', 'admin')
+    await getEncryptionSession('content-v1', 'public')
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(cookieWrites).toHaveLength(3)
+    expect(cookieWrites[0]).toContain('Path=/api/public')
+    expect(cookieWrites[1]).toContain('Path=/api/admin')
+    expect(cookieWrites[2]).toContain('Path=/api/public')
   })
 })
+
+function captureCookieWrites(): string[] {
+  const writes: string[] = []
+  const originalDescriptor = Object.getOwnPropertyDescriptor(document, 'cookie')
+  let cookieValue = ''
+
+  Object.defineProperty(document, 'cookie', {
+    configurable: true,
+    get: () => cookieValue,
+    set: (value: string) => {
+      cookieValue = value
+      writes.push(value)
+    },
+  })
+  restoreDocumentCookie = () => {
+    if (originalDescriptor) {
+      Object.defineProperty(document, 'cookie', originalDescriptor)
+      return
+    }
+    delete (document as { cookie?: string }).cookie
+  }
+  return writes
+}
 
 function stubBrowserCrypto(): void {
   const keyPair = {

@@ -90,6 +90,7 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml bu
 `deploy/nginx/templates/blog.conf.template` 是站点模板，负责：
 
 - 提供 React 静态资源。
+- 优先返回前端 build 生成的 `.gz` 预压缩静态资源，动态 gzip 作为兜底。
 - 反向代理 `/api/` 到后端。
 - 精确反代 `/rss.xml`、`/sitemap.xml` 和 `/robots.txt`，避免被 SPA 的 `index.html` 兜底吞掉。
 - 设置上传体积限制、基础安全响应头和代理头。当前模板使用 `client_max_body_size 20m`，后端生产环境变量应同步为 `BLOG_UPLOAD_MAX_SIZE_BYTES=20971520`。

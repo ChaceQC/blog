@@ -59,6 +59,7 @@ export async function getEncryptionSession(
     activeSession.scope === scope &&
     activeSession.profiles.includes(profile)
   ) {
+    await writeEncryptionSidCookie(activeSession)
     return activeSession
   }
   if (signal?.aborted) {
@@ -238,16 +239,27 @@ async function writeEncryptionSidCookie(
 ): Promise<void> {
   const esid = await createEncryptionSid(session)
   const maxAge = Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000))
-  const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+  const secure = window.location.protocol === 'https:' ? 'Secure' : ''
+  const cookiePath = esidCookiePath(session.scope)
   document.cookie = [
     `${ESID_COOKIE_NAME}=${esid}`,
-    'Path=/api',
+    `Path=${cookiePath}`,
     `Max-Age=${maxAge}`,
     'SameSite=Lax',
-    secure.trimStart(),
+    secure,
   ]
     .filter(Boolean)
     .join('; ')
+}
+
+function esidCookiePath(scope: EncryptionScope): string {
+  return `${apiCookieBasePath()}/${scope}`.replace(/\/{2,}/g, '/')
+}
+
+function apiCookieBasePath(): string {
+  const pathname = new URL(API_BASE_URL, window.location.origin).pathname
+  const normalized = pathname.replace(/\/+$/g, '')
+  return normalized || '/'
 }
 
 async function createEncryptionSid(session: EncryptionSession): Promise<string> {
