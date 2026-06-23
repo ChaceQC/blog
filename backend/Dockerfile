@@ -16,7 +16,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN rm -f /etc/apt/sources.list \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    rm -f /etc/apt/sources.list \
     && printf '%s\n' \
       'Types: deb' \
       'URIs: https://mirrors.cloud.tencent.com/debian' \
@@ -32,13 +35,13 @@ RUN rm -f /etc/apt/sources.list \
       > /etc/apt/sources.list.d/debian.sources \
     && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir uv==0.11.7 \
+    && pip install uv==0.11.7 \
     && groupadd --system app \
     && useradd --system --gid app --home-dir /app app
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv sync --frozen --no-dev --default-index "${UV_DEFAULT_INDEX}"
 
 COPY alembic.ini ./
 COPY migrations ./migrations
