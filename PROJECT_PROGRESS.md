@@ -9,6 +9,7 @@
 - 后端 Dockerfile 已改为通过项目启动入口启动 Uvicorn，避免生产容器绕开项目配置。
 - 同步 README、后端 README、部署 README 和计划书，明确数据库访问日志与终端运行日志都依赖 `BLOG_TRUSTED_PROXY_HOSTS`，修改配置或升级启动入口后需要重建 backend 镜像。
 - 后端镜像已补充 `tzdata` 和默认 UTF-8 环境变量：`TZ` 默认 `Asia/Shanghai` 且可通过真实 `backend.env` 覆盖，`PYTHONUTF8=1`、`PYTHONIOENCODING=utf-8`、`LANG=C.UTF-8` 和 `LC_ALL=C.UTF-8` 作为容器默认值，运行日志时间戳遵循容器时区而不是应用代码硬编码时区。
+- 后端 Dockerfile 已在安装 `tzdata` 前写入腾讯云 Debian trixie、trixie-updates 和 trixie-security 源，避免生产镜像构建时继续访问默认 `deb.debian.org`。
 
 ### 进行中
 
@@ -16,7 +17,7 @@
 
 ### 阻塞与风险
 
-- 本机未启动生产容器做端到端日志截图验证；已通过单元测试覆盖 Uvicorn 可信代理配置和日志格式，并通过 Compose 配置展开检查。后端镜像新增 `tzdata` 需要服务器或 Docker 可用环境在构建时拉取 Debian 包。
+- 本机未启动生产容器做端到端日志截图验证；已通过单元测试覆盖 Uvicorn 可信代理配置和日志格式，并通过 Compose 配置展开检查。后端镜像新增 `tzdata` 和 Debian 镜像源配置，需要服务器或 Docker 可用环境在构建时拉取 Debian 包。
 - 服务器真实 `deploy/env/backend.env` 仍必须保留后端看到的代理 IP/CIDR，例如宿主机 Nginx 场景常用 `BLOG_TRUSTED_PROXY_HOSTS=["172.16.0.0/12"]`；如果配置为空或不匹配，运行日志仍会显示 Docker 网关地址。
 
 ### 下一步
@@ -28,7 +29,7 @@
 - 已运行 `uv run ruff check app/server.py tests/test_server.py`，通过。
 - 已运行 `uv run pytest tests/test_server.py tests/test_request_client_ip.py`，12 个测试通过。
 - 已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
-- 尝试运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml build backend` 验证镜像内 `tzdata` 安装与 UTF-8 默认环境，本机 Docker Desktop 未运行，无法连接 `dockerDesktopLinuxEngine`；服务器或 Docker 可用环境仍需执行 backend 镜像构建确认。
+- 尝试运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml build backend` 验证镜像内腾讯云 Debian 源、`tzdata` 安装与 UTF-8 默认环境，本机 Docker Desktop 未运行，无法连接 `dockerDesktopLinuxEngine`；服务器或 Docker 可用环境仍需执行 backend 镜像构建确认。
 
 ## 2026-06-20
 

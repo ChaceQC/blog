@@ -63,7 +63,7 @@ services:
 BLOG_TRUSTED_PROXY_HOSTS=["172.16.0.0/12"]
 ```
 
-后端生产容器会把同一份 `BLOG_TRUSTED_PROXY_HOSTS` 传给 Uvicorn 的代理头处理逻辑，因此 `docker compose logs backend` 里的运行访问日志也会使用真实访客 IP，并带有时间戳。时间戳按容器内 `TZ` 和 `tzdata` 显示，`deploy/env/backend.env.example` 默认 `TZ=Asia/Shanghai`；后端镜像也默认启用 UTF-8 环境变量。修改这些配置或升级本次启动入口后，需要重新构建并启动 backend 镜像。
+后端生产容器会把同一份 `BLOG_TRUSTED_PROXY_HOSTS` 传给 Uvicorn 的代理头处理逻辑，因此 `docker compose logs backend` 里的运行访问日志也会使用真实访客 IP，并带有时间戳。时间戳按容器内 `TZ` 和 `tzdata` 显示，`deploy/env/backend.env.example` 默认 `TZ=Asia/Shanghai`；后端镜像默认启用 UTF-8 环境变量，并使用腾讯云 Debian/PyPI/uv 镜像源。修改这些配置或升级本次启动入口后，需要重新构建并启动 backend 镜像。
 
 宿主机 Nginx 的站点配置也必须向后端传递代理头：
 

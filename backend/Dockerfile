@@ -16,7 +16,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update \
+RUN printf '%s\n' \
+      'deb https://mirrors.cloud.tencent.com/debian/ trixie main contrib non-free non-free-firmware' \
+      'deb https://mirrors.cloud.tencent.com/debian/ trixie-updates main contrib non-free non-free-firmware' \
+      'deb https://mirrors.cloud.tencent.com/debian-security trixie-security main contrib non-free non-free-firmware' \
+      > /etc/apt/sources.list \
+    && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir uv==0.11.7 \
