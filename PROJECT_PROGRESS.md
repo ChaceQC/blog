@@ -1,5 +1,33 @@
 # 项目进度
 
+## 2026-06-23
+
+### 已完成
+
+- 修复生产后端运行访问日志的代理 IP 与时间戳问题：新增 `python -m app.server` 容器启动入口，读取 `BLOG_TRUSTED_PROXY_HOSTS` 后传给 Uvicorn 的 `forwarded_allow_ips`，让 `docker compose logs backend` 中的 access log 按可信 `X-Forwarded-For` 显示真实访客 IP。
+- 后端运行日志格式已补充时间戳，Uvicorn 默认日志和访问日志都会输出 `YYYY-MM-DDTHH:MM:SS+0000` 形式时间，便于直接查看终端/物理 Docker 日志时定位请求时间。
+- 后端 Dockerfile 已改为通过项目启动入口启动 Uvicorn，避免生产容器绕开项目配置。
+- 同步 README、后端 README、部署 README 和计划书，明确数据库访问日志与终端运行日志都依赖 `BLOG_TRUSTED_PROXY_HOSTS`，修改配置或升级启动入口后需要重建 backend 镜像。
+
+### 进行中
+
+- 当前运行日志 IP 与时间戳修复已完成，等待部署服务器重建 backend 镜像后用真实公网请求复核日志输出。
+
+### 阻塞与风险
+
+- 本机未启动生产容器做端到端日志截图验证；已通过单元测试覆盖 Uvicorn 可信代理配置和日志格式，并通过 Compose 配置展开检查。
+- 服务器真实 `deploy/env/backend.env` 仍必须保留后端看到的代理 IP/CIDR，例如宿主机 Nginx 场景常用 `BLOG_TRUSTED_PROXY_HOSTS=["172.16.0.0/12"]`；如果配置为空或不匹配，运行日志仍会显示 Docker 网关地址。
+
+### 下一步
+
+- 在服务器执行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml up -d --build backend` 后，访问公开页面并用 `docker compose ... logs --tail=200 --timestamps backend` 复核真实 IP 与时间戳。
+
+### 验证
+
+- 已运行 `uv run ruff check app/server.py tests/test_server.py`，通过。
+- 已运行 `uv run pytest tests/test_server.py tests/test_request_client_ip.py`，12 个测试通过。
+- 已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
+
 ## 2026-06-20
 
 ### 已完成
