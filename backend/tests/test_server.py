@@ -24,11 +24,13 @@ def test_forwarded_allow_ips_disables_implicit_proxy_trust_when_empty() -> None:
 
 def test_uvicorn_access_log_format_includes_timestamp() -> None:
     log_config = build_uvicorn_log_config()
+    default_formatter = log_config["formatters"]["default"]
     access_formatter = log_config["formatters"]["access"]
 
     assert "%(asctime)s" in access_formatter["fmt"]
     assert "%(client_addr)s" in access_formatter["fmt"]
     assert "%(request_line)s" in access_formatter["fmt"]
+    assert default_formatter["datefmt"] == "%Y-%m-%dT%H:%M:%S%z"
     assert access_formatter["datefmt"] == "%Y-%m-%dT%H:%M:%S%z"
 
 

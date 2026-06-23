@@ -2,6 +2,11 @@ FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PYTHONUTF8=1 \
+    PYTHONIOENCODING=utf-8 \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    TZ=Asia/Shanghai \
     PIP_INDEX_URL=https://mirrors.cloud.tencent.com/pypi/simple \
     UV_INDEX_URL=https://mirrors.cloud.tencent.com/pypi/simple \
     UV_DEFAULT_INDEX=https://mirrors.cloud.tencent.com/pypi/simple \
@@ -11,7 +16,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir uv==0.11.7 \
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir uv==0.11.7 \
     && groupadd --system app \
     && useradd --system --gid app --home-dir /app app
 

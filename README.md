@@ -173,6 +173,7 @@ npm.cmd run build
 
 关键配置包括：
 
+- `TZ`：后端容器时区，生产模板默认为 `Asia/Shanghai`，运行日志时间戳会按该时区显示。
 - `BLOG_DATABASE_URL`：MySQL 连接串。
 - `BLOG_SECRET_KEY`：应用密钥，生产必须使用强随机值。
 - `BLOG_PUBLIC_BASE_URL`：公网 HTTPS 基础地址，用于生成 RSS、sitemap、robots.txt 和签名 URL。
@@ -189,7 +190,7 @@ npm.cmd run build
 - `BLOG_TRUSTED_PROXY_HOSTS`：可信反向代理直连后端的 IP 或 CIDR 列表；只有这些来源的 `X-Forwarded-For` / `X-Real-IP` 会被用于应用层限流、数据库访问日志和后端运行日志。
 - `BLOG_ACCESS_LOG_DEDUPE_SECONDS`：成功 `GET/HEAD` 访问日志短时去重窗口，默认 `60`；同一 IP 在窗口内重复访问同一 path 只写入第一条，错误和写操作仍逐条记录。
 
-访问日志只保留类型、方法、path、状态码、实体类型/id、IP、UA 和时间，不保存 query、临时 token、签名参数、slug、文件名或 MIME 摘要；后台审计日志只保留动作、实体 id、操作者和最小状态/字段名摘要，不保存标题、URL、文件名、正文或完整设置值。生产后端容器通过项目启动入口把 `BLOG_TRUSTED_PROXY_HOSTS` 同步传给 Uvicorn，因此 `docker compose logs backend` 中的运行访问日志也会按可信代理头显示真实访客 IP，并带有时间戳。后端所有响应都会设置 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 和 `Permissions-Policy`；生产环境额外设置 HSTS 与 Content Security Policy，Nginx 仍保留同等安全响应头作为公网入口兜底。
+访问日志只保留类型、方法、path、状态码、实体类型/id、IP、UA 和时间，不保存 query、临时 token、签名参数、slug、文件名或 MIME 摘要；后台审计日志只保留动作、实体 id、操作者和最小状态/字段名摘要，不保存标题、URL、文件名、正文或完整设置值。生产后端容器通过项目启动入口把 `BLOG_TRUSTED_PROXY_HOSTS` 同步传给 Uvicorn，因此 `docker compose logs backend` 中的运行访问日志也会按可信代理头显示真实访客 IP，并带有时间戳；时间戳使用容器内 `TZ`/`tzdata` 配置，模板默认 `Asia/Shanghai`。后端镜像默认启用 UTF-8 环境变量，避免终端和 Python IO 出现中文编码漂移。后端所有响应都会设置 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 和 `Permissions-Policy`；生产环境额外设置 HSTS 与 Content Security Policy，Nginx 仍保留同等安全响应头作为公网入口兜底。
 
 公开首页头像和友链头像会先通过后端签名缓存地址读取服务器本地缓存，前端再写入浏览器 Cache Storage；默认前后端都按 1 小时缓存窗口复用头像，减少访客浏览器直接触达原头像站点和重复请求。
 
@@ -473,7 +474,7 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f
 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml logs --tail=200 --timestamps backend
 ```
 
-后端运行访问日志由生产启动入口读取 `BLOG_TRUSTED_PROXY_HOSTS` 后交给 Uvicorn 处理；如果日志里仍看到 `172.23.0.1` 这类 Docker 网关地址，先确认服务器真实 `deploy/env/backend.env` 已包含后端看到的代理 IP/CIDR，并重新构建 backend 镜像。
+后端运行访问日志由生产启动入口读取 `BLOG_TRUSTED_PROXY_HOSTS` 后交给 Uvicorn 处理；时间戳按容器内 `TZ` 显示，模板默认 `Asia/Shanghai`。如果日志里仍看到 `172.23.0.1` 这类 Docker 网关地址，先确认服务器真实 `deploy/env/backend.env` 已包含后端看到的代理 IP/CIDR，并重新构建 backend 镜像。
 
 ### 8. 初始化数据库
 
