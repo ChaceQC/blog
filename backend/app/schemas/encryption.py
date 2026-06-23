@@ -10,6 +10,7 @@ ENCRYPTION_SESSION_ID_MAX_LENGTH = 128
 ENCRYPTION_NONCE_MAX_LENGTH = 64
 ENCRYPTION_CIPHERTEXT_MAX_LENGTH = 2_000_000
 ENCRYPTION_TAG_MAX_LENGTH = 128
+ENCRYPTION_SALT_ID_MAX_LENGTH = 128
 
 
 class BrowserPublicKey(BaseModel):
@@ -49,6 +50,7 @@ class CreateEncryptionSessionResponse(BaseModel):
 class EncryptedApiResponse(BaseModel):
     session_id: str = Field(min_length=1, max_length=ENCRYPTION_SESSION_ID_MAX_LENGTH)
     profile: EncryptionProfile
+    salt_id: str = Field(min_length=1, max_length=ENCRYPTION_SALT_ID_MAX_LENGTH)
     nonce: str = Field(min_length=1, max_length=ENCRYPTION_NONCE_MAX_LENGTH)
     ciphertext: str = Field(min_length=1, max_length=ENCRYPTION_CIPHERTEXT_MAX_LENGTH)
 
@@ -58,6 +60,7 @@ class EncryptedApiResponse(BaseModel):
 class EncryptedApiRequest(BaseModel):
     session_id: str = Field(min_length=1, max_length=ENCRYPTION_SESSION_ID_MAX_LENGTH)
     profile: EncryptionProfile
+    salt_id: str = Field(min_length=1, max_length=ENCRYPTION_SALT_ID_MAX_LENGTH)
     nonce: str = Field(min_length=1, max_length=ENCRYPTION_NONCE_MAX_LENGTH)
     ciphertext: str = Field(min_length=1, max_length=ENCRYPTION_CIPHERTEXT_MAX_LENGTH)
 

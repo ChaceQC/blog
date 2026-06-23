@@ -1,16 +1,23 @@
 import { ApiError } from './client.ts'
 import { API_BASE_URL } from './config.ts'
 import {
+  createEncryptionRequestHeaders,
   createFreshEncryptionSession,
   decryptEncryptedResponse,
+  takeLoginCapsuleSalt,
 } from './encryption.ts'
 
-import type { EncryptedApiResponse, EncryptionSession } from './encryption.ts'
+import type {
+  EncryptedApiResponse,
+  EncryptionSaltLease,
+  EncryptionSession,
+} from './encryption.ts'
 
 type LoginCapsuleRequest = {
   scheme: 'login-capsule-v2'
   session_id: string
   challenge_id: string
+  salt_id: string
   nonce: string
   issued_at: number
   ciphertext: string
@@ -18,7 +25,6 @@ type LoginCapsuleRequest = {
 }
 
 const LOGIN_CAPSULE_SCHEME = 'login-capsule-v2'
-const LOGIN_CAPSULE_SALT = 'blog-login-capsule-v2'
 const LOGIN_CAPSULE_BUCKETS = [256, 512, 1024, 2048] as const
 
 const encoder = new TextEncoder()
@@ -30,13 +36,17 @@ export async function apiPostLoginCapsule<TBody, TResponse>(
 ): Promise<TResponse> {
   const session = await createFreshEncryptionSession('admin', signal)
   const capsule = await createLoginCapsule(path, body, session)
+  const encryptionHeaders = await createEncryptionRequestHeaders(
+    session,
+    'sensitive-v1',
+  )
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: 'POST',
     credentials: 'include',
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
-      'X-Encryption-Session': session.id,
+      ...encryptionHeaders,
     },
     body: JSON.stringify(capsule),
     signal,
@@ -62,11 +72,13 @@ async function createLoginCapsule<TBody>(
   if (!challenge) {
     throw new Error('登录加密挑战缺失')
   }
+  const loginSalt = await takeLoginCapsuleSalt(session)
 
   const plaintext = paddedPayload(body)
   const nonce = crypto.getRandomValues(new Uint8Array(16))
   const encryptionKey = await deriveLoginCapsuleKey(
     session,
+    loginSalt,
     challenge.challenge_id,
     challenge.challenge_salt,
     'enc',
@@ -86,12 +98,14 @@ async function createLoginCapsule<TBody>(
     scheme: LOGIN_CAPSULE_SCHEME,
     session_id: session.id,
     challenge_id: challenge.challenge_id,
+    salt_id: loginSalt.leaseId,
     nonce: base64urlEncode(nonce),
     issued_at: issuedAt,
     ciphertext: base64urlEncode(ciphertext),
   }
   const macKey = await deriveLoginCapsuleKey(
     session,
+    loginSalt,
     challenge.challenge_id,
     challenge.challenge_salt,
     'mac',
@@ -114,6 +128,7 @@ async function createLoginCapsule<TBody>(
 
 async function deriveLoginCapsuleKey(
   session: EncryptionSession,
+  loginSalt: EncryptionSaltLease,
   challengeId: string,
   challengeSalt: string,
   purpose: 'enc' | 'mac',
@@ -137,7 +152,7 @@ async function deriveLoginCapsuleKey(
       hash: 'SHA-256',
       salt: toArrayBuffer(
         concatBytes(
-          encoder.encode(LOGIN_CAPSULE_SALT),
+          new Uint8Array(loginSalt.salt),
           new Uint8Array(base64urlDecode(challengeSalt)),
         ),
       ),
@@ -178,6 +193,7 @@ function signingInput(
         capsule.scheme,
         capsule.session_id,
         capsule.challenge_id,
+        capsule.salt_id,
         'POST',
         requestPath,
         String(capsule.issued_at),
@@ -226,6 +242,7 @@ function isEncryptedApiResponse(value: unknown): value is EncryptedApiResponse {
     value !== null &&
     'session_id' in value &&
     'profile' in value &&
+    'salt_id' in value &&
     'nonce' in value &&
     'ciphertext' in value
   )

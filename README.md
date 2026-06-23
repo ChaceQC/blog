@@ -58,7 +58,7 @@ Internet
         -> Service Layer
         -> Repository Layer
         -> MySQL 8
-        -> Redis 可选
+        -> Redis
         -> Local Storage
 ```
 
@@ -81,7 +81,7 @@ Internet
 - 后端：Python 3.12、FastAPI、SQLAlchemy 2、Alembic、uv。
 - 前端：React、TypeScript、Vite、npm。
 - 数据库：MySQL 8。
-- 缓存与限流：Redis 可选，本地默认内存后端。
+- 缓存、限流与一次性加密 salt：Redis；本地开发可回落内存后端。
 - 部署：Linux Debian、Docker Compose、Nginx、Let's Encrypt 或云厂商证书。
 - 开发环境：Windows 11，文件读写和终端统一使用 UTF-8。
 
@@ -158,6 +158,8 @@ npm run dev
 
 后台登录请求体不走普通明文 JSON，也不复用 `sensitive-v1` 的 AES-GCM 请求信封。前端会在后台加密会话协商返回的一次性 `login_challenge` 基础上使用 `Login Capsule v2`：对带固定分桶 padding 的用户名和密码载荷做 AES-CTR 加密，并用独立 HMAC 密钥绑定 session、challenge、请求方法、路径、时间戳、nonce 和密文；后端验证 `X-Encryption-Session`、`esid`、challenge、tag 和 nonce 后才解密登录载荷。
 
+应用层加密使用 `/api/{scope}/encryption/salts` WebSocket 下发一次性动态 salt。WSS 帧本身会用 ECDH shared secret 派生 AES-GCM 包裹密钥加密，每帧还有随机 `wrap_salt`；salt lease 按用途分为 `esid`、`login_capsule`、`request` 和 `response`，只能消费一次。HTTP 请求会同时携带 `X-Encryption-Session`、`X-Encryption-Esid-Salt`、`X-Encryption-Response-Salt`，加密请求/登录 capsule 信封还会携带 `salt_id`；后端校验并消费 Redis 中的 lease 后才会继续处理。WSS 长连接使用同一加密帧格式传输应用层 `ping` / `pong` 心跳，前端连续丢失响应会关闭连接并按指数退避重连，重连期间不会降级回固定 salt。
+
 常用命令：
 
 ```powershell
@@ -189,14 +191,14 @@ npm.cmd run build
 - `BLOG_AVATAR_CACHE_MAX_SIZE_BYTES`：单个远程头像缓存拉取大小上限，默认 `2097152`。
 - `BLOG_AVATAR_CACHE_REQUEST_TIMEOUT_SECONDS`：远程头像拉取超时时间，默认 `5` 秒。
 - `BLOG_AVATAR_CACHE_RETRY_ATTEMPTS`：远程头像拉取失败后的重试次数，默认 `2`。
-- `BLOG_RATE_LIMIT_BACKEND`：限流后端，支持 `memory` 和 `redis`。
+- `BLOG_RATE_LIMIT_BACKEND`：共享后端，支持 `memory` 和 `redis`；生产必须使用 `redis`，用于限流、访问日志去重和一次性加密 salt lease。
 - `BLOG_REDIS_URL`：Redis 连接串，生产示例为 `redis://redis:6379/0`。
 - `BLOG_ADMIN_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`：后台加密会话单 IP 活跃数量上限，默认 `10`。
 - `BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`：公开加密会话单 IP 活跃数量上限，默认 `10`。
 - `BLOG_TRUSTED_PROXY_HOSTS`：可信反向代理直连后端的 IP 或 CIDR 列表；只有这些来源的 `X-Forwarded-For` / `X-Real-IP` 会被用于应用层限流、数据库访问日志和后端运行日志。
 - `BLOG_ACCESS_LOG_DEDUPE_SECONDS`：成功 `GET/HEAD` 访问日志短时去重窗口，默认 `60`；同一 IP 在窗口内重复访问同一 path 只写入第一条，错误和写操作仍逐条记录。
 
-访问日志只保留类型、方法、path、状态码、实体类型/id、IP、UA 和时间，不保存 query、临时 token、签名参数、slug、文件名或 MIME 摘要；后台审计日志只保留动作、实体 id、操作者和最小状态/字段名摘要，不保存标题、URL、文件名、正文或完整设置值。应用层加密会话除 `X-Encryption-Session` 外还要求同源 `esid` Cookie：前端用 ECDH shared secret、`session_id`、scope 和过期时间生成可逆 sid，后端用数据库 `key_material` 逆运算并校验 HMAC、session、scope 和过期时间。生产后端容器通过项目启动入口把 `BLOG_TRUSTED_PROXY_HOSTS` 同步传给 Uvicorn，因此 `docker compose logs backend` 中的运行访问日志也会按可信代理头显示真实访客 IP，并带有时间戳；时间戳使用容器内 `TZ`/`tzdata` 配置，模板默认 `Asia/Shanghai`。后端镜像默认启用 UTF-8 环境变量，并使用腾讯云 Debian/PyPI/uv 镜像源，避免终端和 Python IO 出现中文编码漂移并加快国内构建。后端所有响应都会设置 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 和 `Permissions-Policy`；生产环境额外设置 HSTS 与 Content Security Policy，Nginx 仍保留同等安全响应头作为公网入口兜底。
+访问日志只保留类型、方法、path、状态码、实体类型/id、IP、UA 和时间，不保存 query、临时 token、签名参数、slug、文件名或 MIME 摘要；后台审计日志只保留动作、实体 id、操作者和最小状态/字段名摘要，不保存标题、URL、文件名、正文或完整设置值。应用层加密会话除 `X-Encryption-Session` 外还要求同源 `esid` Cookie：前端用 ECDH shared secret、`session_id`、scope 和过期时间生成可逆 sid，后端用数据库 `key_material` 逆运算并校验 HMAC、session、scope 和过期时间；`esid`、登录 capsule、加密请求和加密响应的 HKDF salt 都来自 WSS 加密下发的一次性 lease。生产后端容器通过项目启动入口把 `BLOG_TRUSTED_PROXY_HOSTS` 同步传给 Uvicorn，因此 `docker compose logs backend` 中的运行访问日志也会按可信代理头显示真实访客 IP，并带有时间戳；时间戳使用容器内 `TZ`/`tzdata` 配置，模板默认 `Asia/Shanghai`。后端镜像默认启用 UTF-8 环境变量，并使用腾讯云 Debian/PyPI/uv 镜像源，避免终端和 Python IO 出现中文编码漂移并加快国内构建。后端所有响应都会设置 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 和 `Permissions-Policy`；生产环境额外设置 HSTS 与 Content Security Policy，Nginx 仍保留同等安全响应头作为公网入口兜底。
 
 公开首页头像和友链头像会先通过后端签名缓存地址读取服务器本地缓存，前端再写入浏览器 Cache Storage；默认前后端都按 1 小时缓存窗口复用头像，减少访客浏览器直接触达原头像站点和重复请求。
 

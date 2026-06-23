@@ -32,11 +32,13 @@ def encrypt_json_payload(
     *,
     secret_key: str,
     profile: EncryptionProfile,
+    salt: bytes,
 ) -> EncryptedEnvelope:
     return encrypt_json_payload_with_key_material(
         payload,
         key_material=secret_key.encode("utf-8"),
         profile=profile,
+        salt=salt,
     )
 
 
@@ -45,6 +47,7 @@ def encrypt_json_payload_with_key_material(
     *,
     key_material: bytes,
     profile: EncryptionProfile,
+    salt: bytes,
 ) -> EncryptedEnvelope:
     nonce = urandom(12)
     plaintext = json.dumps(
@@ -53,7 +56,7 @@ def encrypt_json_payload_with_key_material(
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
-    ciphertext = AESGCM(_derive_profile_key(key_material, profile)).encrypt(
+    ciphertext = AESGCM(_derive_profile_key(key_material, profile, salt)).encrypt(
         nonce,
         plaintext,
         _associated_data(profile),
@@ -70,11 +73,13 @@ def decrypt_json_payload(
     *,
     secret_key: str,
     expected_profile: EncryptionProfile,
+    salt: bytes,
 ) -> dict[str, Any]:
     return decrypt_json_payload_with_key_material(
         envelope,
         key_material=secret_key.encode("utf-8"),
         expected_profile=expected_profile,
+        salt=salt,
     )
 
 
@@ -83,12 +88,15 @@ def decrypt_json_payload_with_key_material(
     *,
     key_material: bytes,
     expected_profile: EncryptionProfile,
+    salt: bytes,
 ) -> dict[str, Any]:
     if envelope.profile != expected_profile:
         raise EncryptionError("unexpected encryption profile")
 
     try:
-        plaintext = AESGCM(_derive_profile_key(key_material, expected_profile)).decrypt(
+        plaintext = AESGCM(
+            _derive_profile_key(key_material, expected_profile, salt),
+        ).decrypt(
             _base64url_decode(envelope.nonce),
             _base64url_decode(envelope.ciphertext),
             _associated_data(expected_profile),
@@ -102,11 +110,15 @@ def decrypt_json_payload_with_key_material(
     return decoded
 
 
-def _derive_profile_key(key_material: bytes, profile: EncryptionProfile) -> bytes:
+def _derive_profile_key(
+    key_material: bytes,
+    profile: EncryptionProfile,
+    salt: bytes,
+) -> bytes:
     return HKDF(
         algorithm=hashes.SHA256(),
         length=32,
-        salt=b"blog-cms-encryption-v1",
+        salt=salt,
         info=f"blog-cms:{profile.value}".encode(),
     ).derive(key_material)
 

@@ -18,7 +18,6 @@ _NONCE_LENGTH = 16
 _TAG_LENGTH = 16
 _ROUNDS = 8
 _PURPOSE = "encryption-session-binding"
-_SALT = b"blog-cms-esid-v1"
 
 
 class EncryptionSidError(Exception):
@@ -31,6 +30,7 @@ def create_encryption_sid(
     scope: EncryptionSessionScope,
     key_material: bytes,
     expires_at: datetime,
+    salt: bytes,
     issued_at: datetime | None = None,
     nonce: bytes | None = None,
 ) -> str:
@@ -42,7 +42,7 @@ def create_encryption_sid(
         "scope": scope,
         "session_id": session_id,
     }
-    key = _derive_sid_key(key_material, scope)
+    key = _derive_sid_key(key_material, scope, salt=salt)
     token_nonce = nonce or urandom(_NONCE_LENGTH)
     if len(token_nonce) != _NONCE_LENGTH:
         raise EncryptionSidError("invalid esid nonce")
@@ -65,6 +65,7 @@ def validate_encryption_sid(
     session_id: str,
     scope: EncryptionSessionScope,
     key_material: bytes,
+    salt: bytes,
     now: datetime | None = None,
 ) -> None:
     if esid is None:
@@ -85,7 +86,7 @@ def validate_encryption_sid(
     tag = raw[-_TAG_LENGTH:]
     nonce = raw[1 : 1 + _NONCE_LENGTH]
     transformed = raw[1 + _NONCE_LENGTH : -_TAG_LENGTH]
-    key = _derive_sid_key(key_material, scope)
+    key = _derive_sid_key(key_material, scope, salt=salt)
     if not compare_digest(_mac(key, body)[:_TAG_LENGTH], tag):
         raise EncryptionSidError("invalid esid")
 
@@ -242,11 +243,13 @@ def _hmac_stream(
 def _derive_sid_key(
     key_material: bytes,
     scope: EncryptionSessionScope,
+    *,
+    salt: bytes,
 ) -> bytes:
     return HKDF(
         algorithm=hashes.SHA256(),
         length=32,
-        salt=_SALT,
+        salt=salt,
         info=f"blog-cms:esid:{scope}".encode(),
     ).derive(key_material)
 

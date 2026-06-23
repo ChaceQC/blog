@@ -25,7 +25,10 @@ def test_public_site_profile_returns_encrypted_setting() -> None:
     try:
         response = client.get(
             "/api/public/settings/site-profile",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -72,7 +75,10 @@ def test_public_site_profile_filters_unsafe_social_href() -> None:
     try:
         response = client.get(
             "/api/public/settings/site-profile",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -127,7 +133,10 @@ def test_public_site_profile_bounds_legacy_oversized_values() -> None:
     try:
         response = client.get(
             "/api/public/settings/site-profile",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()

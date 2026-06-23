@@ -27,7 +27,10 @@ def test_public_friend_links_return_encrypted_list() -> None:
     try:
         response = client.get(
             "/api/public/friend-links?limit=1",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -67,10 +70,14 @@ def test_public_friend_link_application_decrypts_content_request() -> None:
     try:
         response = client.post(
             "/api/public/friend-links/applications",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
             json={
                 "session_id": "public-session",
                 "profile": "content-v1",
+                "salt_id": "test-request-salt",
                 "nonce": "test-nonce",
                 "ciphertext": "test-ciphertext",
             },
@@ -109,6 +116,7 @@ def test_public_friend_link_application_rejects_duplicate_url() -> None:
             json={
                 "session_id": "public-session",
                 "profile": "content-v1",
+                "salt_id": "test-request-salt",
                 "nonce": "test-nonce",
                 "ciphertext": "test-ciphertext",
             },
@@ -141,6 +149,7 @@ def test_public_friend_link_application_rejects_pending_overflow() -> None:
             json={
                 "session_id": "public-session",
                 "profile": "content-v1",
+                "salt_id": "test-request-salt",
                 "nonce": "test-nonce",
                 "ciphertext": "test-ciphertext",
             },
@@ -162,7 +171,10 @@ def test_public_site_items_return_encrypted_list() -> None:
     try:
         response = client.get(
             "/api/public/site-items?limit=1",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()

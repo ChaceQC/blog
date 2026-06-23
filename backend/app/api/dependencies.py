@@ -2,10 +2,12 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import HTTPConnection
 
 from app.api.state import (
     get_app_access_log_dedupe_backend,
     get_app_rate_limit_service,
+    get_app_salt_lease_service,
 )
 from app.core.config import Settings, get_settings
 from app.core.database import get_session
@@ -19,6 +21,7 @@ from app.repositories.settings import SettingRepository
 from app.services.avatar_cache import AvatarCacheService
 from app.services.content import ContentService
 from app.services.encryption import EncryptionSessionManager
+from app.services.encryption_salts import SaltLeaseService
 from app.services.files import FileService
 from app.services.links import LinkService
 from app.services.logs import (
@@ -70,12 +73,14 @@ AvatarCacheServiceDependency = Annotated[
 
 
 def get_encryption_session_manager(
+    connection: HTTPConnection,
     session: SessionDependency,
     settings: SettingsDependency,
 ) -> EncryptionSessionManager:
     return EncryptionSessionManager(
         repository=EncryptionSessionRepository(session),
         settings=settings,
+        salt_leases=get_app_salt_lease_service(connection.app, settings),
     )
 
 
@@ -128,4 +133,17 @@ def get_rate_limit_service(
 RateLimitServiceDependency = Annotated[
     RateLimitService,
     Depends(get_rate_limit_service),
+]
+
+
+def get_salt_lease_service(
+    connection: HTTPConnection,
+    settings: SettingsDependency,
+) -> SaltLeaseService:
+    return get_app_salt_lease_service(connection.app, settings)
+
+
+SaltLeaseServiceDependency = Annotated[
+    SaltLeaseService,
+    Depends(get_salt_lease_service),
 ]

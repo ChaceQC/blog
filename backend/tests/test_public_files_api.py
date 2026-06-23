@@ -26,7 +26,10 @@ def test_public_file_list_uses_public_encryption_session() -> None:
     try:
         response = client.get(
             "/api/public/files?limit=1",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -51,7 +54,10 @@ def test_public_file_temporary_url_requires_public_session() -> None:
     try:
         response = client.get(
             "/api/public/files/1/temporary-url",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()

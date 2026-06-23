@@ -32,6 +32,7 @@ from app.services.encryption import (
     ActiveEncryptionSessionLimitExceeded,
     EncryptionSessionManager,
 )
+from app.services.encryption_salts import InMemorySaltLeaseStore, SaltLeaseService
 from app.services.rate_limit import RateLimitService
 
 
@@ -223,9 +224,11 @@ def test_login_response_can_use_sensitive_encryption_session() -> None:
     client_private_key = ec.generate_private_key(ec.SECP256R1())
     client = TestClient(app)
     encryption_repository = FakeEncryptionSessionRepository()
+    salt_leases = SaltLeaseService(store=InMemorySaltLeaseStore())
     encryption_manager = EncryptionSessionManager(
         repository=encryption_repository,
         settings=get_settings(),
+        salt_leases=salt_leases,
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: (
         encryption_manager
@@ -252,12 +255,20 @@ def test_login_response_can_use_sensitive_encryption_session() -> None:
         ec.ECDH(),
         _load_public_key(session_payload["server_public_key"]),
     )
-    _set_esid_cookie(
+    esid_salt = _set_esid_cookie(
         client,
         session_id=session_payload["session_id"],
         scope="admin",
         key_material=shared_key,
         expires_at=_parse_api_datetime(session_payload["expires_at"]),
+        salt_leases=salt_leases,
+    )
+    response_salt = _issue_salt(
+        salt_leases,
+        session_id=session_payload["session_id"],
+        scope="admin",
+        purpose="response",
+        profile=EncryptionProfile.SENSITIVE,
     )
 
     app.dependency_overrides[get_auth_service] = lambda: FakeAuthService()
@@ -269,10 +280,15 @@ def test_login_response_can_use_sensitive_encryption_session() -> None:
     try:
         login_response = client.post(
             "/api/admin/auth/login",
-            headers={"X-Encryption-Session": session_payload["session_id"]},
+            headers={
+                "X-Encryption-Session": session_payload["session_id"],
+                "X-Encryption-Esid-Salt": esid_salt.lease_id,
+                "X-Encryption-Response-Salt": response_salt.lease_id,
+            },
             json=_make_login_capsule(
                 session_payload=session_payload,
                 shared_key=shared_key,
+                salt_leases=salt_leases,
             ),
         )
     finally:
@@ -289,6 +305,7 @@ def test_login_response_can_use_sensitive_encryption_session() -> None:
         ),
         key_material=shared_key,
         expected_profile=EncryptionProfile.SENSITIVE,
+        salt=response_salt.salt,
     )
 
     assert decrypted["user"]["username"] == "admin"
@@ -323,9 +340,11 @@ def test_login_rejects_missing_encryption_session_sid() -> None:
     client_private_key = ec.generate_private_key(ec.SECP256R1())
     client = TestClient(app)
     encryption_repository = FakeEncryptionSessionRepository()
+    salt_leases = SaltLeaseService(store=InMemorySaltLeaseStore())
     encryption_manager = EncryptionSessionManager(
         repository=encryption_repository,
         settings=get_settings(),
+        salt_leases=salt_leases,
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: (
         encryption_manager
@@ -365,6 +384,7 @@ def test_login_rejects_missing_encryption_session_sid() -> None:
             json=_make_login_capsule(
                 session_payload=session_payload,
                 shared_key=shared_key,
+                salt_leases=salt_leases,
             ),
         )
     finally:
@@ -378,9 +398,11 @@ def test_login_rejects_tampered_encryption_session_sid() -> None:
     client_private_key = ec.generate_private_key(ec.SECP256R1())
     client = TestClient(app)
     encryption_repository = FakeEncryptionSessionRepository()
+    salt_leases = SaltLeaseService(store=InMemorySaltLeaseStore())
     encryption_manager = EncryptionSessionManager(
         repository=encryption_repository,
         settings=get_settings(),
+        salt_leases=salt_leases,
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: (
         encryption_manager
@@ -406,12 +428,13 @@ def test_login_rejects_tampered_encryption_session_sid() -> None:
         ec.ECDH(),
         _load_public_key(session_payload["server_public_key"]),
     )
-    _set_esid_cookie(
+    esid_salt = _set_esid_cookie(
         client,
         session_id=session_payload["session_id"],
         scope="admin",
         key_material=shared_key,
         expires_at=_parse_api_datetime(session_payload["expires_at"]),
+        salt_leases=salt_leases,
         suffix="x",
     )
 
@@ -424,10 +447,14 @@ def test_login_rejects_tampered_encryption_session_sid() -> None:
     try:
         response = client.post(
             "/api/admin/auth/login",
-            headers={"X-Encryption-Session": session_payload["session_id"]},
+            headers={
+                "X-Encryption-Session": session_payload["session_id"],
+                "X-Encryption-Esid-Salt": esid_salt.lease_id,
+            },
             json=_make_login_capsule(
                 session_payload=session_payload,
                 shared_key=shared_key,
+                salt_leases=salt_leases,
             ),
         )
     finally:
@@ -465,9 +492,11 @@ def test_login_rejects_public_encryption_session_before_authentication() -> None
     client_private_key = ec.generate_private_key(ec.SECP256R1())
     client = TestClient(app)
     encryption_repository = FakeEncryptionSessionRepository()
+    salt_leases = SaltLeaseService(store=InMemorySaltLeaseStore())
     encryption_manager = EncryptionSessionManager(
         repository=encryption_repository,
         settings=get_settings(),
+        salt_leases=salt_leases,
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: (
         encryption_manager
@@ -516,9 +545,11 @@ def test_admin_login_ip_rate_limit_blocks_rotating_usernames() -> None:
     )
     client = TestClient(app)
     encryption_repository = FakeEncryptionSessionRepository()
+    salt_leases = SaltLeaseService(store=InMemorySaltLeaseStore())
     encryption_manager = EncryptionSessionManager(
         repository=encryption_repository,
         settings=settings,
+        salt_leases=salt_leases,
     )
     logs = CollectingLogService()
     rate_limiter = RateLimitService()
@@ -547,20 +578,33 @@ def test_admin_login_ip_rate_limit_blocks_rotating_usernames() -> None:
                 ec.ECDH(),
                 _load_public_key(session_payload["server_public_key"]),
             )
-            _set_esid_cookie(
+            esid_salt = _set_esid_cookie(
                 client,
                 session_id=session_payload["session_id"],
                 scope="admin",
                 key_material=shared_key,
                 expires_at=_parse_api_datetime(session_payload["expires_at"]),
+                salt_leases=salt_leases,
+            )
+            response_salt = _issue_salt(
+                salt_leases,
+                session_id=session_payload["session_id"],
+                scope="admin",
+                purpose="response",
+                profile=EncryptionProfile.SENSITIVE,
             )
             responses.append(
                 client.post(
                     "/api/admin/auth/login",
-                    headers={"X-Encryption-Session": session_payload["session_id"]},
+                    headers={
+                        "X-Encryption-Session": session_payload["session_id"],
+                        "X-Encryption-Esid-Salt": esid_salt.lease_id,
+                        "X-Encryption-Response-Salt": response_salt.lease_id,
+                    },
                     json=_make_login_capsule(
                         session_payload=session_payload,
                         shared_key=shared_key,
+                        salt_leases=salt_leases,
                         username=f"missing-{index}",
                         password="wrong-password",
                     ),
@@ -579,9 +623,11 @@ def test_me_rejects_public_encryption_session_before_authentication() -> None:
     client_private_key = ec.generate_private_key(ec.SECP256R1())
     client = TestClient(app)
     encryption_repository = FakeEncryptionSessionRepository()
+    salt_leases = SaltLeaseService(store=InMemorySaltLeaseStore())
     encryption_manager = EncryptionSessionManager(
         repository=encryption_repository,
         settings=get_settings(),
+        salt_leases=salt_leases,
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: (
         encryption_manager
@@ -625,9 +671,11 @@ def test_refresh_uses_cookie_without_csrf_header() -> None:
     client_private_key = ec.generate_private_key(ec.SECP256R1())
     client = TestClient(app)
     encryption_repository = FakeEncryptionSessionRepository()
+    salt_leases = SaltLeaseService(store=InMemorySaltLeaseStore())
     encryption_manager = EncryptionSessionManager(
         repository=encryption_repository,
         settings=get_settings(),
+        salt_leases=salt_leases,
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: (
         encryption_manager
@@ -650,12 +698,20 @@ def test_refresh_uses_cookie_without_csrf_header() -> None:
         ec.ECDH(),
         _load_public_key(session_payload["server_public_key"]),
     )
-    _set_esid_cookie(
+    esid_salt = _set_esid_cookie(
         client,
         session_id=session_payload["session_id"],
         scope="admin",
         key_material=shared_key,
         expires_at=_parse_api_datetime(session_payload["expires_at"]),
+        salt_leases=salt_leases,
+    )
+    response_salt = _issue_salt(
+        salt_leases,
+        session_id=session_payload["session_id"],
+        scope="admin",
+        purpose="response",
+        profile=EncryptionProfile.SENSITIVE,
     )
     auth_service = FakeRefreshAuthService()
     client.cookies.set("blog_admin_refresh", refresh_token, path="/api/admin")
@@ -667,7 +723,11 @@ def test_refresh_uses_cookie_without_csrf_header() -> None:
     try:
         response = client.post(
             "/api/admin/auth/refresh",
-            headers={"X-Encryption-Session": session_payload["session_id"]},
+            headers={
+                "X-Encryption-Session": session_payload["session_id"],
+                "X-Encryption-Esid-Salt": esid_salt.lease_id,
+                "X-Encryption-Response-Salt": response_salt.lease_id,
+            },
             json={},
         )
     finally:
@@ -689,6 +749,7 @@ def test_refresh_uses_cookie_without_csrf_header() -> None:
         ),
         key_material=shared_key,
         expected_profile=EncryptionProfile.SENSITIVE,
+        salt=response_salt.salt,
     )
 
     assert decrypted["user"]["username"] == "admin"
@@ -700,9 +761,11 @@ def test_refresh_rejects_body_refresh_token_without_cookie() -> None:
     client_private_key = ec.generate_private_key(ec.SECP256R1())
     client = TestClient(app)
     encryption_repository = FakeEncryptionSessionRepository()
+    salt_leases = SaltLeaseService(store=InMemorySaltLeaseStore())
     encryption_manager = EncryptionSessionManager(
         repository=encryption_repository,
         settings=get_settings(),
+        salt_leases=salt_leases,
     )
     app.dependency_overrides[get_encryption_session_manager] = lambda: (
         encryption_manager
@@ -725,12 +788,13 @@ def test_refresh_rejects_body_refresh_token_without_cookie() -> None:
         ec.ECDH(),
         _load_public_key(session_payload["server_public_key"]),
     )
-    _set_esid_cookie(
+    esid_salt = _set_esid_cookie(
         client,
         session_id=session_payload["session_id"],
         scope="admin",
         key_material=shared_key,
         expires_at=_parse_api_datetime(session_payload["expires_at"]),
+        salt_leases=salt_leases,
     )
     auth_service = FakeRefreshAuthService()
 
@@ -741,7 +805,10 @@ def test_refresh_rejects_body_refresh_token_without_cookie() -> None:
     try:
         response = client.post(
             "/api/admin/auth/refresh",
-            headers={"X-Encryption-Session": session_payload["session_id"]},
+            headers={
+                "X-Encryption-Session": session_payload["session_id"],
+                "X-Encryption-Esid-Salt": esid_salt.lease_id,
+            },
             json={"refresh_token": refresh_token},
         )
     finally:
@@ -869,6 +936,7 @@ def _make_login_capsule(
     *,
     session_payload: dict[str, object],
     shared_key: bytes,
+    salt_leases: SaltLeaseService,
     username: str = "admin",
     password: str = "correct-password",
     path: str = "/api/admin/auth/login",
@@ -877,9 +945,17 @@ def _make_login_capsule(
     assert isinstance(challenge, dict)
     session_id = str(session_payload["session_id"])
     challenge_id = str(challenge["challenge_id"])
+    login_salt = _issue_salt(
+        salt_leases,
+        session_id=session_id,
+        scope="admin",
+        purpose="login_capsule",
+        profile=EncryptionProfile.SENSITIVE,
+    )
     keys = derive_login_capsule_keys(
         key_material=shared_key,
         challenge_salt=_base64url_decode(str(challenge["challenge_salt"])),
+        transport_salt=login_salt.salt,
         session_id=session_id,
         challenge_id=challenge_id,
     )
@@ -904,6 +980,7 @@ def _make_login_capsule(
         "scheme": "login-capsule-v2",
         "session_id": session_id,
         "challenge_id": challenge_id,
+        "salt_id": login_salt.lease_id,
         "nonce": _base64url_encode(nonce),
         "issued_at": int(datetime.now(UTC).timestamp()),
         "ciphertext": _base64url_encode(ciphertext),
@@ -923,6 +1000,7 @@ def _dummy_login_capsule(session_id: str = "dummy-session") -> dict[str, object]
         "scheme": "login-capsule-v2",
         "session_id": session_id,
         "challenge_id": "dummy-challenge",
+        "salt_id": "dummy-salt",
         "nonce": "AA",
         "issued_at": int(datetime.now(UTC).timestamp()),
         "ciphertext": "AA",
@@ -940,6 +1018,7 @@ def _login_capsule_signing_input(
             str(capsule["scheme"]),
             str(capsule["session_id"]),
             str(capsule["challenge_id"]),
+            str(capsule["salt_id"]),
             "POST",
             path,
             str(capsule["issued_at"]),
@@ -983,15 +1062,25 @@ def _set_esid_cookie(
     scope: str,
     key_material: bytes,
     expires_at: datetime,
+    salt_leases: SaltLeaseService,
     suffix: str = "",
-) -> None:
+) -> object:
+    salt_lease = _issue_salt(
+        salt_leases,
+        session_id=session_id,
+        scope=scope,
+        purpose="esid",
+        profile=None,
+    )
     esid = create_encryption_sid(
         session_id=session_id,
         scope=scope,
         key_material=key_material,
         expires_at=expires_at,
+        salt=salt_lease.salt,
     )
     client.cookies.set(ESID_COOKIE_NAME, f"{esid}{suffix}", path="/api")
+    return salt_lease
 
 
 def _parse_api_datetime(value: str) -> datetime:
@@ -1002,3 +1091,19 @@ def _as_utc_naive(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value
     return value.astimezone(UTC).replace(tzinfo=None)
+
+
+def _issue_salt(
+    salt_leases: SaltLeaseService,
+    *,
+    session_id: str,
+    scope: str,
+    purpose: str,
+    profile: EncryptionProfile | None,
+):
+    return salt_leases.issue(
+        session_id=session_id,
+        scope=scope,  # type: ignore[arg-type]
+        purpose=purpose,  # type: ignore[arg-type]
+        profile=profile,
+    )

@@ -21,7 +21,9 @@ from app.api.dependencies import (
 )
 from app.api.encrypted_response import (
     encrypted_response,
+    encryption_esid_salt_id_from_request,
     encryption_sid_from_request,
+    mark_encryption_session_validated,
     require_encryption_session,
     validate_encryption_session,
 )
@@ -56,6 +58,7 @@ async def login(
         login_payload = await encryption_manager.decrypt_login_capsule(
             session_id=session_id,
             esid=encryption_sid_from_request(request),
+            esid_salt_id=encryption_esid_salt_id_from_request(request),
             payload=payload,
             method=request.method,
             path=str(request.url.path),
@@ -65,6 +68,12 @@ async def login(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="invalid login capsule",
         ) from exc
+    mark_encryption_session_validated(
+        request,
+        session_id=session_id,
+        scope="admin",
+        profile=EncryptionProfile.SENSITIVE,
+    )
 
     client = client_ip(request) or "unknown"
     await enforce_rate_limit(

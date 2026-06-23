@@ -66,6 +66,8 @@ class FakeEncryptionSessionManager:
         profile: EncryptionProfile,
         payload: dict[str, object],
         esid: str | None = None,
+        esid_salt_id: str | None = None,
+        response_salt_id: str | None = None,
     ) -> EncryptedApiResponse:
         assert scope == "admin"
         assert profile == EncryptionProfile.SENSITIVE
@@ -73,8 +75,26 @@ class FakeEncryptionSessionManager:
         return EncryptedApiResponse(
             session_id=session_id,
             profile=profile,
+            salt_id=response_salt_id or "test-response-salt",
             nonce="test-nonce",
             ciphertext="test-ciphertext",
+        )
+
+    async def encrypt_response_for_validated_session(
+        self,
+        *,
+        session_id: str,
+        scope: str,
+        profile: EncryptionProfile,
+        payload: dict[str, object],
+        response_salt_id: str,
+    ) -> EncryptedApiResponse:
+        return await self.encrypt_response(
+            session_id=session_id,
+            scope=scope,
+            profile=profile,
+            payload=payload,
+            response_salt_id=response_salt_id,
         )
 
     async def decrypt_request(
@@ -85,6 +105,7 @@ class FakeEncryptionSessionManager:
         profile: EncryptionProfile,
         payload: EncryptedApiRequest,
         esid: str | None = None,
+        esid_salt_id: str | None = None,
     ) -> dict[str, object]:
         assert session_id == "sensitive-session"
         assert scope == "admin"
@@ -99,6 +120,7 @@ class FakeEncryptionSessionManager:
         scope: str,
         profile: EncryptionProfile,
         esid: str | None = None,
+        esid_salt_id: str | None = None,
     ) -> None:
         assert session_id == "sensitive-session"
         assert scope == "admin"
@@ -133,7 +155,10 @@ def test_admin_settings_use_sensitive_encryption_profile() -> None:
     try:
         response = client.get(
             "/api/admin/settings",
-            headers={"X-Encryption-Session": "sensitive-session"},
+            headers={
+                "X-Encryption-Session": "sensitive-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -166,10 +191,12 @@ def test_update_admin_setting_decrypts_sensitive_request() -> None:
             headers={
                 "X-CSRF-Token": "csrf-token",
                 "X-Encryption-Session": "sensitive-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
             },
             json={
                 "session_id": "sensitive-session",
                 "profile": "sensitive-v1",
+                "salt_id": "test-request-salt",
                 "nonce": "test-nonce",
                 "ciphertext": "test-ciphertext",
             },
@@ -218,6 +245,7 @@ def test_update_admin_setting_rejects_invalid_key_name_before_decrypt() -> None:
             json={
                 "session_id": "sensitive-session",
                 "profile": "sensitive-v1",
+                "salt_id": "test-request-salt",
                 "nonce": "test-nonce",
                 "ciphertext": "test-ciphertext",
             },
@@ -254,6 +282,7 @@ def test_update_admin_setting_rejects_oversized_value_json() -> None:
             json={
                 "session_id": "sensitive-session",
                 "profile": "sensitive-v1",
+                "salt_id": "test-request-salt",
                 "nonce": "test-nonce",
                 "ciphertext": "test-ciphertext",
             },

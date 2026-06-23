@@ -26,7 +26,10 @@ def test_admin_files_use_content_encryption_profile() -> None:
     try:
         response = client.get(
             "/api/admin/files?limit=1&offset=0",
-            headers={"X-Encryption-Session": "content-session"},
+            headers={
+                "X-Encryption-Session": "content-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -51,6 +54,7 @@ def test_admin_file_upload_accepts_multipart_and_csrf() -> None:
             headers={
                 "X-CSRF-Token": "csrf-token",
                 "X-Encryption-Session": "content-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
             },
             cookies={"blog_admin_csrf": "csrf-token"},
             data={
@@ -92,6 +96,7 @@ def test_admin_file_upload_rejects_oversized_body_before_service() -> None:
             headers={
                 "X-CSRF-Token": "csrf-token",
                 "X-Encryption-Session": "content-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
             },
             cookies={"blog_admin_csrf": "csrf-token"},
             data={
@@ -123,6 +128,7 @@ def test_admin_file_delete_requires_csrf() -> None:
             headers={
                 "X-CSRF-Token": "csrf-token",
                 "X-Encryption-Session": "content-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
             },
             cookies={"blog_admin_csrf": "csrf-token"},
         )
@@ -149,7 +155,10 @@ def test_admin_file_temporary_url_uses_encrypted_response() -> None:
     try:
         response = client.get(
             "/api/admin/files/1/temporary-url",
-            headers={"X-Encryption-Session": "content-session"},
+            headers={
+                "X-Encryption-Session": "content-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()

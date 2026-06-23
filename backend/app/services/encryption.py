@@ -40,6 +40,12 @@ from app.schemas.encryption import (
     JsonObject,
     LoginChallengeResponse,
 )
+from app.services.encryption_salts import (
+    EncryptionSaltError,
+    InMemorySaltLeaseStore,
+    SaltLeaseService,
+    SaltPurpose,
+)
 
 
 class EncryptionSessionRepositoryProtocol(Protocol):
@@ -102,9 +108,13 @@ class EncryptionSessionManager:
         *,
         repository: EncryptionSessionRepositoryProtocol,
         settings: Settings,
+        salt_leases: SaltLeaseService | None = None,
     ) -> None:
         self._repository = repository
         self._settings = settings
+        self._salt_leases = salt_leases or SaltLeaseService(
+            store=InMemorySaltLeaseStore(),
+        )
 
     async def create_session(
         self,
@@ -195,36 +205,65 @@ class EncryptionSessionManager:
         *,
         session_id: str,
         esid: str | None,
+        esid_salt_id: str | None,
         scope: EncryptionSessionScope,
         profile: EncryptionProfile,
     ) -> None:
         await self._get_session(
             session_id=session_id,
             esid=esid,
+            esid_salt_id=esid_salt_id,
             expected_scope=scope,
             expected_profile=profile,
         )
+
+    async def get_session_for_salt_stream(
+        self,
+        *,
+        session_id: str,
+        scope: EncryptionSessionScope,
+    ) -> EncryptionSession:
+        session = await self._repository.get_active_session(
+            session_id=session_id,
+            now=_utc_now(),
+        )
+        if session is None:
+            raise EncryptionSessionError("encryption session is invalid or expired")
+        if session.scope != scope:
+            raise EncryptionSessionError("encryption session scope mismatch")
+        return session
 
     async def encrypt_response(
         self,
         *,
         session_id: str,
         esid: str | None,
+        esid_salt_id: str | None,
         scope: EncryptionSessionScope,
         profile: EncryptionProfile,
         payload: JsonObject,
+        response_salt_id: str,
     ) -> EncryptedApiResponse:
         session = await self._get_session(
             session_id=session_id,
             esid=esid,
+            esid_salt_id=esid_salt_id,
             expected_scope=scope,
             expected_profile=profile,
+        )
+        response_salt = self._consume_salt(
+            lease_id=response_salt_id,
+            session_id=session.session_id,
+            scope=scope,
+            purpose="response",
+            profile=profile,
         )
         try:
             envelope = encrypt_json_payload_with_key_material(
                 payload,
                 key_material=session.key_material,
                 profile=profile,
+                salt=response_salt,
             )
         except EncryptionError as exc:
             raise EncryptionSessionError("failed to encrypt response") from exc
@@ -232,6 +271,46 @@ class EncryptionSessionManager:
         return EncryptedApiResponse(
             session_id=session.session_id,
             profile=envelope.profile,
+            salt_id=response_salt_id,
+            nonce=envelope.nonce,
+            ciphertext=envelope.ciphertext,
+        )
+
+    async def encrypt_response_for_validated_session(
+        self,
+        *,
+        session_id: str,
+        scope: EncryptionSessionScope,
+        profile: EncryptionProfile,
+        payload: JsonObject,
+        response_salt_id: str,
+    ) -> EncryptedApiResponse:
+        session = await self._repository.get_active_session(
+            session_id=session_id,
+            now=_utc_now(),
+        )
+        if session is None or session.scope != scope:
+            raise EncryptionSessionError("encryption session is invalid or expired")
+        response_salt = self._consume_salt(
+            lease_id=response_salt_id,
+            session_id=session.session_id,
+            scope=scope,
+            purpose="response",
+            profile=profile,
+        )
+        try:
+            envelope = encrypt_json_payload_with_key_material(
+                payload,
+                key_material=session.key_material,
+                profile=profile,
+                salt=response_salt,
+            )
+        except EncryptionError as exc:
+            raise EncryptionSessionError("failed to encrypt response") from exc
+        return EncryptedApiResponse(
+            session_id=session.session_id,
+            profile=envelope.profile,
+            salt_id=response_salt_id,
             nonce=envelope.nonce,
             ciphertext=envelope.ciphertext,
         )
@@ -241,6 +320,7 @@ class EncryptionSessionManager:
         *,
         session_id: str,
         esid: str | None,
+        esid_salt_id: str | None,
         scope: EncryptionSessionScope,
         profile: EncryptionProfile,
         payload: EncryptedApiRequest,
@@ -250,8 +330,16 @@ class EncryptionSessionManager:
         session = await self._get_session(
             session_id=session_id,
             esid=esid,
+            esid_salt_id=esid_salt_id,
             expected_scope=scope,
             expected_profile=profile,
+        )
+        request_salt = self._consume_salt(
+            lease_id=payload.salt_id,
+            session_id=session.session_id,
+            scope=scope,
+            purpose="request",
+            profile=profile,
         )
         try:
             return decrypt_json_payload_with_key_material(
@@ -262,6 +350,7 @@ class EncryptionSessionManager:
                 ),
                 key_material=session.key_material,
                 expected_profile=profile,
+                salt=request_salt,
             )
         except EncryptionError as exc:
             raise EncryptionSessionError("failed to decrypt request") from exc
@@ -271,6 +360,7 @@ class EncryptionSessionManager:
         *,
         session_id: str,
         esid: str | None,
+        esid_salt_id: str | None,
         payload: LoginCapsuleRequest,
         method: str,
         path: str,
@@ -288,6 +378,7 @@ class EncryptionSessionManager:
         session = await self._get_session(
             session_id=session_id,
             esid=esid,
+            esid_salt_id=esid_salt_id,
             expected_scope="admin",
             expected_profile=EncryptionProfile.SENSITIVE,
             now=db_now,
@@ -310,6 +401,13 @@ class EncryptionSessionManager:
         keys = derive_login_capsule_keys(
             key_material=session.key_material,
             challenge_salt=session.login_challenge_salt,
+            transport_salt=self._consume_salt(
+                lease_id=payload.salt_id,
+                session_id=session.session_id,
+                scope="admin",
+                purpose="login_capsule",
+                profile=EncryptionProfile.SENSITIVE,
+            ),
             session_id=session.session_id,
             challenge_id=session.login_challenge_id,
         )
@@ -339,6 +437,7 @@ class EncryptionSessionManager:
         *,
         session_id: str,
         esid: str | None,
+        esid_salt_id: str | None,
         expected_scope: EncryptionSessionScope,
         expected_profile: EncryptionProfile,
         now: datetime | None = None,
@@ -354,15 +453,46 @@ class EncryptionSessionManager:
         if expected_profile not in _profiles_for_scope(expected_scope):
             raise EncryptionSessionError("encryption profile is not allowed")
         try:
+            if esid_salt_id is None:
+                raise EncryptionSidError("missing esid salt")
+            esid_salt = self._consume_salt(
+                lease_id=esid_salt_id,
+                session_id=session.session_id,
+                scope=expected_scope,
+                purpose="esid",
+                profile=None,
+            )
             validate_encryption_sid(
                 esid,
                 session_id=session.session_id,
                 scope=expected_scope,
                 key_material=session.key_material,
+                salt=esid_salt,
             )
-        except EncryptionSidError as exc:
+        except (EncryptionSidError, EncryptionSaltError) as exc:
             raise EncryptionSessionError("invalid encryption session sid") from exc
         return session
+
+    def _consume_salt(
+        self,
+        *,
+        lease_id: str,
+        session_id: str,
+        scope: EncryptionSessionScope,
+        purpose: SaltPurpose,
+        profile: EncryptionProfile | None,
+    ) -> bytes:
+        try:
+            lease = self._salt_leases.consume(
+                lease_id=lease_id,
+                session_id=session_id,
+                scope=scope,
+                purpose=purpose,
+                profile=profile,
+            )
+        except EncryptionSaltError as exc:
+            raise EncryptionSessionError("invalid encryption salt") from exc
+        return lease.salt
 
 
 def _load_browser_public_key(client_key: BrowserPublicKey) -> ec.EllipticCurvePublicKey:

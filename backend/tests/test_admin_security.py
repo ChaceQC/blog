@@ -159,6 +159,8 @@ def test_production_response_uses_hsts_and_content_security_policy() -> None:
             "public_base_url": "https://example.com",
             "allowed_hosts": ["testserver"],
             "cors_origins": ["https://example.com"],
+            "rate_limit_backend": "redis",
+            "redis_url": "redis://localhost:6379/15",
         },
     )
     settings = Settings(**settings_data)

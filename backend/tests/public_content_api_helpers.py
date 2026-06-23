@@ -59,6 +59,8 @@ class FakeEncryptionSessionManager:
         profile: EncryptionProfile,
         payload: dict[str, object],
         esid: str | None = None,
+        esid_salt_id: str | None = None,
+        response_salt_id: str | None = None,
     ) -> EncryptedApiResponse:
         assert session_id == "public-session"
         assert scope == "public"
@@ -67,8 +69,26 @@ class FakeEncryptionSessionManager:
         return EncryptedApiResponse(
             session_id=session_id,
             profile=profile,
+            salt_id=response_salt_id or "test-response-salt",
             nonce="test-nonce",
             ciphertext="test-ciphertext",
+        )
+
+    async def encrypt_response_for_validated_session(
+        self,
+        *,
+        session_id: str,
+        scope: str,
+        profile: EncryptionProfile,
+        payload: dict[str, object],
+        response_salt_id: str,
+    ) -> EncryptedApiResponse:
+        return await self.encrypt_response(
+            session_id=session_id,
+            scope=scope,
+            profile=profile,
+            payload=payload,
+            response_salt_id=response_salt_id,
         )
 
     async def create_session(
@@ -108,6 +128,7 @@ class FakeEncryptionSessionManager:
         profile: EncryptionProfile,
         payload: EncryptedApiRequest,
         esid: str | None = None,
+        esid_salt_id: str | None = None,
     ) -> dict[str, object]:
         assert session_id == "public-session"
         assert scope == "public"
@@ -122,6 +143,7 @@ class FakeEncryptionSessionManager:
         scope: str,
         profile: EncryptionProfile,
         esid: str | None = None,
+        esid_salt_id: str | None = None,
     ) -> None:
         assert session_id == "public-session"
         assert scope == "public"

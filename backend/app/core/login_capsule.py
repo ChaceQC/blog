@@ -11,7 +11,6 @@ from app.schemas.auth import LoginCapsuleRequest, LoginRequest
 
 LOGIN_CAPSULE_SCHEME = "login-capsule-v2"
 
-_SALT = b"blog-login-capsule-v2"
 _BUCKETS = (256, 512, 1024, 2048)
 _NONCE_LENGTH = 16
 
@@ -30,6 +29,7 @@ def derive_login_capsule_keys(
     *,
     key_material: bytes,
     challenge_salt: bytes,
+    transport_salt: bytes,
     session_id: str,
     challenge_id: str,
 ) -> LoginCapsuleKeys:
@@ -37,6 +37,7 @@ def derive_login_capsule_keys(
         encryption_key=_derive_key(
             key_material=key_material,
             challenge_salt=challenge_salt,
+            transport_salt=transport_salt,
             purpose="enc",
             session_id=session_id,
             challenge_id=challenge_id,
@@ -44,6 +45,7 @@ def derive_login_capsule_keys(
         mac_key=_derive_key(
             key_material=key_material,
             challenge_salt=challenge_salt,
+            transport_salt=transport_salt,
             purpose="mac",
             session_id=session_id,
             challenge_id=challenge_id,
@@ -109,6 +111,7 @@ def _derive_key(
     *,
     key_material: bytes,
     challenge_salt: bytes,
+    transport_salt: bytes,
     purpose: str,
     session_id: str,
     challenge_id: str,
@@ -116,7 +119,7 @@ def _derive_key(
     return HKDF(
         algorithm=hashes.SHA256(),
         length=32,
-        salt=_SALT + challenge_salt,
+        salt=transport_salt + challenge_salt,
         info=f"blog-login-v2:{purpose}:{session_id}:{challenge_id}".encode(),
     ).derive(key_material)
 
@@ -132,6 +135,7 @@ def _signing_input(
             capsule.scheme,
             capsule.session_id,
             capsule.challenge_id,
+            capsule.salt_id,
             method.upper(),
             path,
             str(capsule.issued_at),

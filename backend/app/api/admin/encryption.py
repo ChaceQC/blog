@@ -1,11 +1,13 @@
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, WebSocket, status
 
 from app.api.dependencies import (
     EncryptionSessionManagerDependency,
     LogServiceDependency,
     RateLimitServiceDependency,
+    SaltLeaseServiceDependency,
     SettingsDependency,
 )
+from app.api.encryption_salts import salt_websocket
 from app.api.limits import enforce_rate_limit
 from app.core.request import client_ip
 from app.schemas.encryption import (
@@ -70,3 +72,17 @@ async def create_encryption_session(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="invalid encryption public key",
         ) from exc
+
+
+@router.websocket("/salts")
+async def admin_encryption_salts(
+    websocket: WebSocket,
+    manager: EncryptionSessionManagerDependency,
+    salt_leases: SaltLeaseServiceDependency,
+) -> None:
+    await salt_websocket(
+        websocket,
+        scope="admin",
+        manager=manager,
+        salt_leases=salt_leases,
+    )

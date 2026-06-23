@@ -3,6 +3,10 @@ from dataclasses import dataclass
 from fastapi import FastAPI
 
 from app.core.config import Settings
+from app.services.encryption_salts import (
+    SaltLeaseService,
+    create_salt_lease_service,
+)
 from app.services.logs import (
     AccessLogDedupeBackend,
     create_access_log_dedupe_backend,
@@ -31,6 +35,8 @@ def configure_api_state(app: FastAPI, settings: Settings) -> None:
     app.state.access_log_dedupe_signature = signature
     app.state.rate_limit_service = create_rate_limit_service(settings)
     app.state.rate_limit_signature = signature
+    app.state.salt_lease_service = create_salt_lease_service(settings)
+    app.state.salt_lease_signature = signature
 
 
 def get_app_access_log_dedupe_backend(
@@ -55,3 +61,14 @@ def get_app_rate_limit_service(
         app.state.rate_limit_service = create_rate_limit_service(settings)
         app.state.rate_limit_signature = signature
     return app.state.rate_limit_service
+
+
+def get_app_salt_lease_service(
+    app: FastAPI,
+    settings: Settings,
+) -> SaltLeaseService:
+    signature = shared_backend_signature(settings)
+    if getattr(app.state, "salt_lease_signature", None) != signature:
+        app.state.salt_lease_service = create_salt_lease_service(settings)
+        app.state.salt_lease_signature = signature
+    return app.state.salt_lease_service

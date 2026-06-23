@@ -1,5 +1,46 @@
 # 项目进度
 
+## 2026-06-24
+
+### 本轮计划
+
+- 将应用层加密中前后端写死的 HKDF salt 改为通过 WSS 下发的一次性动态 salt lease，覆盖 AES-GCM JSON 信封、`esid` Cookie 绑定和 `Login Capsule v2` 三类固定 salt。
+- 新增 `/api/{scope}/encryption/salts` WSS 协议：前端完成 P-256 ECDH 加密会话协商后建立 WSS，后端以 ECDH shared secret 派生包裹密钥并加密下发 salt lease；前端只缓存未过期未使用 lease。
+- 所有 salt lease 都按用途隔离并一次性消费：`esid` 只用于写一次 Cookie，`login_capsule` 只用于一次登录 capsule，`request` 只用于一次加密请求体，`response` 只用于一次加密响应体。
+- 后端 salt lease 共享状态采用 Redis 优先：签发时写入 Redis，HTTP 消费时用 Lua 脚本原子读取并删除，确保多 worker、多容器、WSS 与 HTTP 落到不同进程时仍不可重放；仅本地开发和测试允许 memory fallback。
+- 更新前端加密客户端，让所有需要 HKDF salt 的派生都从 WSS salt lease 取得，并在 HTTP 头或信封字段携带 `lease_id` 供后端消费。
+- 为 `/api/{scope}/encryption/salts` 长连接补充应用层加密心跳和自动重连：前端定时发送加密 `ping`，后端返回加密 `pong`，前端连续丢失响应后关闭并按指数退避重连，重连时清理未绑定 HTTP 请求的本地 salt 状态。
+
+### 本轮进度
+
+- 已确认用户指向的 salt 是 AES-GCM JSON 信封中的 `blog-cms-encryption-v1`，并进一步确认本轮要把 `blog-cms-esid-v1` 与 `blog-login-capsule-v2` 也一起纳入 WSS 一次性 salt 协议。
+- 已按要求先更新 `PROJECT_PLAN.md`，明确 WSS salt lease 的协议边界、一次性用途、Redis 共享与原子消费要求。
+- 已进一步补充 `PROJECT_PLAN.md`，明确 WSS 长连接必须使用加密 `ping` / `pong` 心跳、服务端空闲超时关闭、前端指数退避重连和断线 salt 缓存处理规则。
+- 已完成后端 WSS salt 通道心跳：收到加密 `ping` 后使用同一 AES-GCM 包裹格式返回加密 `pong`，并在 90 秒没有收到有效加密帧时关闭连接。
+- 已完成前端 `SaltLeaseSocket` 状态机增强：建立连接后每 25 秒发送加密 `ping`，连续 2 次未收到匹配 `pong` 会关闭连接，并按指数退避加抖动自动重连。
+- 已补充前后端测试，覆盖 WSS 心跳帧加密、加密 `ping` / `pong` 解析、前端收到 `pong` 后保持连接、丢失心跳响应后自动重连。
+
+### 阻塞与风险
+
+- WSS 动态 salt 需要浏览器与反向代理支持 WebSocket 转发；Nginx 生产配置必须确认 `/api/*/encryption/salts` 的 `Upgrade` / `Connection` 头正确传递。
+- 生产多 worker 或多容器必须使用 Redis 共享 salt lease；如果 Redis 不可用却启用动态 salt，不能退回固定 salt，应拒绝加密会话或登录，避免安全边界静默降低。
+- `esid` 的 salt 在 Cookie 写入前就需要，因此首次 WSS salt 连接只能先依赖 `session_id + ECDH shared secret`，拿到 `esid` lease 并写入 Cookie 后，后续 WSS/HTTP 再强制校验 `esid`。
+- 动态 salt 仍不能替代 HTTPS；WSS 必须走 `wss://`，且所有明文、salt、lease、密钥材料和解密失败细节都不能进入日志。
+- 浏览器无法主动发送底层 WebSocket ping frame，因此必须依赖应用层加密心跳；Nginx `proxy_read_timeout` 只能减少代理误断，不能替代前端断线感知和重连。
+
+### 下一步
+
+- 推送 `dev`，再将已验证改动合并到 `main` 并推送远端。
+
+### 验证
+
+- 已运行 `uv run ruff check .`，通过。
+- 已运行 `uv run pytest -q`，245 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- 已运行 `npm.cmd test -- src/api/encryption.test.ts`，4 个前端加密会话测试通过。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；生产 build 完成混淆和 `.gz` 预压缩，仍提示混淆插件耗时较高。
+- 已运行 `git diff --check`，未发现空白或行尾问题。
+
 ## 2026-06-23
 
 ### 本轮计划

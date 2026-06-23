@@ -1,5 +1,6 @@
 import { API_BASE_URL } from './config.ts'
 import {
+  createEncryptionRequestHeaders,
   decryptEncryptedResponse,
   encryptRequestPayload,
   getEncryptionSession,
@@ -21,6 +22,7 @@ type ApiRequestOptions = {
 }
 
 type AuthRefreshHandler = () => Promise<boolean>
+type RetryInitFactory = () => Promise<Pick<RequestInit, 'body' | 'headers'>>
 
 let authRefreshHandler: AuthRefreshHandler | null = null
 
@@ -72,9 +74,15 @@ export async function apiGetEncrypted<T>(
     options.encryptionScope ?? 'admin',
     options.signal,
   )
+  const encryptionHeaders = await createEncryptionRequestHeaders(session, profile)
   return requestJson<T>(path, {
-    headers: jsonHeaders(options, { encryptionSessionId: session.id }),
+    headers: jsonHeaders(options, { encryptionHeaders }),
     encryption: { profile, session },
+    retryInit: async () => ({
+      headers: jsonHeaders(options, {
+        encryptionHeaders: await createEncryptionRequestHeaders(session, profile),
+      }),
+    }),
     signal: options.signal,
     skipAuthRefresh: options.skipAuthRefresh,
   })
@@ -94,14 +102,28 @@ export async function apiPostEncrypted<TBody, TResponse>(
   const requestBody = options.encryptRequest
     ? await encryptRequestPayload(body, profile, session)
     : body
+  const encryptionHeaders = await createEncryptionRequestHeaders(session, profile)
+  const encryptedRetryInit: RetryInitFactory = async () => {
+    const retryBody = options.encryptRequest
+      ? await encryptRequestPayload(body, profile, session)
+      : body
+    return {
+      headers: jsonHeaders(options, {
+        includeContentType: true,
+        encryptionHeaders: await createEncryptionRequestHeaders(session, profile),
+      }),
+      body: JSON.stringify(retryBody),
+    }
+  }
   return requestJson<TResponse>(path, {
     method: 'POST',
     headers: jsonHeaders(options, {
       includeContentType: true,
-      encryptionSessionId: session.id,
+      encryptionHeaders,
     }),
     body: JSON.stringify(requestBody),
     encryption: { profile, session },
+    retryInit: encryptedRetryInit,
     signal: options.signal,
     skipAuthRefresh: options.skipAuthRefresh,
   })
@@ -118,13 +140,20 @@ export async function apiPostFormEncrypted<TResponse>(
     options.encryptionScope ?? 'admin',
     options.signal,
   )
+  const encryptionHeaders = await createEncryptionRequestHeaders(session, profile)
   return requestJson<TResponse>(path, {
     method: 'POST',
     headers: jsonHeaders(options, {
-      encryptionSessionId: session.id,
+      encryptionHeaders,
     }),
     body,
     encryption: { profile, session },
+    retryInit: async () => ({
+      headers: jsonHeaders(options, {
+        encryptionHeaders: await createEncryptionRequestHeaders(session, profile),
+      }),
+      body,
+    }),
     signal: options.signal,
     skipAuthRefresh: options.skipAuthRefresh,
   })
@@ -144,14 +173,28 @@ export async function apiPatchEncrypted<TBody, TResponse>(
   const requestBody = options.encryptRequest
     ? await encryptRequestPayload(body, profile, session)
     : body
+  const encryptionHeaders = await createEncryptionRequestHeaders(session, profile)
+  const encryptedRetryInit: RetryInitFactory = async () => {
+    const retryBody = options.encryptRequest
+      ? await encryptRequestPayload(body, profile, session)
+      : body
+    return {
+      headers: jsonHeaders(options, {
+        includeContentType: true,
+        encryptionHeaders: await createEncryptionRequestHeaders(session, profile),
+      }),
+      body: JSON.stringify(retryBody),
+    }
+  }
   return requestJson<TResponse>(path, {
     method: 'PATCH',
     headers: jsonHeaders(options, {
       includeContentType: true,
-      encryptionSessionId: session.id,
+      encryptionHeaders,
     }),
     body: JSON.stringify(requestBody),
     encryption: { profile, session },
+    retryInit: encryptedRetryInit,
     signal: options.signal,
     skipAuthRefresh: options.skipAuthRefresh,
   })
@@ -167,12 +210,18 @@ export async function apiDeleteEncrypted<TResponse>(
     options.encryptionScope ?? 'admin',
     options.signal,
   )
+  const encryptionHeaders = await createEncryptionRequestHeaders(session, profile)
   return requestJson<TResponse>(path, {
     method: 'DELETE',
     headers: jsonHeaders(options, {
-      encryptionSessionId: session.id,
+      encryptionHeaders,
     }),
     encryption: { profile, session },
+    retryInit: async () => ({
+      headers: jsonHeaders(options, {
+        encryptionHeaders: await createEncryptionRequestHeaders(session, profile),
+      }),
+    }),
     signal: options.signal,
     skipAuthRefresh: options.skipAuthRefresh,
   })
@@ -182,10 +231,11 @@ async function requestJson<T>(
   path: string,
   init: RequestInit & {
     encryption?: { profile: EncryptionProfile; session: EncryptionSession }
+    retryInit?: RetryInitFactory
     skipAuthRefresh?: boolean
   },
 ): Promise<T> {
-  const { encryption, skipAuthRefresh, ...fetchInit } = init
+  const { encryption, retryInit, skipAuthRefresh, ...fetchInit } = init
   let response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: 'include',
     ...fetchInit,
@@ -194,6 +244,9 @@ async function requestJson<T>(
   if (response.status === 401 && !skipAuthRefresh && authRefreshHandler) {
     const refreshed = await authRefreshHandler()
     if (refreshed) {
+      if (retryInit) {
+        Object.assign(fetchInit, await retryInit())
+      }
       response = await fetch(`${API_BASE_URL}${path}`, {
         credentials: 'include',
         ...fetchInit,
@@ -247,7 +300,10 @@ async function readErrorMessage(response: Response): Promise<string> {
 
 function jsonHeaders(
   options: ApiRequestOptions,
-  config: { includeContentType?: boolean; encryptionSessionId?: string } = {},
+  config: {
+    includeContentType?: boolean
+    encryptionHeaders?: Record<string, string>
+  } = {},
 ): HeadersInit {
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -261,8 +317,8 @@ function jsonHeaders(
     headers['X-CSRF-Token'] = options.csrfToken
   }
 
-  if (config.encryptionSessionId) {
-    headers['X-Encryption-Session'] = config.encryptionSessionId
+  if (config.encryptionHeaders) {
+    Object.assign(headers, config.encryptionHeaders)
   }
 
   return headers
@@ -274,6 +330,7 @@ function isEncryptedApiResponse(value: unknown): value is EncryptedApiResponse {
     value !== null &&
     'session_id' in value &&
     'profile' in value &&
+    'salt_id' in value &&
     'nonce' in value &&
     'ciphertext' in value
   )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hmac
 import json
 import os
 import re
@@ -14,15 +15,21 @@ from typing import Any, Literal
 import httpx
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from PIL import Image, ImageDraw
 from playwright.sync_api import sync_playwright
+from websockets.sync.client import connect as ws_connect
+
+from app.core.encryption_sid import ESID_COOKIE_NAME, create_encryption_sid
+from app.core.login_capsule import LOGIN_CAPSULE_SCHEME, derive_login_capsule_keys
 
 EncryptionProfile = Literal["sensitive-v1", "content-v1"]
 EncryptionScope = Literal["admin", "public"]
+SaltPurpose = Literal["esid", "login_capsule", "request", "response"]
 
-SALT = b"blog-cms-encryption-v1"
+SALT_WRAP_INFO = b"blog-cms:wss-salt-wrap:v1"
 
 
 @dataclass(frozen=True)
@@ -31,6 +38,18 @@ class EncryptionSession:
     scope: EncryptionScope
     shared_key: bytes
     profiles: list[str]
+    expires_at: datetime
+    login_challenge: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class SaltLease:
+    lease_id: str
+    purpose: SaltPurpose
+    scope: EncryptionScope
+    profile: EncryptionProfile | None
+    salt: bytes
+    expires_at: datetime
 
 
 @dataclass(frozen=True)
@@ -67,11 +86,14 @@ class M4RuntimeVerifyResult:
 
 class RuntimeApiClient:
     def __init__(self, *, base_url: str, timeout: float) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
         self.client = httpx.Client(
-            base_url=base_url.rstrip("/"),
+            base_url=self.base_url,
             timeout=timeout,
             follow_redirects=False,
         )
+        self._response_salts: dict[str, SaltLease] = {}
 
     def close(self) -> None:
         self.client.close()
@@ -107,6 +129,10 @@ class RuntimeApiClient:
             scope=payload["scope"],
             shared_key=shared_key,
             profiles=list(payload["profiles"]),
+            expires_at=datetime.fromisoformat(
+                str(payload["expires_at"]).replace("Z", "+00:00"),
+            ),
+            login_challenge=payload.get("login_challenge"),
         )
 
     def decrypt(
@@ -120,7 +146,16 @@ class RuntimeApiClient:
             raise RuntimeVerifyError("加密响应 session_id 不匹配")
         if envelope.get("profile") != profile:
             raise RuntimeVerifyError("加密响应 profile 不匹配")
-        aesgcm = AESGCM(_derive_key(session.shared_key, profile))
+        salt_id = str(envelope.get("salt_id") or "")
+        if not salt_id:
+            raise RuntimeVerifyError("加密响应缺少 salt_id")
+        response_salt = self._consume_salt(
+            session=session,
+            lease_id=salt_id,
+            purpose="response",
+            profile=profile,
+        )
+        aesgcm = AESGCM(_derive_key(session.shared_key, profile, response_salt.salt))
         plaintext = aesgcm.decrypt(
             _b64url_decode(str(envelope["nonce"])),
             _b64url_decode(str(envelope["ciphertext"])),
@@ -138,13 +173,20 @@ class RuntimeApiClient:
         session: EncryptionSession,
         profile: EncryptionProfile,
     ) -> dict[str, str]:
+        request_salt = self._issue_salt(
+            session=session,
+            purpose="request",
+            profile=profile,
+        )
         nonce = secrets.token_bytes(12)
         plaintext = json.dumps(
             payload,
             ensure_ascii=False,
             separators=(",", ":"),
         ).encode("utf-8")
-        ciphertext = AESGCM(_derive_key(session.shared_key, profile)).encrypt(
+        ciphertext = AESGCM(
+            _derive_key(session.shared_key, profile, request_salt.salt),
+        ).encrypt(
             nonce,
             plaintext,
             _associated_data(profile),
@@ -152,6 +194,7 @@ class RuntimeApiClient:
         return {
             "session_id": session.id,
             "profile": profile,
+            "salt_id": request_salt.lease_id,
             "nonce": _b64url(nonce),
             "ciphertext": _b64url(ciphertext),
         }
@@ -163,10 +206,16 @@ class RuntimeApiClient:
         password: str,
         session: EncryptionSession,
     ) -> dict[str, Any]:
+        capsule = self._login_capsule(
+            username=username,
+            password=password,
+            session=session,
+            path="/api/admin/auth/login",
+        )
         response = self.client.post(
             "/api/admin/auth/login",
-            headers={"X-Encryption-Session": session.id},
-            json={"username": username, "password": password},
+            headers=self._encrypted_headers(session=session, profile="sensitive-v1"),
+            json=capsule,
         )
         _raise_for_status(response, "后台登录失败")
         return self.decrypt(
@@ -190,7 +239,7 @@ class RuntimeApiClient:
             "/api/admin/files",
             headers={
                 "X-CSRF-Token": csrf_token,
-                "X-Encryption-Session": session.id,
+                **self._encrypted_headers(session=session, profile="content-v1"),
             },
             data={
                 "visibility": visibility,
@@ -258,7 +307,7 @@ class RuntimeApiClient:
             path,
             headers={
                 "X-CSRF-Token": csrf_token,
-                "X-Encryption-Session": session.id,
+                **self._encrypted_headers(session=session, profile="content-v1"),
             },
             json=(
                 self.encrypt(payload, session=session, profile="content-v1")
@@ -282,7 +331,7 @@ class RuntimeApiClient:
     ) -> dict[str, Any]:
         response = self.client.post(
             path,
-            headers={"X-Encryption-Session": session.id},
+            headers=self._encrypted_headers(session=session, profile="content-v1"),
             json=self.encrypt(payload, session=session, profile="content-v1"),
         )
         _raise_for_status(response, f"POST {path} 失败")
@@ -304,7 +353,7 @@ class RuntimeApiClient:
             path,
             headers={
                 "X-CSRF-Token": csrf_token,
-                "X-Encryption-Session": session.id,
+                **self._encrypted_headers(session=session, profile="content-v1"),
             },
             json=self.encrypt(payload, session=session, profile="content-v1"),
         )
@@ -326,7 +375,7 @@ class RuntimeApiClient:
             path,
             headers={
                 "X-CSRF-Token": csrf_token,
-                "X-Encryption-Session": session.id,
+                **self._encrypted_headers(session=session, profile="content-v1"),
             },
         )
         _raise_for_status(response, f"DELETE {path} 失败")
@@ -345,10 +394,22 @@ class RuntimeApiClient:
     ) -> dict[str, Any]:
         response = self.client.get(
             path,
-            headers={"X-Encryption-Session": session.id},
+            headers=self._encrypted_headers(session=session, profile=profile),
         )
         _raise_for_status(response, f"GET {path} 失败")
         return self.decrypt(response.json(), session=session, profile=profile)
+
+    def encrypted_get_response(
+        self,
+        path: str,
+        *,
+        session: EncryptionSession,
+        profile: EncryptionProfile,
+    ) -> httpx.Response:
+        return self.client.get(
+            path,
+            headers=self._encrypted_headers(session=session, profile=profile),
+        )
 
     def get_binary(self, url: str) -> httpx.Response:
         response = self.client.get(url)
@@ -359,6 +420,163 @@ class RuntimeApiClient:
         response = self.client.get(path)
         _raise_for_status(response, f"GET {path} 失败")
         return response.text
+
+    def _encrypted_headers(
+        self,
+        *,
+        session: EncryptionSession,
+        profile: EncryptionProfile,
+    ) -> dict[str, str]:
+        esid_salt = self._issue_salt(session=session, purpose="esid", profile=None)
+        esid = create_encryption_sid(
+            session_id=session.id,
+            scope=session.scope,
+            key_material=session.shared_key,
+            expires_at=session.expires_at,
+            salt=esid_salt.salt,
+        )
+        cookie_path = f"/api/{session.scope}"
+        self.client.cookies.set(
+            ESID_COOKIE_NAME,
+            esid,
+            domain=httpx.URL(self.base_url).host,
+            path=cookie_path,
+        )
+        response_salt = self._issue_salt(
+            session=session,
+            purpose="response",
+            profile=profile,
+        )
+        self._response_salts[response_salt.lease_id] = response_salt
+        return {
+            "X-Encryption-Session": session.id,
+            "X-Encryption-Esid-Salt": esid_salt.lease_id,
+            "X-Encryption-Response-Salt": response_salt.lease_id,
+        }
+
+    def _login_capsule(
+        self,
+        *,
+        username: str,
+        password: str,
+        session: EncryptionSession,
+        path: str,
+    ) -> dict[str, Any]:
+        challenge = session.login_challenge
+        if not challenge:
+            raise RuntimeVerifyError("后台登录缺少 login_challenge")
+        challenge_id = str(challenge["challenge_id"])
+        login_salt = self._issue_salt(
+            session=session,
+            purpose="login_capsule",
+            profile="sensitive-v1",
+        )
+        keys = derive_login_capsule_keys(
+            key_material=session.shared_key,
+            challenge_salt=_b64url_decode(str(challenge["challenge_salt"])),
+            transport_salt=login_salt.salt,
+            session_id=session.id,
+            challenge_id=challenge_id,
+        )
+        payload = json.dumps(
+            {"username": username, "password": password},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        bucket_size = next(
+            size for size in (256, 512, 1024, 2048) if size >= len(payload) + 2
+        )
+        padded = bytearray(secrets.token_bytes(bucket_size))
+        padded[0:2] = len(payload).to_bytes(2, "big")
+        padded[2 : 2 + len(payload)] = payload
+        nonce = secrets.token_bytes(16)
+        encryptor = Cipher(
+            algorithms.AES(keys.encryption_key),
+            modes.CTR(nonce),
+        ).encryptor()
+        ciphertext = encryptor.update(bytes(padded)) + encryptor.finalize()
+        capsule: dict[str, Any] = {
+            "scheme": LOGIN_CAPSULE_SCHEME,
+            "session_id": session.id,
+            "challenge_id": challenge_id,
+            "salt_id": login_salt.lease_id,
+            "nonce": _b64url(nonce),
+            "issued_at": int(datetime.now(UTC).timestamp()),
+            "ciphertext": _b64url(ciphertext),
+        }
+        capsule["tag"] = _b64url(
+            hmac.digest(
+                keys.mac_key,
+                _login_capsule_signing_input(capsule, path),
+                "sha256",
+            ),
+        )
+        return capsule
+
+    def _issue_salt(
+        self,
+        *,
+        session: EncryptionSession,
+        purpose: SaltPurpose,
+        profile: EncryptionProfile | None,
+    ) -> SaltLease:
+        request_payload = {
+            "purpose": purpose,
+            "profile": profile,
+            "count": 1,
+        }
+        with ws_connect(
+            _salt_ws_url(self.base_url, session.scope),
+            open_timeout=self.timeout,
+            close_timeout=self.timeout,
+        ) as websocket:
+            websocket.send(
+                json.dumps(
+                    _wrap_salt_payload(
+                        request_payload,
+                        session_id=session.id,
+                        key_material=session.shared_key,
+                    ),
+                    separators=(",", ":"),
+                ),
+            )
+            response = json.loads(websocket.recv(timeout=self.timeout))
+        frames = response.get("frames")
+        if response.get("type") != "salt_leases" or not isinstance(frames, list):
+            raise RuntimeVerifyError("salt WSS 返回格式异常")
+        if not frames:
+            raise RuntimeVerifyError("salt WSS 未返回 lease")
+        lease = _unwrap_salt_frame(
+            frames[0],
+            session_id=session.id,
+            key_material=session.shared_key,
+        )
+        if (
+            lease.purpose != purpose
+            or lease.scope != session.scope
+            or lease.profile != profile
+        ):
+            raise RuntimeVerifyError("salt lease 用途不匹配")
+        return lease
+
+    def _consume_salt(
+        self,
+        *,
+        session: EncryptionSession,
+        lease_id: str,
+        purpose: SaltPurpose,
+        profile: EncryptionProfile | None,
+    ) -> SaltLease:
+        lease = self._response_salts.pop(lease_id, None)
+        if lease is None:
+            raise RuntimeVerifyError("响应 salt_id 不匹配")
+        if (
+            lease.purpose != purpose
+            or lease.scope != session.scope
+            or lease.profile != profile
+        ):
+            raise RuntimeVerifyError("响应 salt lease 用途不匹配")
+        return lease
 
 
 def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
@@ -512,9 +730,10 @@ def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
             raise RuntimeVerifyError("公开文章列表没有返回刚发布的验证文章")
         if any(item.get("slug") == scheduled_slug for item in public_list["items"]):
             raise RuntimeVerifyError("未来定时文章提前出现在公开文章列表")
-        scheduled_response = api.client.get(
+        scheduled_response = api.encrypted_get_response(
             f"/api/public/posts/{scheduled_slug}",
-            headers={"X-Encryption-Session": public_session.id},
+            session=public_session,
+            profile="content-v1",
         )
         if scheduled_response.status_code != 404:
             raise RuntimeVerifyError("未来定时文章详情提前公开")
@@ -669,9 +888,10 @@ def verify_runtime_flow(args: argparse.Namespace) -> RuntimeVerifyResult:
         download_response = api.get_binary(str(temporary_url["url"]))
         _assert_media_type(download_response, "image/png", "公开文件下载")
 
-        private_public_response = api.client.get(
+        private_public_response = api.encrypted_get_response(
             f"/api/public/files/{private_file_id}/temporary-url",
-            headers={"X-Encryption-Session": public_session.id},
+            session=public_session,
+            profile="content-v1",
         )
         if private_public_response.status_code != 403:
             raise RuntimeVerifyError("私有文件公开短时访问入口没有返回 403")
@@ -1589,11 +1809,111 @@ def _assert_media_type(
         raise RuntimeVerifyError(f"{label}响应类型不是 {expected}：{content_type}")
 
 
-def _derive_key(key_material: bytes, profile: EncryptionProfile) -> bytes:
+def _wrap_salt_payload(
+    payload: dict[str, object],
+    *,
+    session_id: str,
+    key_material: bytes,
+) -> dict[str, str]:
+    wrap_salt = secrets.token_bytes(32)
+    nonce = secrets.token_bytes(12)
+    ciphertext = AESGCM(_derive_salt_wrap_key(key_material, wrap_salt)).encrypt(
+        nonce,
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8"),
+        _salt_wrap_associated_data(session_id),
+    )
+    return {
+        "session_id": session_id,
+        "wrap_salt": _b64url(wrap_salt),
+        "nonce": _b64url(nonce),
+        "ciphertext": _b64url(ciphertext),
+    }
+
+
+def _unwrap_salt_frame(
+    frame: dict[str, Any],
+    *,
+    session_id: str,
+    key_material: bytes,
+) -> SaltLease:
+    if frame.get("session_id") != session_id:
+        raise RuntimeVerifyError("salt frame session_id 不匹配")
+    plaintext = AESGCM(
+        _derive_salt_wrap_key(
+            key_material,
+            _b64url_decode(str(frame["wrap_salt"])),
+        ),
+    ).decrypt(
+        _b64url_decode(str(frame["nonce"])),
+        _b64url_decode(str(frame["ciphertext"])),
+        _salt_wrap_associated_data(session_id),
+    )
+    payload = json.loads(plaintext.decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeVerifyError("salt lease 解密结果不是对象")
+    return SaltLease(
+        lease_id=str(payload["lease_id"]),
+        purpose=_salt_purpose(str(payload["purpose"])),
+        scope=_encryption_scope(str(payload["scope"])),
+        profile=(
+            _encryption_profile(str(payload["profile"]))
+            if payload.get("profile") is not None
+            else None
+        ),
+        salt=_b64url_decode(str(payload["salt"])),
+        expires_at=datetime.fromtimestamp(int(payload["expires_at"]), UTC),
+    )
+
+
+def _salt_ws_url(base_url: str, scope: EncryptionScope) -> str:
+    parsed = httpx.URL(base_url)
+    scheme = "wss" if parsed.scheme == "https" else "ws"
+    return str(parsed.copy_with(scheme=scheme, path=f"/api/{scope}/encryption/salts"))
+
+
+def _derive_salt_wrap_key(key_material: bytes, wrap_salt: bytes) -> bytes:
     return HKDF(
         algorithm=hashes.SHA256(),
         length=32,
-        salt=SALT,
+        salt=wrap_salt,
+        info=SALT_WRAP_INFO,
+    ).derive(key_material)
+
+
+def _salt_wrap_associated_data(session_id: str) -> bytes:
+    return f"blog-cms:wss-salt-wrap:{session_id}".encode()
+
+
+def _login_capsule_signing_input(capsule: dict[str, Any], path: str) -> bytes:
+    return "\n".join(
+        (
+            str(capsule["scheme"]),
+            str(capsule["session_id"]),
+            str(capsule["challenge_id"]),
+            str(capsule["salt_id"]),
+            "POST",
+            path,
+            str(capsule["issued_at"]),
+            str(capsule["nonce"]),
+            str(capsule["ciphertext"]),
+        ),
+    ).encode("utf-8")
+
+
+def _derive_key(
+    key_material: bytes,
+    profile: EncryptionProfile,
+    salt: bytes,
+) -> bytes:
+    return HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
         info=f"blog-cms:{profile}".encode(),
     ).derive(key_material)
 
@@ -1608,6 +1928,24 @@ def _b64url(value: bytes) -> str:
 
 def _b64url_decode(value: str) -> bytes:
     return urlsafe_b64decode(value + "=" * (-len(value) % 4))
+
+
+def _encryption_scope(value: str) -> EncryptionScope:
+    if value not in {"admin", "public"}:
+        raise RuntimeVerifyError(f"未知加密 scope：{value}")
+    return value  # type: ignore[return-value]
+
+
+def _encryption_profile(value: str) -> EncryptionProfile:
+    if value not in {"sensitive-v1", "content-v1"}:
+        raise RuntimeVerifyError(f"未知加密 profile：{value}")
+    return value  # type: ignore[return-value]
+
+
+def _salt_purpose(value: str) -> SaltPurpose:
+    if value not in {"esid", "login_capsule", "request", "response"}:
+        raise RuntimeVerifyError(f"未知 salt purpose：{value}")
+    return value  # type: ignore[return-value]
 
 
 if __name__ == "__main__":

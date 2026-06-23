@@ -24,7 +24,10 @@ def test_public_posts_returns_published_post_list() -> None:
     try:
         response = client.get(
             "/api/public/posts?limit=1",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -69,7 +72,10 @@ def test_public_posts_rejects_oversized_offset() -> None:
 
     response = client.get(
         "/api/public/posts?limit=1&offset=10001",
-        headers={"X-Encryption-Session": "public-session"},
+        headers={
+            "X-Encryption-Session": "public-session",
+            "X-Encryption-Response-Salt": "test-response-salt",
+        },
     )
 
     assert response.status_code == 422
@@ -87,7 +93,10 @@ def test_public_posts_accept_category_and_tag_filters() -> None:
     try:
         response = client.get(
             "/api/public/posts?limit=2&category=category-a&tag=fastapi",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -113,7 +122,10 @@ def test_public_categories_return_encrypted_list() -> None:
     try:
         response = client.get(
             "/api/public/categories?limit=2",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -143,7 +155,10 @@ def test_public_category_detail_returns_encrypted_item() -> None:
     try:
         response = client.get(
             "/api/public/categories/category-a",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -172,7 +187,10 @@ def test_public_category_detail_returns_404_for_missing_category() -> None:
     try:
         response = client.get(
             "/api/public/categories/missing-category",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -194,7 +212,10 @@ def test_public_tags_return_encrypted_list() -> None:
     try:
         response = client.get(
             "/api/public/tags?limit=2",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -224,7 +245,10 @@ def test_public_tag_detail_returns_encrypted_item() -> None:
     try:
         response = client.get(
             "/api/public/tags/fastapi",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -253,7 +277,10 @@ def test_public_tag_detail_returns_404_for_missing_tag() -> None:
     try:
         response = client.get(
             "/api/public/tags/missing-tag",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -275,7 +302,10 @@ def test_public_post_detail_returns_html_content() -> None:
     try:
         response = client.get(
             "/api/public/posts/public-post",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -312,7 +342,10 @@ def test_public_post_detail_returns_404_for_missing_post() -> None:
     try:
         response = client.get(
             "/api/public/posts/missing-post",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -334,7 +367,10 @@ def test_public_page_detail_returns_html_content() -> None:
     try:
         response = client.get(
             "/api/public/pages/about",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -366,7 +402,10 @@ def test_public_page_detail_returns_404_for_missing_page() -> None:
     try:
         response = client.get(
             "/api/public/pages/missing-page",
-            headers={"X-Encryption-Session": "public-session"},
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()

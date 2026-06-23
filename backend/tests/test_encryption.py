@@ -11,6 +11,7 @@ from app.core.encryption import (
 )
 
 SECRET_KEY = "test-secret-key-with-at-least-32-characters"
+TEST_SALT = b"test-dynamic-salt-for-json-envelope"
 
 
 def test_sensitive_encryption_round_trip() -> None:
@@ -20,6 +21,7 @@ def test_sensitive_encryption_round_trip() -> None:
         payload,
         secret_key=SECRET_KEY,
         profile=EncryptionProfile.SENSITIVE,
+        salt=TEST_SALT,
     )
 
     assert envelope.profile == EncryptionProfile.SENSITIVE
@@ -27,6 +29,7 @@ def test_sensitive_encryption_round_trip() -> None:
         envelope,
         secret_key=SECRET_KEY,
         expected_profile=EncryptionProfile.SENSITIVE,
+        salt=TEST_SALT,
     ) == payload
 
 
@@ -36,6 +39,7 @@ def test_content_profile_uses_separate_key_context() -> None:
         payload,
         secret_key=SECRET_KEY,
         profile=EncryptionProfile.CONTENT,
+        salt=TEST_SALT,
     )
 
     with pytest.raises(EncryptionError):
@@ -43,6 +47,7 @@ def test_content_profile_uses_separate_key_context() -> None:
             envelope,
             secret_key=SECRET_KEY,
             expected_profile=EncryptionProfile.SENSITIVE,
+            salt=TEST_SALT,
         )
 
 
@@ -52,6 +57,7 @@ def test_encryption_rejects_tampered_ciphertext() -> None:
         payload,
         secret_key=SECRET_KEY,
         profile=EncryptionProfile.CONTENT,
+        salt=TEST_SALT,
     )
     ciphertext_bytes = bytearray(_base64url_decode(envelope.ciphertext))
     ciphertext_bytes[-1] ^= 1
@@ -66,6 +72,7 @@ def test_encryption_rejects_tampered_ciphertext() -> None:
             tampered,
             secret_key=SECRET_KEY,
             expected_profile=EncryptionProfile.CONTENT,
+            salt=TEST_SALT,
         )
 
 
@@ -74,6 +81,7 @@ def test_encrypted_envelope_does_not_expose_plaintext() -> None:
         {"username": "admin"},
         secret_key=SECRET_KEY,
         profile=EncryptionProfile.SENSITIVE,
+        salt=TEST_SALT,
     )
 
     assert "admin" not in envelope.ciphertext

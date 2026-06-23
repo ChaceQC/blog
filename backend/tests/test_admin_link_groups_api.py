@@ -22,7 +22,10 @@ def test_admin_friend_link_groups_use_content_encryption_profile() -> None:
     try:
         response = client.get(
             "/api/admin/friend-link-groups?limit=1",
-            headers={"X-Encryption-Session": "content-session"},
+            headers={
+                "X-Encryption-Session": "content-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -54,10 +57,12 @@ def test_create_admin_friend_link_group_decrypts_content_request() -> None:
             headers={
                 "X-CSRF-Token": "csrf-token",
                 "X-Encryption-Session": "content-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
             },
             json={
                 "session_id": "content-session",
                 "profile": "content-v1",
+                "salt_id": "test-request-salt",
                 "nonce": "test-nonce",
                 "ciphertext": "test-ciphertext",
             },
@@ -94,10 +99,12 @@ def test_update_admin_friend_link_group_decrypts_content_request() -> None:
             headers={
                 "X-CSRF-Token": "csrf-token",
                 "X-Encryption-Session": "content-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
             },
             json={
                 "session_id": "content-session",
                 "profile": "content-v1",
+                "salt_id": "test-request-salt",
                 "nonce": "test-nonce",
                 "ciphertext": "test-ciphertext",
             },
@@ -122,7 +129,10 @@ def test_admin_site_nav_groups_use_content_encryption_profile() -> None:
     try:
         response = client.get(
             "/api/admin/site-groups?limit=1",
-            headers={"X-Encryption-Session": "content-session"},
+            headers={
+                "X-Encryption-Session": "content-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -156,10 +166,12 @@ def test_create_admin_site_nav_group_decrypts_content_request() -> None:
             headers={
                 "X-CSRF-Token": "csrf-token",
                 "X-Encryption-Session": "content-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
             },
             json={
                 "session_id": "content-session",
                 "profile": "content-v1",
+                "salt_id": "test-request-salt",
                 "nonce": "test-nonce",
                 "ciphertext": "test-ciphertext",
             },
@@ -196,10 +208,12 @@ def test_update_admin_site_nav_group_decrypts_content_request() -> None:
             headers={
                 "X-CSRF-Token": "csrf-token",
                 "X-Encryption-Session": "content-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
             },
             json={
                 "session_id": "content-session",
                 "profile": "content-v1",
+                "salt_id": "test-request-salt",
                 "nonce": "test-nonce",
                 "ciphertext": "test-ciphertext",
             },
