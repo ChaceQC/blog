@@ -115,9 +115,11 @@ export async function createEncryptionRequestHeaders(
   session: EncryptionSession,
   profile: EncryptionProfile,
 ): Promise<Record<string, string>> {
+  const [esidSalt, responseSalt] = await takeSaltLeases(session, [
+    { purpose: 'esid', profile: null },
+    { purpose: 'response', profile },
+  ])
   await ensureEncryptionSidCookie(session)
-  const esidSalt = await takeSaltLease(session, 'esid', null)
-  const responseSalt = await takeSaltLease(session, 'response', profile)
   rememberResponseSalt(session, responseSalt)
   return {
     'X-Encryption-Session': session.id,
@@ -199,8 +201,6 @@ async function createEncryptionSession(scope: EncryptionScope): Promise<Encrypti
     expiresAt: parseApiTime(sessionResponse.expires_at),
     loginChallenge: sessionResponse.login_challenge ?? null,
   }
-  session.saltSocket = await createSaltSocket(session)
-  await ensureEncryptionSidCookie(session)
   return session
 }
 
@@ -235,7 +235,7 @@ async function takeSaltLease(
   if (Date.now() > session.expiresAt - 1_000) {
     throw new Error('加密会话已过期')
   }
-  session.saltSocket ??= await createSaltSocket(session)
+  session.saltSocket ??= await getSaltSocket(session)
   const [lease] = await session.saltSocket.request(purpose, profile, 1)
   if (!lease) {
     throw new Error('salt lease missing')
@@ -249,6 +249,38 @@ async function takeSaltLease(
     throw new Error('salt lease mismatch')
   }
   return lease
+}
+
+async function takeSaltLeases(
+  session: EncryptionSession,
+  requests: Array<{ purpose: SaltPurpose; profile: EncryptionProfile | null }>,
+): Promise<EncryptionSaltLease[]> {
+  if (Date.now() > session.expiresAt - 1_000) {
+    throw new Error('加密会话已过期')
+  }
+  session.saltSocket ??= await getSaltSocket(session)
+  const leases = await session.saltSocket.requestBatch(
+    requests.map((request) => ({
+      ...request,
+      count: 1,
+    })),
+  )
+  if (leases.length !== requests.length) {
+    throw new Error('salt lease missing')
+  }
+  leases.forEach((lease, index) => {
+    const request = requests[index]
+    if (
+      !request ||
+      lease.purpose !== request.purpose ||
+      lease.scope !== session.scope ||
+      lease.profile !== request.profile ||
+      lease.expiresAt <= Date.now()
+    ) {
+      throw new Error('salt lease mismatch')
+    }
+  })
+  return leases
 }
 
 function consumeResponseSalt(
@@ -268,6 +300,23 @@ async function createSaltSocket(
 ): Promise<NonNullable<EncryptionSession['saltSocket']>> {
   const { SaltLeaseSocket } = await import('./encryptionSaltSocket.ts')
   return new SaltLeaseSocket(session)
+}
+
+async function getSaltSocket(
+  session: EncryptionSession,
+): Promise<NonNullable<EncryptionSession['saltSocket']>> {
+  if (session.saltSocket) {
+    return session.saltSocket
+  }
+  session.saltSocketOpening ??= createSaltSocket(session)
+    .then((socket) => {
+      session.saltSocket = socket
+      return socket
+    })
+    .finally(() => {
+      session.saltSocketOpening = undefined
+    })
+  return session.saltSocketOpening
 }
 
 function responseSaltRegistryKey(sessionId: string, leaseId: string): string {

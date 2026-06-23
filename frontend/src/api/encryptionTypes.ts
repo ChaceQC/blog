@@ -19,10 +19,28 @@ export type EncryptionSaltLease = {
   expiresAt: number
 }
 
+export type SaltLeaseRequestItem = {
+  purpose: SaltPurpose
+  profile?: EncryptionProfile | null
+  count?: number
+}
+
 export type LoginChallenge = {
   challenge_id: string
   challenge_salt: string
   expires_at: string
+}
+
+export type SaltSocketClient = {
+  request: (
+    purpose: SaltPurpose,
+    profile?: EncryptionProfile | null,
+    count?: number,
+  ) => Promise<EncryptionSaltLease[]>
+  requestBatch: (
+    items: SaltLeaseRequestItem[],
+  ) => Promise<EncryptionSaltLease[]>
+  close: () => void
 }
 
 export type EncryptionSession = {
@@ -34,12 +52,6 @@ export type EncryptionSession = {
   esid?: string
   esidCookieWritten?: boolean
   loginChallenge?: LoginChallenge | null
-  saltSocket?: {
-    request: (
-      purpose: SaltPurpose,
-      profile?: EncryptionProfile | null,
-      count?: number,
-    ) => Promise<EncryptionSaltLease[]>
-    close: () => void
-  }
+  saltSocket?: SaltSocketClient
+  saltSocketOpening?: Promise<SaltSocketClient>
 }

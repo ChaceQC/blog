@@ -94,11 +94,10 @@ describe('getEncryptionSession', () => {
       scope: 'public',
       profiles: ['content-v1'],
     })
-    expect(document.cookie).toContain('esid=')
-    expect(cookieWrites.at(-1)).toContain('Path=/api/public')
+    expect(cookieWrites).toHaveLength(0)
   })
 
-  it('does not rewrite esid cookies just for cached session reuse', async () => {
+  it('does not rewrite esid cookies just for cached request headers', async () => {
     vi.setSystemTime(new Date('2026-06-23T00:00:00Z'))
     window.history.replaceState({}, '', '/')
     const cookieWrites = captureCookieWrites()
@@ -131,11 +130,15 @@ describe('getEncryptionSession', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    const { getEncryptionSession } = await import('./encryption.ts')
+    const { createEncryptionRequestHeaders, getEncryptionSession } = await import(
+      './encryption.ts'
+    )
 
-    await getEncryptionSession('content-v1', 'public')
-    await getEncryptionSession('sensitive-v1', 'admin')
-    await getEncryptionSession('content-v1', 'public')
+    const publicSession = await getEncryptionSession('content-v1', 'public')
+    await createEncryptionRequestHeaders(publicSession, 'content-v1')
+    const adminSession = await getEncryptionSession('sensitive-v1', 'admin')
+    await createEncryptionRequestHeaders(adminSession, 'sensitive-v1')
+    await createEncryptionRequestHeaders(publicSession, 'content-v1')
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(cookieWrites).toHaveLength(2)
@@ -163,6 +166,58 @@ describe('getEncryptionSession', () => {
     const publicEsid = readCookieValue(cookieWrites[0])
     expect(publicEsid).toBeTruthy()
     expect(publicEsid.length).toBeLessThan(ESID_COOKIE_SIZE_LIMIT)
+  })
+
+  it('opens the salt websocket before creating the esid cookie', async () => {
+    vi.setSystemTime(new Date('2026-06-23T00:00:00Z'))
+    window.history.replaceState({}, '', '/')
+    const cookieWrites = captureCookieWrites()
+    vi.stubGlobal('fetch', sessionFetchMock('public-session', 'public'))
+    vi.mocked(crypto.subtle.sign).mockRejectedValueOnce(
+      new Error('esid signing failed'),
+    )
+
+    const { createEncryptionRequestHeaders, getEncryptionSession } = await import(
+      './encryption.ts'
+    )
+
+    const session = await getEncryptionSession('content-v1', 'public')
+    await expect(
+      createEncryptionRequestHeaders(session, 'content-v1'),
+    ).rejects.toThrow('esid signing failed')
+
+    expect(saltWebSocketInstances).toHaveLength(1)
+    expect(saltWebSocketInstances[0]?.sentPayloads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'salt_batch_request',
+          items: expect.arrayContaining([
+            expect.objectContaining({ purpose: 'esid' }),
+            expect.objectContaining({ purpose: 'response' }),
+          ]),
+        }),
+      ]),
+    )
+    expect(cookieWrites).toHaveLength(0)
+  })
+
+  it('shares one opening salt websocket across concurrent requests', async () => {
+    vi.setSystemTime(new Date('2026-06-23T00:00:00Z'))
+    window.history.replaceState({}, '', '/')
+    captureCookieWrites()
+    vi.stubGlobal('fetch', sessionFetchMock('public-session', 'public'))
+
+    const { createEncryptionRequestHeaders, getEncryptionSession } = await import(
+      './encryption.ts'
+    )
+
+    const session = await getEncryptionSession('content-v1', 'public')
+    await Promise.all([
+      createEncryptionRequestHeaders(session, 'content-v1'),
+      createEncryptionRequestHeaders(session, 'content-v1'),
+    ])
+
+    expect(saltWebSocketInstances).toHaveLength(1)
   })
 
   it('keeps the salt websocket alive with encrypted heartbeat pongs', async () => {
@@ -290,6 +345,7 @@ function stubSaltWebSocket(): void {
     readyState = MockWebSocket.CONNECTING
     readonly url: string
     sentPayloads: unknown[] = []
+    leaseCounter = 0
 
     constructor(url: string) {
       super()
@@ -334,20 +390,22 @@ function stubSaltWebSocket(): void {
       }
       queueMicrotask(() => {
         const scope = this.url.includes('/admin/') ? 'admin' : 'public'
+        const requests = saltLeaseRequestsFromPayload(payload)
         this.dispatchEvent(
           new MessageEvent('message', {
             data: JSON.stringify({
               type: 'salt_leases',
-              frames: [
-                encodeFramePayload(frame.session_id, {
-                  lease_id: `lease-${this.sentPayloads.length}`,
-                  purpose: isSaltRequestPayload(payload) ? payload.purpose : 'esid',
+              frames: requests.map((request) => {
+                this.leaseCounter += 1
+                return encodeFramePayload(frame.session_id, {
+                  lease_id: `lease-${this.leaseCounter}`,
+                  purpose: request.purpose,
                   scope,
-                  profile: isSaltRequestPayload(payload) ? payload.profile : null,
+                  profile: request.profile,
                   salt: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
                   expires_at: 4_071_398_400,
-                }),
-              ],
+                })
+              }),
             }),
           }),
         )
@@ -409,6 +467,7 @@ function isSaltRequestPayload(value: unknown): value is {
   kind: 'salt_request'
   purpose: 'esid' | 'login_capsule' | 'request' | 'response'
   profile: 'sensitive-v1' | 'content-v1' | null
+  count: number
 } {
   if (!value || typeof value !== 'object') {
     return false
@@ -419,6 +478,42 @@ function isSaltRequestPayload(value: unknown): value is {
     typeof payload.purpose === 'string' &&
     (payload.profile === null || typeof payload.profile === 'string')
   )
+}
+
+function isSaltBatchRequestPayload(value: unknown): value is {
+  kind: 'salt_batch_request'
+  items: Array<{
+    purpose: 'esid' | 'login_capsule' | 'request' | 'response'
+    profile: 'sensitive-v1' | 'content-v1' | null
+    count: number
+  }>
+} {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+  const payload = value as { kind?: unknown; items?: unknown }
+  return payload.kind === 'salt_batch_request' && Array.isArray(payload.items)
+}
+
+function saltLeaseRequestsFromPayload(value: unknown): Array<{
+  purpose: 'esid' | 'login_capsule' | 'request' | 'response'
+  profile: 'sensitive-v1' | 'content-v1' | null
+}> {
+  if (isSaltBatchRequestPayload(value)) {
+    return value.items.flatMap((item) =>
+      Array.from({ length: item.count }, () => ({
+        purpose: item.purpose,
+        profile: item.profile,
+      })),
+    )
+  }
+  if (isSaltRequestPayload(value)) {
+    return Array.from({ length: value.count }, () => ({
+      purpose: value.purpose,
+      profile: value.profile,
+    }))
+  }
+  return [{ purpose: 'esid', profile: null }]
 }
 
 function encodeFramePayload(

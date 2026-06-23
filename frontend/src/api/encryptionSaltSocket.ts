@@ -15,6 +15,7 @@ import type {
   EncryptionSaltLease,
   EncryptionScope,
   EncryptionSession,
+  SaltLeaseRequestItem,
   SaltPurpose,
 } from './encryptionTypes.ts'
 
@@ -53,6 +54,11 @@ type SaltRequestPayload = {
   count: number
 }
 
+type SaltBatchRequestPayload = {
+  kind: 'salt_batch_request'
+  items: Required<SaltLeaseRequestItem>[]
+}
+
 type SaltPingPayload = {
   kind: 'ping'
   seq: number
@@ -66,6 +72,7 @@ type SaltPongWire = {
 }
 
 const SALT_WRAP_INFO = 'blog-cms:wss-salt-wrap:v1'
+const SALT_SOCKET_OPEN_TIMEOUT_MS = 8_000
 const SALT_SOCKET_REQUEST_TIMEOUT_MS = 8_000
 const SALT_SOCKET_HEARTBEAT_INTERVAL_MS = 25_000
 const SALT_SOCKET_MAX_MISSED_PONGS = 2
@@ -101,9 +108,15 @@ export class SaltLeaseSocket {
     profile: EncryptionProfile | null = null,
     count = 1,
   ): Promise<EncryptionSaltLease[]> {
+    return this.requestBatch([{ purpose, profile, count }])
+  }
+
+  async requestBatch(
+    items: SaltLeaseRequestItem[],
+  ): Promise<EncryptionSaltLease[]> {
     const task = this.queue
       .catch(() => undefined)
-      .then(() => this.performRequest(purpose, profile, count))
+      .then(() => this.performRequest(normalizeRequestItems(items)))
     this.queue = task.then(
       () => undefined,
       () => undefined,
@@ -122,14 +135,12 @@ export class SaltLeaseSocket {
   }
 
   private async performRequest(
-    purpose: SaltPurpose,
-    profile: EncryptionProfile | null,
-    count: number,
+    items: Required<SaltLeaseRequestItem>[],
   ): Promise<EncryptionSaltLease[]> {
     let lastError: Error | null = null
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        return await this.sendSaltRequest(purpose, profile, count)
+        return await this.sendSaltRequest(items)
       } catch (error) {
         const normalizedError = toError(error, 'salt lease request failed')
         if (!isRetryableSaltSocketError(normalizedError) || attempt > 0) {
@@ -144,20 +155,25 @@ export class SaltLeaseSocket {
   }
 
   private async sendSaltRequest(
-    purpose: SaltPurpose,
-    profile: EncryptionProfile | null,
-    count: number,
+    items: Required<SaltLeaseRequestItem>[],
   ): Promise<EncryptionSaltLease[]> {
     if (this.pending) {
       throw new Error('salt lease request is already pending')
     }
     const socket = await this.ensureSocket()
-    const frame = await this.wrapPayload({
-      kind: 'salt_request',
-      purpose,
-      profile,
-      count,
-    })
+    const frame = await this.wrapPayload(
+      items.length === 1
+        ? {
+            kind: 'salt_request',
+            purpose: items[0]?.purpose ?? 'esid',
+            profile: items[0]?.profile ?? null,
+            count: items[0]?.count ?? 1,
+          }
+        : {
+            kind: 'salt_batch_request',
+            items,
+          },
+    )
     return new Promise<EncryptionSaltLease[]>((resolve, reject) => {
       const timeoutId = window.setTimeout(() => {
         this.pending = null
@@ -209,7 +225,17 @@ export class SaltLeaseSocket {
 
     this.opening = new Promise<WebSocket>((resolve, reject) => {
       let settled = false
+      const timeoutId = window.setTimeout(() => {
+        if (settled) {
+          return
+        }
+        settled = true
+        cleanup()
+        this.closeSocketForReconnect(new Error('salt lease socket open timed out'))
+        reject(new Error('salt lease socket open timed out'))
+      }, SALT_SOCKET_OPEN_TIMEOUT_MS)
       const cleanup = () => {
+        window.clearTimeout(timeoutId)
         socket.removeEventListener('open', handleOpen)
         socket.removeEventListener('error', handleError)
         socket.removeEventListener('close', handleClose)
@@ -279,20 +305,42 @@ export class SaltLeaseSocket {
 
   private waitForSocketOpen(socket: WebSocket): Promise<WebSocket> {
     return new Promise<WebSocket>((resolve, reject) => {
+      let settled = false
+      const timeoutId = window.setTimeout(() => {
+        if (settled) {
+          return
+        }
+        settled = true
+        cleanup()
+        reject(new Error('salt lease socket open timed out'))
+      }, SALT_SOCKET_OPEN_TIMEOUT_MS)
       const cleanup = () => {
+        window.clearTimeout(timeoutId)
         socket.removeEventListener('open', handleOpen)
         socket.removeEventListener('error', handleError)
         socket.removeEventListener('close', handleClose)
       }
       const handleOpen = () => {
+        if (settled) {
+          return
+        }
+        settled = true
         cleanup()
         resolve(socket)
       }
       const handleError = () => {
+        if (settled) {
+          return
+        }
+        settled = true
         cleanup()
         reject(new Error('salt lease socket failed'))
       }
       const handleClose = () => {
+        if (settled) {
+          return
+        }
+        settled = true
         cleanup()
         reject(new Error('salt lease socket closed'))
       }
@@ -427,7 +475,9 @@ export class SaltLeaseSocket {
     return Math.min(SALT_SOCKET_RECONNECT_MAX_MS, baseDelay + jitter)
   }
 
-  private async wrapPayload(payload: SaltRequestPayload | SaltPingPayload): Promise<SaltFrame> {
+  private async wrapPayload(
+    payload: SaltRequestPayload | SaltBatchRequestPayload | SaltPingPayload,
+  ): Promise<SaltFrame> {
     const wrapSalt = crypto.getRandomValues(new Uint8Array(32))
     const nonce = crypto.getRandomValues(new Uint8Array(12))
     const key = await deriveSaltWrapKey(this.session.sharedSecret, wrapSalt, [
@@ -529,6 +579,23 @@ function isSaltPurpose(value: unknown): value is SaltPurpose {
     value === 'request' ||
     value === 'response'
   )
+}
+
+function normalizeRequestItems(
+  items: SaltLeaseRequestItem[],
+): Required<SaltLeaseRequestItem>[] {
+  if (items.length < 1 || items.length > 8) {
+    throw new Error('invalid salt lease request count')
+  }
+  const totalCount = items.reduce((total, item) => total + (item.count ?? 1), 0)
+  if (totalCount < 1 || totalCount > 8) {
+    throw new Error('invalid salt lease request count')
+  }
+  return items.map((item) => ({
+    purpose: item.purpose,
+    profile: item.profile ?? null,
+    count: item.count ?? 1,
+  }))
 }
 
 function isEncryptionScope(value: unknown): value is EncryptionScope {

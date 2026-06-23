@@ -160,6 +160,8 @@ npm run dev
 
 应用层加密使用 `/api/{scope}/encryption/salts` WebSocket 下发一次性动态 salt。WSS 帧本身会用 ECDH shared secret 派生 AES-GCM 包裹密钥加密，每帧还有随机 `wrap_salt`；salt lease 按用途分为 `esid`、`login_capsule`、`request` 和 `response`，只能消费一次。HTTP 请求会同时携带 `X-Encryption-Session`、`X-Encryption-Esid-Salt`、`X-Encryption-Response-Salt`，加密请求/登录 capsule 信封还会携带 `salt_id`；后端校验并消费 Redis 中的 lease 后才会继续处理。WSS 长连接使用同一加密帧格式传输应用层 `ping` / `pong` 心跳，前端连续丢失响应会关闭连接并按指数退避重连，重连期间不会降级回固定 salt。
 
+前端创建加密请求头时会先建立 WSS salt 通道并批量获取当前请求需要的 `esid` 与 `response` lease，随后再生成并写入 `esid` Cookie，避免 `esid` 动态 chunk、WASM 或混淆后执行异常时阻断 WSS 启动。首屏多个公开查询并发时同一加密 session 只共享一个 salt WebSocket 创建过程，避免冷缓存下重复建连放大限流压力。
+
 常用命令：
 
 ```powershell
@@ -193,8 +195,8 @@ npm.cmd run build
 - `BLOG_AVATAR_CACHE_RETRY_ATTEMPTS`：远程头像拉取失败后的重试次数，默认 `2`。
 - `BLOG_RATE_LIMIT_BACKEND`：共享后端，支持 `memory` 和 `redis`；生产必须使用 `redis`，用于限流、访问日志去重和一次性加密 salt lease。
 - `BLOG_REDIS_URL`：Redis 连接串，生产示例为 `redis://redis:6379/0`。
-- `BLOG_ADMIN_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`：后台加密会话单 IP 活跃数量上限，默认 `10`。
-- `BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`：公开加密会话单 IP 活跃数量上限，默认 `10`。
+- `BLOG_ADMIN_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`：后台加密会话单 IP 活跃数量上限，默认 `30`。
+- `BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP`：公开加密会话单 IP 活跃数量上限，默认 `60`。
 - `BLOG_TRUSTED_PROXY_HOSTS`：可信反向代理直连后端的 IP 或 CIDR 列表；只有这些来源的 `X-Forwarded-For` / `X-Real-IP` 会被用于应用层限流、数据库访问日志和后端运行日志。
 - `BLOG_ACCESS_LOG_DEDUPE_SECONDS`：成功 `GET/HEAD` 访问日志短时去重窗口，默认 `60`；同一 IP 在窗口内重复访问同一 path 只写入第一条，错误和写操作仍逐条记录。
 
@@ -376,8 +378,8 @@ BLOG_AVATAR_CACHE_TTL_SECONDS=3600
 BLOG_AVATAR_CACHE_MAX_SIZE_BYTES=2097152
 BLOG_AVATAR_CACHE_REQUEST_TIMEOUT_SECONDS=5
 BLOG_AVATAR_CACHE_RETRY_ATTEMPTS=2
-BLOG_ADMIN_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP=10
-BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP=10
+BLOG_ADMIN_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP=30
+BLOG_PUBLIC_ENCRYPTION_SESSION_ACTIVE_LIMIT_PER_IP=60
 BLOG_ACCESS_LOG_DEDUPE_SECONDS=60
 ```
 

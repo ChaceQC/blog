@@ -2,6 +2,8 @@ type EsidWasmExports = {
   q: (value: number, mask: number, shift: number) => number
 }
 
+type ByteMixer = (value: number, mask: number, shift: number) => number
+
 const WASM_BYTES = new Uint8Array([
   0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x01, 0x60,
   0x03, 0x7f, 0x7f, 0x7f, 0x01, 0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x05,
@@ -14,12 +16,14 @@ const WASM_BYTES = new Uint8Array([
 
 let wasmModule: Promise<EsidWasmExports> | null = null
 
-export async function loadEsidWasmByteMixer(): Promise<
-  (value: number, mask: number, shift: number) => number
-> {
-  const wasm = await loadEsidWasm()
-  return (value: number, mask: number, shift: number) =>
-    wasm.q(value, mask, shift) & 0xff
+export async function loadEsidWasmByteMixer(): Promise<ByteMixer> {
+  try {
+    const wasm = await loadEsidWasm()
+    return (value: number, mask: number, shift: number) =>
+      wasm.q(value, mask, shift) & 0xff
+  } catch {
+    return jsByteMix
+  }
 }
 
 async function loadEsidWasm(): Promise<EsidWasmExports> {
@@ -33,4 +37,13 @@ async function loadEsidWasm(): Promise<EsidWasmExports> {
     }
   })
   return wasmModule
+}
+
+function jsByteMix(value: number, mask: number, shift: number): number {
+  const mixed = ((value ^ mask) & 0xff) >>> 0
+  const amount = shift & 7
+  if (amount === 0) {
+    return mixed
+  }
+  return ((mixed << amount) | (mixed >>> (8 - amount))) & 0xff
 }

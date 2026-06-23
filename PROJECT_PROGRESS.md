@@ -4,6 +4,42 @@
 
 ### 本轮计划
 
+- 优先修复冷缓存打开页面时“只有 `/encryption/sessions` 请求能发出，WSS 和后续业务请求没有启动”的加载阻塞问题。
+- 保留多业务 chunk + 源码 chunk 混淆策略，不把构建分包重新收敛成少量大 JS；冷缓存请求压力通过增大 Nginx/API/WSS 限流余量、静态资源长期缓存和请求链路顺序修复处理。
+- 调整 WSS salt 启动顺序：业务请求创建加密请求头时必须先建立 WSS 并拿到一次性 salt，再执行 `esid` Cookie 生成，避免 `esid` 动态 chunk、WASM 或混淆执行异常导致 WSS 根本不启动。
+- 为同一加密 session 的 salt socket 创建增加 promise 级复用，首屏多个公开查询并发时只建立一个 WSS；同一 HTTP 请求需要的 `esid` 和 `response` salt 通过一次批量 WSS 请求获取。
+- 同步生产 CSP、Nginx WSS location、API/WSS 限流和 session 协商限流默认值，避免 WSS 被 CSP/代理/limit 拦住。
+
+### 本轮进度
+
+- 已将 `createEncryptionRequestHeaders()` 顺序改为先通过 WSS 获取 `purpose=esid` 与 `purpose=response` salt，再调用 `ensureEncryptionSidCookie()`；如果 `esid` 生成异常，至少 WSS 已经启动，便于定位且不会出现“WSS 根本没发起”的静默阻塞。
+- 已为 `SaltLeaseSocket` 增加连接建立超时，避免 CSP、代理或网络异常时请求无限等待；同时保留应用层加密心跳与指数退避重连。
+- 已给加密 session 增加 `saltSocketOpening`，并发请求会复用同一个 socket 创建过程，避免冷缓存首屏多查询同时打开多个 WSS。
+- 已新增 WSS `salt_batch_request`：前端可一次请求多个 salt lease，后端按请求顺序下发多个加密 frame；公开 GET 请求现在一次 WSS 往返即可拿到 `esid` 与 `response` salt。
+- 已同步 CSP：后端与 Nginx 均允许 `script-src 'wasm-unsafe-eval'` 和 `connect-src 'self' ws: wss:`。
+- 已调整 Nginx 模板：`api_limit` 提高到 `60r/s`、普通 `/api/` burst 提高到 `240`；新增 WSS 专用 `wss_limit` 与 `/api/(public|admin)/encryption/salts` location，配置 WebSocket upgrade 头和 120 秒读写超时；`/assets/` 使用 1 年缓存以减少 hash chunk 重复请求。
+- 已提高后端默认加密 session 限流余量：协商限流 `120/分钟`，后台/公开活跃 session 单 IP 上限分别为 `30` 和 `60`；登录限流保持严格。
+
+### 阻塞与风险
+
+- 如果公网前面还有宿主机 Nginx、CDN 或面板网关，它们也必须同步放开 WSS upgrade、CSP `connect-src`、API/WSS 限流和静态资源缓存；仓库内模板只能覆盖 Docker Nginx。
+- WSS 和 WASM 仍依赖浏览器安全策略；本轮已加建连超时和 CSP 放行，但线上仍需要用真实浏览器网络面板确认 `/api/public/encryption/salts` 返回 101。
+
+### 验证
+
+- 已运行 `npm.cmd test -- src/api/encryption.test.ts`，7 个前端加密会话/WSS 顺序测试通过。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；生产构建仍输出多个纯 hash JS chunk，gzip 预压缩正常生成，仍提示混淆插件耗时较高。
+- 已运行 `uv run ruff check .`，通过。
+- 已运行 `uv run pytest tests/test_encryption_salts.py tests/test_admin_encryption_api.py tests/test_public_encryption_api.py tests/test_rate_limit_redis_integration.py -q`，23 个测试通过、2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过。
+- 已运行 `uv run pytest -q`，248 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- 已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
+- 已运行 `git diff --check`，未发现空白或行尾问题。
+
+## 2026-06-24
+
+### 本轮计划
+
 - 加强前端生产构建防逆向：提高字符串加密、控制流混淆和死代码注入强度，并保留“只混淆项目源码、不混淆第三方 vendor”的边界。
 - 将加密协议状态机从单个 `encryption.ts` 拆成多个异步 chunk：WSS salt lease 状态机、`esid` 生成/变换、JSON 请求/响应信封分别动态加载，降低静态分析时的一次性可见性。
 - 把 `esid` 可逆数组变换中的字节置换核心迁移到一个前端 WASM 模块，TS 侧只保留密钥派生、HMAC 和协议编排；WASM 仍只作为防逆向成本提升，不替代服务端校验。

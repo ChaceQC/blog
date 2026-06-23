@@ -21,21 +21,21 @@ class Settings(BaseSettings):
     encryption_session_expire_seconds: int = Field(default=300, ge=60, le=3600)
     admin_login_rate_limit_max_attempts: int = Field(default=5, ge=1, le=100)
     admin_login_rate_limit_window_seconds: int = Field(default=60, ge=10, le=3600)
-    encryption_session_rate_limit_max_attempts: int = Field(default=20, ge=1, le=300)
+    encryption_session_rate_limit_max_attempts: int = Field(default=120, ge=1, le=1000)
     encryption_session_rate_limit_window_seconds: int = Field(
         default=60,
         ge=10,
         le=3600,
     )
     public_encryption_session_active_limit_per_ip: int = Field(
-        default=10,
+        default=60,
         ge=1,
-        le=100,
+        le=500,
     )
     admin_encryption_session_active_limit_per_ip: int = Field(
-        default=10,
+        default=30,
         ge=1,
-        le=100,
+        le=500,
     )
     friend_link_application_rate_limit_max_attempts: int = Field(
         default=5,

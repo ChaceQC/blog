@@ -148,7 +148,7 @@ class FakeEncryptionSessionManager:
         active_session_limit: int | None = None,
     ) -> CreateEncryptionSessionResponse:
         assert client_ip == "testclient"
-        assert active_session_limit == 10
+        assert active_session_limit == 60
         return CreateEncryptionSessionResponse(
             session_id="redis-test-session",
             scope="admin",

@@ -102,7 +102,7 @@ class FakeEncryptionSessionManager:
         assert client_public_key.kty == "EC"
         assert scope == "public"
         assert client_ip == "testclient"
-        assert active_session_limit == 10
+        assert active_session_limit == 60
         if self.raise_active_limit:
             raise ActiveEncryptionSessionLimitExceeded(
                 "too many active encryption sessions",

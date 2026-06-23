@@ -41,6 +41,13 @@ class SaltLeaseRequestPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class SaltLeaseBatchRequestPayload(BaseModel):
+    kind: Literal["salt_batch_request"]
+    items: list[SaltLeaseRequestPayload] = Field(min_length=1, max_length=8)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class SaltPingPayload(BaseModel):
     kind: Literal["ping"]
     seq: int = Field(ge=0, le=2_147_483_647)
@@ -114,10 +121,11 @@ async def salt_websocket(
                     )
                     continue
 
-                lease_request = SaltLeaseRequestPayload.model_validate(
-                    _normalize_salt_request_payload(request_payload),
-                )
-                _validate_purpose(scope=scope, request=lease_request)
+                lease_requests = _parse_lease_requests(request_payload)
+                if sum(request.count for request in lease_requests) > 8:
+                    raise ValueError("too many salt leases requested")
+                for lease_request in lease_requests:
+                    _validate_purpose(scope=scope, request=lease_request)
                 frames = [
                     salt_leases.wrap(
                         lease=salt_leases.issue(
@@ -128,6 +136,7 @@ async def salt_websocket(
                         ),
                         key_material=session.key_material,
                     )
+                    for lease_request in lease_requests
                     for _ in range(lease_request.count)
                 ]
                 await websocket.send_json(
@@ -162,6 +171,14 @@ def _normalize_salt_request_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if "kind" not in payload:
         return {"kind": "salt_request", **payload}
     return payload
+
+
+def _parse_lease_requests(payload: dict[str, Any]) -> list[SaltLeaseRequestPayload]:
+    normalized = _normalize_salt_request_payload(payload)
+    if normalized.get("kind") == "salt_batch_request":
+        batch = SaltLeaseBatchRequestPayload.model_validate(normalized)
+        return batch.items
+    return [SaltLeaseRequestPayload.model_validate(normalized)]
 
 
 def _validate_purpose(
