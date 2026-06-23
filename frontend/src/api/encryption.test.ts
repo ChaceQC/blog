@@ -98,7 +98,7 @@ describe('getEncryptionSession', () => {
     expect(cookieWrites.at(-1)).toContain('Path=/api/public')
   })
 
-  it('writes scoped esid cookies again when reusing cached sessions', async () => {
+  it('does not rewrite esid cookies just for cached session reuse', async () => {
     vi.setSystemTime(new Date('2026-06-23T00:00:00Z'))
     window.history.replaceState({}, '', '/')
     const cookieWrites = captureCookieWrites()
@@ -138,10 +138,36 @@ describe('getEncryptionSession', () => {
     await getEncryptionSession('content-v1', 'public')
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(cookieWrites).toHaveLength(3)
+    expect(cookieWrites).toHaveLength(2)
     expect(cookieWrites[0]).toContain('Path=/api/public')
     expect(cookieWrites[1]).toContain('Path=/api/admin')
-    expect(cookieWrites[2]).toContain('Path=/api/public')
+  })
+
+  it('keeps multiple in-flight esids in one scoped cookie bundle', async () => {
+    vi.setSystemTime(new Date('2026-06-23T00:00:00Z'))
+    window.history.replaceState({}, '', '/')
+    const cookieWrites = captureCookieWrites()
+    vi.stubGlobal('fetch', sessionFetchMock('public-session', 'public'))
+
+    const { createEncryptionRequestHeaders, getEncryptionSession } = await import(
+      './encryption.ts'
+    )
+
+    const session = await getEncryptionSession('content-v1', 'public')
+    const firstHeaders = await createEncryptionRequestHeaders(session, 'content-v1')
+    const secondHeaders = await createEncryptionRequestHeaders(session, 'content-v1')
+
+    expect(firstHeaders['X-Encryption-Esid-Salt']).toBe('lease-2')
+    expect(secondHeaders['X-Encryption-Esid-Salt']).toBe('lease-4')
+    const publicBundle = decodeCookieBundle(cookieWrites.at(-1) ?? '')
+    expect(publicBundle.session_id).toBe('public-session')
+    expect(publicBundle.scope).toBe('public')
+    expect(publicBundle.items).toHaveLength(3)
+    expect(publicBundle.items.map(([saltId]) => saltId)).toEqual([
+      'lease-1',
+      'lease-2',
+      'lease-4',
+    ])
   })
 
   it('keeps the salt websocket alive with encrypted heartbeat pongs', async () => {
@@ -214,6 +240,21 @@ function captureCookieWrites(): string[] {
     delete (document as { cookie?: string }).cookie
   }
   return writes
+}
+
+function decodeCookieBundle(cookieWrite: string): {
+  session_id: string
+  scope: string
+  items: [string, string][]
+} {
+  const value = cookieWrite.split(';')[0]?.split('=').slice(1).join('=') ?? ''
+  return JSON.parse(
+    new TextDecoder().decode(base64urlDecode(decodeURIComponent(value))),
+  ) as {
+    session_id: string
+    scope: string
+    items: [string, string][]
+  }
 }
 
 function stubBrowserCrypto(): void {

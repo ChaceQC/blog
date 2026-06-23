@@ -2,6 +2,33 @@
 
 ## 2026-06-24
 
+### 已完成
+
+- 修复公开页并发请求偶发 400：根因是多个 public 加密请求并发刷新同一个 `esid` Cookie，后发请求覆盖先发请求的 Cookie，导致先发请求的 `X-Encryption-Esid-Salt` 与浏览器实际携带的 `esid` 不匹配。
+- 前端 `esid` Cookie 改为按 `salt_id` 保存最多 8 个在途 sid 的 bundle；每个请求仍携带自己的 `X-Encryption-Esid-Salt`，后端按该 salt id 从同一个 `esid` bundle 中选择对应 sid 校验。
+- 后端 `validate_encryption_sid` 兼容新的 bundle 格式，同时继续兼容旧的单 sid Cookie 格式，避免已有测试和单请求路径被破坏。
+- 移除复用已缓存加密 session 时的额外 `esid` 刷新，避免一次业务请求前出现无意义的 Cookie 覆盖。
+
+### 阻塞与风险
+
+- 本轮未直接连线上服务器抓取真实浏览器网络包；已根据截图中“session/WSS 成功但并发 public API 部分 400”的模式定位并补充前后端回归测试。
+
+### 下一步
+
+- 推送 `dev` 并合并到 `main` 后，在服务器重新部署前端和后端，复查首页首屏 public posts、site-profile、site-items、files 等并发请求不再出现 400。
+
+### 验证
+
+- 已运行 `uv run pytest tests/test_encryption.py tests/test_admin_encryption_api.py -q`，20 个测试通过。
+- 已运行 `uv run pytest -q`，247 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- 已运行 `uv run ruff check .`，通过。
+- 已运行 `npm.cmd test -- src/api/encryption.test.ts`，5 个前端加密会话测试通过。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；生产 build 完成混淆和 `.gz` 预压缩，仍提示混淆插件耗时较高。
+- 已运行 `git diff --check`，未发现空白或行尾问题。
+
+## 2026-06-24
+
 ### 本轮计划
 
 - 将应用层加密中前后端写死的 HKDF salt 改为通过 WSS 下发的一次性动态 salt lease，覆盖 AES-GCM JSON 信封、`esid` Cookie 绑定和 `Login Capsule v2` 三类固定 salt。

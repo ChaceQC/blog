@@ -468,6 +468,7 @@ class EncryptionSessionManager:
                 scope=expected_scope,
                 key_material=session.key_material,
                 salt=esid_salt,
+                salt_id=esid_salt_id,
             )
         except (EncryptionSidError, EncryptionSaltError) as exc:
             raise EncryptionSessionError("invalid encryption session sid") from exc

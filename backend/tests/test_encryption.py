@@ -1,4 +1,6 @@
-﻿from base64 import urlsafe_b64decode, urlsafe_b64encode
+﻿import json
+from base64 import urlsafe_b64decode, urlsafe_b64encode
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -9,6 +11,7 @@ from app.core.encryption import (
     decrypt_json_payload,
     encrypt_json_payload,
 )
+from app.core.encryption_sid import create_encryption_sid, validate_encryption_sid
 
 SECRET_KEY = "test-secret-key-with-at-least-32-characters"
 TEST_SALT = b"test-dynamic-salt-for-json-envelope"
@@ -85,6 +88,66 @@ def test_encrypted_envelope_does_not_expose_plaintext() -> None:
     )
 
     assert "admin" not in envelope.ciphertext
+
+
+def test_esid_bundle_selects_token_by_salt_id() -> None:
+    expires_at = datetime.now(UTC) + timedelta(minutes=5)
+    first_salt = b"1" * 32
+    second_salt = b"2" * 32
+    first_esid = create_encryption_sid(
+        session_id="session-1",
+        scope="public",
+        key_material=b"k" * 32,
+        expires_at=expires_at,
+        salt=first_salt,
+    )
+    second_esid = create_encryption_sid(
+        session_id="session-1",
+        scope="public",
+        key_material=b"k" * 32,
+        expires_at=expires_at,
+        salt=second_salt,
+    )
+    bundle = _base64url_encode(
+        json.dumps(
+            {
+                "v": 1,
+                "session_id": "session-1",
+                "scope": "public",
+                "items": [["salt-1", first_esid], ["salt-2", second_esid]],
+            },
+            separators=(",", ":"),
+        ).encode(),
+    )
+
+    validate_encryption_sid(
+        bundle,
+        session_id="session-1",
+        scope="public",
+        key_material=b"k" * 32,
+        salt=second_salt,
+        salt_id="salt-2",
+    )
+
+
+def test_esid_still_accepts_legacy_single_token() -> None:
+    salt = b"1" * 32
+    esid = create_encryption_sid(
+        session_id="session-1",
+        scope="public",
+        key_material=b"k" * 32,
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+        salt=salt,
+    )
+
+    validate_encryption_sid(
+        esid,
+        session_id="session-1",
+        scope="public",
+        key_material=b"k" * 32,
+        salt=salt,
+        salt_id="salt-1",
+    )
 
 
 def _base64url_decode(value: str) -> bytes:

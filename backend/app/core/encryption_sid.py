@@ -18,6 +18,7 @@ _NONCE_LENGTH = 16
 _TAG_LENGTH = 16
 _ROUNDS = 8
 _PURPOSE = "encryption-session-binding"
+_BUNDLE_VERSION = 1
 
 
 class EncryptionSidError(Exception):
@@ -66,15 +67,22 @@ def validate_encryption_sid(
     scope: EncryptionSessionScope,
     key_material: bytes,
     salt: bytes,
+    salt_id: str | None = None,
     now: datetime | None = None,
 ) -> None:
     if esid is None:
         raise EncryptionSidError("missing esid")
-    if not esid or len(esid) > ESID_MAX_LENGTH:
+    token = _select_esid_from_bundle(
+        esid,
+        session_id=session_id,
+        scope=scope,
+        salt_id=salt_id,
+    )
+    if not token or len(token) > ESID_MAX_LENGTH:
         raise EncryptionSidError("invalid esid")
 
     try:
-        raw = _base64url_decode(esid)
+        raw = _base64url_decode(token)
     except (ValueError, TypeError) as exc:
         raise EncryptionSidError("invalid esid") from exc
 
@@ -125,6 +133,42 @@ def _validate_payload(
     current = now.timestamp()
     if iat is None or exp is None or iat > current + 60 or exp <= current:
         raise EncryptionSidError("expired esid")
+
+
+def _select_esid_from_bundle(
+    esid: str,
+    *,
+    session_id: str,
+    scope: EncryptionSessionScope,
+    salt_id: str | None,
+) -> str:
+    if not esid:
+        raise EncryptionSidError("invalid esid")
+    if salt_id is None:
+        return esid
+    try:
+        raw = _base64url_decode(esid)
+        payload = json.loads(raw.decode("utf-8"))
+    except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+        return esid
+    if not isinstance(payload, dict):
+        return esid
+    if payload.get("v") != _BUNDLE_VERSION:
+        return esid
+    if payload.get("session_id") != session_id or payload.get("scope") != scope:
+        raise EncryptionSidError("esid bundle mismatch")
+    items = payload.get("items")
+    if not isinstance(items, list):
+        raise EncryptionSidError("invalid esid bundle")
+    for item in items:
+        if (
+            isinstance(item, list | tuple)
+            and len(item) == 2
+            and item[0] == salt_id
+            and isinstance(item[1], str)
+        ):
+            return item[1]
+    raise EncryptionSidError("missing esid for salt")
 
 
 def _transform_forward(data: bytes, *, key: bytes, nonce: bytes) -> bytes:
