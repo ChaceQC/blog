@@ -154,6 +154,8 @@ npm install
 npm run dev
 ```
 
+本地开发时前端 dev server 使用同源 `/api` 代理到 `config/development.json` 中的后端地址，保证应用层加密协商后前端可写入并随请求携带 `esid` Cookie。
+
 常用命令：
 
 ```powershell
@@ -162,6 +164,8 @@ npm.cmd test
 npm.cmd run lint
 npm.cmd run build
 ```
+
+生产构建会对输出的 JavaScript chunk 做混淆；混淆只提高前端算法阅读和复刻成本，后端仍以数据库中的加密会话 `key_material`、`X-Encryption-Session` 和 `esid` Cookie 校验作为安全边界。
 
 ### 联调约束
 
@@ -190,7 +194,7 @@ npm.cmd run build
 - `BLOG_TRUSTED_PROXY_HOSTS`：可信反向代理直连后端的 IP 或 CIDR 列表；只有这些来源的 `X-Forwarded-For` / `X-Real-IP` 会被用于应用层限流、数据库访问日志和后端运行日志。
 - `BLOG_ACCESS_LOG_DEDUPE_SECONDS`：成功 `GET/HEAD` 访问日志短时去重窗口，默认 `60`；同一 IP 在窗口内重复访问同一 path 只写入第一条，错误和写操作仍逐条记录。
 
-访问日志只保留类型、方法、path、状态码、实体类型/id、IP、UA 和时间，不保存 query、临时 token、签名参数、slug、文件名或 MIME 摘要；后台审计日志只保留动作、实体 id、操作者和最小状态/字段名摘要，不保存标题、URL、文件名、正文或完整设置值。生产后端容器通过项目启动入口把 `BLOG_TRUSTED_PROXY_HOSTS` 同步传给 Uvicorn，因此 `docker compose logs backend` 中的运行访问日志也会按可信代理头显示真实访客 IP，并带有时间戳；时间戳使用容器内 `TZ`/`tzdata` 配置，模板默认 `Asia/Shanghai`。后端镜像默认启用 UTF-8 环境变量，并使用腾讯云 Debian/PyPI/uv 镜像源，避免终端和 Python IO 出现中文编码漂移并加快国内构建。后端所有响应都会设置 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 和 `Permissions-Policy`；生产环境额外设置 HSTS 与 Content Security Policy，Nginx 仍保留同等安全响应头作为公网入口兜底。
+访问日志只保留类型、方法、path、状态码、实体类型/id、IP、UA 和时间，不保存 query、临时 token、签名参数、slug、文件名或 MIME 摘要；后台审计日志只保留动作、实体 id、操作者和最小状态/字段名摘要，不保存标题、URL、文件名、正文或完整设置值。应用层加密会话除 `X-Encryption-Session` 外还要求同源 `esid` Cookie：前端用 ECDH shared secret、`session_id`、scope 和过期时间生成可逆 sid，后端用数据库 `key_material` 逆运算并校验 HMAC、session、scope 和过期时间。生产后端容器通过项目启动入口把 `BLOG_TRUSTED_PROXY_HOSTS` 同步传给 Uvicorn，因此 `docker compose logs backend` 中的运行访问日志也会按可信代理头显示真实访客 IP，并带有时间戳；时间戳使用容器内 `TZ`/`tzdata` 配置，模板默认 `Asia/Shanghai`。后端镜像默认启用 UTF-8 环境变量，并使用腾讯云 Debian/PyPI/uv 镜像源，避免终端和 Python IO 出现中文编码漂移并加快国内构建。后端所有响应都会设置 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 和 `Permissions-Policy`；生产环境额外设置 HSTS 与 Content Security Policy，Nginx 仍保留同等安全响应头作为公网入口兜底。
 
 公开首页头像和友链头像会先通过后端签名缓存地址读取服务器本地缓存，前端再写入浏览器 Cache Storage；默认前后端都按 1 小时缓存窗口复用头像，减少访客浏览器直接触达原头像站点和重复请求。
 

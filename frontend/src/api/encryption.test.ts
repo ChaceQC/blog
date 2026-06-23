@@ -5,15 +5,18 @@ type FetchResolve = (response: Response) => void
 describe('getEncryptionSession', () => {
   beforeEach(() => {
     vi.resetModules()
-    vi.useRealTimers()
+    vi.useFakeTimers()
     stubBrowserCrypto()
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
   })
 
   it('keeps shared session negotiation alive when one caller aborts', async () => {
+    vi.setSystemTime(new Date('2026-06-23T00:00:00Z'))
+    window.history.replaceState({}, '', '/api/test')
     let resolveFetch: FetchResolve | undefined
     const fetchPromise = new Promise<Response>((resolve) => {
       resolveFetch = resolve
@@ -73,6 +76,7 @@ describe('getEncryptionSession', () => {
       scope: 'public',
       profiles: ['content-v1'],
     })
+    expect(document.cookie).toContain('esid=')
   })
 })
 
@@ -86,6 +90,7 @@ function stubBrowserCrypto(): void {
   vi.stubGlobal('crypto', {
     subtle: {
       deriveBits: vi.fn().mockResolvedValue(sharedSecret.buffer),
+      deriveKey: vi.fn().mockResolvedValue({} as CryptoKey),
       exportKey: vi.fn().mockResolvedValue({
         kty: 'EC',
         crv: 'P-256',
@@ -94,6 +99,7 @@ function stubBrowserCrypto(): void {
       }),
       generateKey: vi.fn().mockResolvedValue(keyPair),
       importKey: vi.fn().mockResolvedValue({} as CryptoKey),
+      sign: vi.fn().mockResolvedValue(new Uint8Array(32).buffer),
     },
     getRandomValues: <T extends ArrayBufferView | null>(array: T): T => array,
   } as unknown as Crypto)

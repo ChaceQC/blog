@@ -144,6 +144,7 @@ class FakeEncryptionSessionManager:
         scope: str,
         profile: EncryptionProfile,
         payload: dict[str, object],
+        esid: str | None = None,
     ) -> EncryptedApiResponse:
         return EncryptedApiResponse(
             session_id=session_id,
@@ -151,6 +152,18 @@ class FakeEncryptionSessionManager:
             nonce="redis-test-nonce",
             ciphertext="redis-test-ciphertext",
         )
+
+    async def validate_session(
+        self,
+        *,
+        session_id: str,
+        scope: str,
+        profile: EncryptionProfile,
+        esid: str | None = None,
+    ) -> None:
+        assert session_id == "redis-test-session"
+        assert scope == "admin"
+        assert profile == EncryptionProfile.SENSITIVE
 
 
 class FakeAuthService:

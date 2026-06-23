@@ -13,19 +13,23 @@
 - 继续修正后端镜像 Debian 源配置：`python:3.12-slim` 默认使用 `/etc/apt/sources.list.d/debian.sources`，仅写 `/etc/apt/sources.list` 会与官方源并存；当前已改为删除旧 `sources.list` 并覆盖 deb822 格式的 `debian.sources` 为腾讯云源。
 - 后端镜像构建缓存已补强：apt、pip 和 uv 下载目录接入 BuildKit cache mount，`uv sync --frozen --no-dev` 显式使用 `UV_DEFAULT_INDEX`，避免普通重建时反复下载 Pillow 等依赖；若执行 `--no-cache` 仍会按 Docker 语义跳过构建缓存并重新下载。
 - 后端锁文件下载源已重锁到腾讯云 PyPI 镜像：保持依赖版本不变，仅将 `uv.lock` 中的 registry 与包文件 URL 从 `pypi.org` / `files.pythonhosted.org` 改为 `mirrors.cloud.tencent.com`，避免 `uv sync --frozen` 按锁文件继续访问官方文件域名；`UV_CONCURRENT_DOWNLOADS=1` 保持不变。
+- 加密会话新增 `esid` Cookie 绑定：前端在 `/api/{scope}/encryption/sessions` 协商后使用 ECDH shared secret、`session_id`、scope 和过期时间做可逆数组变换并写入 `esid`，后端后续根据 `X-Encryption-Session` 查表取得 `key_material`，逆运算并校验 HMAC、session、scope 和过期时间，缺少或篡改 `esid` 会在认证或业务查询前返回 400。
+- 前端开发服务器已改为同源 `/api` 代理到 `config/development.json` 的后端地址，避免跨端口开发时浏览器无法为后端 API 写入 `esid` Cookie。
+- 前端生产 build 新增 JavaScript chunk 混淆后处理，提升前端 `esid` 生成算法的阅读和复刻成本；安全边界仍以后端数据库会话密钥和 HMAC 校验为准。
 
 ### 进行中
 
-- 当前运行日志 IP、时间戳时区和 UTF-8 默认环境修复已完成，等待部署服务器重建 backend 镜像后用真实公网请求复核日志输出。
+- 当前运行日志 IP、时间戳时区、UTF-8 默认环境和加密会话 `esid` 绑定已完成，等待部署服务器重建 backend/nginx 镜像后用真实公网请求复核日志输出与加密会话链路。
 
 ### 阻塞与风险
 
 - 本机未启动生产容器做端到端日志截图验证；已通过单元测试覆盖 Uvicorn 可信代理配置和日志格式，并通过 Compose 配置展开检查。后端镜像新增 `tzdata` 和 Debian 镜像源配置，需要服务器或 Docker 可用环境在构建时拉取 Debian 包。
 - 服务器真实 `deploy/env/backend.env` 仍必须保留后端看到的代理 IP/CIDR，例如宿主机 Nginx 场景常用 `BLOG_TRUSTED_PROXY_HOSTS=["172.16.0.0/12"]`；如果配置为空或不匹配，运行日志仍会显示 Docker 网关地址。
+- `esid` 由前端 JavaScript 写入，不能设置 `HttpOnly`；因此已用 ECDH shared secret 派生密钥和 HMAC 防伪，前端混淆仅作为门槛提升，不作为密码学安全边界。混淆后生产主 JS chunk 体积变大，当前 build 通过但 Vite 仍提示单 chunk 超过 500 kB。
 
 ### 下一步
 
-- 在服务器确认真实 `deploy/env/backend.env` 包含 `TZ=Asia/Shanghai` 或目标时区后，执行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml up -d --build backend`，访问公开页面并用 `docker compose ... logs --tail=200 backend` 复核真实 IP 与容器时区时间戳。
+- 在服务器确认真实 `deploy/env/backend.env` 包含 `TZ=Asia/Shanghai` 或目标时区后，执行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml up -d --build backend nginx`，访问公开页面并用浏览器网络面板复核 `/api/*` 请求携带 `X-Encryption-Session` 与 `esid`，再用 `docker compose ... logs --tail=200 backend` 复核真实 IP 与容器时区时间戳。
 
 ### 验证
 
@@ -36,6 +40,10 @@
 - 已运行 `uv sync --frozen --no-dev --default-index https://mirrors.cloud.tencent.com/pypi/simple`，生产依赖安装验证通过；该命令会移除本地 dev 依赖，随后已运行 `uv sync --default-index https://mirrors.cloud.tencent.com/pypi/simple` 恢复本地开发依赖。
 - 已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
 - 尝试运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml build backend` 验证镜像内腾讯云 Debian 源、`tzdata` 安装、UTF-8 默认环境和 BuildKit 依赖缓存，本机 Docker Desktop 未运行，无法连接 `dockerDesktopLinuxEngine`；服务器或 Docker 可用环境仍需执行 backend 镜像构建确认，并观察 `apt-get update` 不再出现 `deb.debian.org`。
+- 已运行 `uv run python -m py_compile app\core\encryption_sid.py app\services\encryption.py app\api\encrypted_response.py`，通过。
+- 已运行 `uv run pytest tests\test_admin_encryption_api.py tests\test_public_encryption_api.py tests\test_admin_content_api.py tests\test_public_content_api.py tests\test_admin_settings_api.py tests\test_admin_logs_api.py -q`，44 个测试通过；仍存在 FastAPI/Starlette TestClient 与 HTTP 状态常量的上游弃用警告。
+- 已运行 `npm.cmd test -- src/api/encryption.test.ts`，1 个前端加密会话测试通过。
+- 已运行 `npm.cmd run build`，通过；生产 build 已执行混淆插件，Vite 提示混淆插件耗时较高且主 JS chunk 超过 500 kB。
 
 ## 2026-06-20
 

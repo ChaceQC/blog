@@ -15,7 +15,7 @@ npm run lint
 npm run build
 ```
 
-本地开发端口、预览端口和 API 地址来自 `config/development.json`，不要写死在启动脚本或业务代码里。
+本地开发端口、预览端口和 API 地址来自 `config/development.json`，不要写死在启动脚本或业务代码里。`npm run dev` 会把前端 API 基础路径固定为同源 `/api`，并按配置把 `/api` 代理到后端，保证加密会话协商后前端可写入 `esid` Cookie 并随 `/api` 请求发送。生产 `npm run build` 会对输出的 JavaScript chunk 做混淆；混淆只提高前端算法阅读成本，真正校验仍依赖后端数据库会话密钥与 `esid` HMAC。
 
 ## 目录约定
 

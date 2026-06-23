@@ -2,6 +2,7 @@ from fastapi import HTTPException, Request, status
 from pydantic import BaseModel
 
 from app.core.encryption import EncryptionProfile
+from app.core.encryption_sid import ESID_COOKIE_NAME
 from app.schemas.encryption import (
     ENCRYPTION_SESSION_ID_MAX_LENGTH,
     EncryptedApiRequest,
@@ -25,6 +26,7 @@ async def encrypted_response(
     try:
         return await manager.encrypt_response(
             session_id=session_id,
+            esid=encryption_sid_from_request(request),
             scope=scope,
             profile=profile,
             payload=payload.model_dump(mode="json"),
@@ -62,6 +64,7 @@ async def validate_encryption_session(
     try:
         await manager.validate_session(
             session_id=session_id,
+            esid=encryption_sid_from_request(request),
             scope=scope,
             profile=profile,
         )
@@ -84,6 +87,7 @@ async def decrypt_encrypted_request(
     try:
         return await manager.decrypt_request(
             session_id=session_id,
+            esid=encryption_sid_from_request(request),
             scope=scope,
             profile=profile,
             payload=payload,
@@ -93,3 +97,7 @@ async def decrypt_encrypted_request(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="invalid encrypted request",
         ) from exc
+
+
+def encryption_sid_from_request(request: Request) -> str | None:
+    return request.cookies.get(ESID_COOKIE_NAME)

@@ -19,6 +19,7 @@ from app.core.encryption import (
     EncryptionProfile,
     decrypt_json_payload_with_key_material,
 )
+from app.core.encryption_sid import ESID_COOKIE_NAME, create_encryption_sid
 from app.main import app
 from app.schemas.encryption import BrowserPublicKey
 from app.services.auth import AuthenticatedUser, TokenPair
@@ -206,6 +207,13 @@ def test_login_response_can_use_sensitive_encryption_session() -> None:
         ec.ECDH(),
         _load_public_key(session_payload["server_public_key"]),
     )
+    _set_esid_cookie(
+        client,
+        session_id=session_payload["session_id"],
+        scope="admin",
+        key_material=shared_key,
+        expires_at=_parse_api_datetime(session_payload["expires_at"]),
+    )
 
     app.dependency_overrides[get_auth_service] = lambda: FakeAuthService()
     app.dependency_overrides[get_encryption_session_manager] = lambda: (
@@ -261,6 +269,114 @@ def test_login_rejects_missing_encryption_session_header() -> None:
 
     assert response.status_code == 400
     assert response.json()["detail"] == "missing encryption session"
+
+
+def test_login_rejects_missing_encryption_session_sid() -> None:
+    client_private_key = ec.generate_private_key(ec.SECP256R1())
+    client = TestClient(app)
+    encryption_repository = FakeEncryptionSessionRepository()
+    encryption_manager = EncryptionSessionManager(
+        repository=encryption_repository,
+        settings=get_settings(),
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        encryption_manager
+    )
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
+
+    try:
+        session_response = client.post(
+            "/api/admin/encryption/sessions",
+            json={
+                "client_public_key": _export_public_key(
+                    client_private_key.public_key(),
+                ),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert session_response.status_code == 200
+    session_payload = session_response.json()
+
+    app.dependency_overrides[get_auth_service] = lambda: RaisingAuthService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        encryption_manager
+    )
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
+    try:
+        response = client.post(
+            "/api/admin/auth/login",
+            headers={"X-Encryption-Session": session_payload["session_id"]},
+            json={"username": "admin", "password": "correct-password"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid encryption session"
+
+
+def test_login_rejects_tampered_encryption_session_sid() -> None:
+    client_private_key = ec.generate_private_key(ec.SECP256R1())
+    client = TestClient(app)
+    encryption_repository = FakeEncryptionSessionRepository()
+    encryption_manager = EncryptionSessionManager(
+        repository=encryption_repository,
+        settings=get_settings(),
+    )
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        encryption_manager
+    )
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
+
+    try:
+        session_response = client.post(
+            "/api/admin/encryption/sessions",
+            json={
+                "client_public_key": _export_public_key(
+                    client_private_key.public_key(),
+                ),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert session_response.status_code == 200
+    session_payload = session_response.json()
+    shared_key = client_private_key.exchange(
+        ec.ECDH(),
+        _load_public_key(session_payload["server_public_key"]),
+    )
+    _set_esid_cookie(
+        client,
+        session_id=session_payload["session_id"],
+        scope="admin",
+        key_material=shared_key,
+        expires_at=_parse_api_datetime(session_payload["expires_at"]),
+        suffix="x",
+    )
+
+    app.dependency_overrides[get_auth_service] = lambda: RaisingAuthService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: (
+        encryption_manager
+    )
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
+    try:
+        response = client.post(
+            "/api/admin/auth/login",
+            headers={"X-Encryption-Session": session_payload["session_id"]},
+            json={"username": "admin", "password": "correct-password"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid encryption session"
 
 
 def test_login_rejects_oversized_encryption_session_header() -> None:
@@ -366,7 +482,19 @@ def test_admin_login_ip_rate_limit_blocks_rotating_usernames() -> None:
                 ),
             },
         )
-        session_id = session_response.json()["session_id"]
+        session_payload = session_response.json()
+        session_id = session_payload["session_id"]
+        shared_key = client_private_key.exchange(
+            ec.ECDH(),
+            _load_public_key(session_payload["server_public_key"]),
+        )
+        _set_esid_cookie(
+            client,
+            session_id=session_id,
+            scope="admin",
+            key_material=shared_key,
+            expires_at=_parse_api_datetime(session_payload["expires_at"]),
+        )
         responses = [
             client.post(
                 "/api/admin/auth/login",
@@ -459,6 +587,13 @@ def test_refresh_uses_cookie_without_csrf_header() -> None:
         ec.ECDH(),
         _load_public_key(session_payload["server_public_key"]),
     )
+    _set_esid_cookie(
+        client,
+        session_id=session_payload["session_id"],
+        scope="admin",
+        key_material=shared_key,
+        expires_at=_parse_api_datetime(session_payload["expires_at"]),
+    )
     auth_service = FakeRefreshAuthService()
     client.cookies.set("blog_admin_refresh", refresh_token, path="/api/admin")
 
@@ -523,6 +658,17 @@ def test_refresh_rejects_body_refresh_token_without_cookie() -> None:
 
     assert session_response.status_code == 200
     session_payload = session_response.json()
+    shared_key = client_private_key.exchange(
+        ec.ECDH(),
+        _load_public_key(session_payload["server_public_key"]),
+    )
+    _set_esid_cookie(
+        client,
+        session_id=session_payload["session_id"],
+        scope="admin",
+        key_material=shared_key,
+        expires_at=_parse_api_datetime(session_payload["expires_at"]),
+    )
     auth_service = FakeRefreshAuthService()
 
     app.dependency_overrides[get_auth_service] = lambda: auth_service
@@ -681,3 +827,25 @@ def _base64url_encode(value: bytes) -> str:
 def _base64url_decode(value: str) -> bytes:
     padding = "=" * (-len(value) % 4)
     return urlsafe_b64decode(f"{value}{padding}")
+
+
+def _set_esid_cookie(
+    client: TestClient,
+    *,
+    session_id: str,
+    scope: str,
+    key_material: bytes,
+    expires_at: datetime,
+    suffix: str = "",
+) -> None:
+    esid = create_encryption_sid(
+        session_id=session_id,
+        scope=scope,
+        key_material=key_material,
+        expires_at=expires_at,
+    )
+    client.cookies.set(ESID_COOKIE_NAME, f"{esid}{suffix}", path="/api")
+
+
+def _parse_api_datetime(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))

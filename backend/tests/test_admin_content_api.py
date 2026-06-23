@@ -99,6 +99,7 @@ class FakeEncryptionSessionManager:
         scope: str,
         profile: EncryptionProfile,
         payload: dict[str, object],
+        esid: str | None = None,
     ) -> EncryptedApiResponse:
         assert scope == "admin"
         self.payload = payload
@@ -116,6 +117,7 @@ class FakeEncryptionSessionManager:
         scope: str,
         profile: EncryptionProfile,
         payload: EncryptedApiRequest,
+        esid: str | None = None,
     ) -> dict[str, object]:
         assert session_id == "content-session"
         assert scope == "admin"
@@ -129,6 +131,7 @@ class FakeEncryptionSessionManager:
         session_id: str,
         scope: str,
         profile: EncryptionProfile,
+        esid: str | None = None,
     ) -> None:
         assert session_id == "content-session"
         assert scope == "admin"

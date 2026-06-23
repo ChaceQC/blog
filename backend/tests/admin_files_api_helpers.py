@@ -330,6 +330,7 @@ class FakeEncryptionSessionManager:
         scope: str,
         profile: EncryptionProfile,
         payload: dict[str, object],
+        esid: str | None = None,
     ) -> EncryptedApiResponse:
         assert session_id == self.session_id
         assert scope == self.expected_scope
@@ -348,6 +349,7 @@ class FakeEncryptionSessionManager:
         session_id: str,
         scope: str,
         profile: EncryptionProfile,
+        esid: str | None = None,
     ) -> None:
         assert session_id == self.session_id
         assert scope == self.expected_scope

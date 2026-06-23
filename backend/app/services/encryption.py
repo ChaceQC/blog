@@ -19,6 +19,10 @@ from app.core.encryption import (
     decrypt_json_payload_with_key_material,
     encrypt_json_payload_with_key_material,
 )
+from app.core.encryption_sid import (
+    EncryptionSidError,
+    validate_encryption_sid,
+)
 from app.models.auth import EncryptionSession
 from app.schemas.encryption import (
     BrowserPublicKey,
@@ -143,11 +147,13 @@ class EncryptionSessionManager:
         self,
         *,
         session_id: str,
+        esid: str | None,
         scope: EncryptionSessionScope,
         profile: EncryptionProfile,
     ) -> None:
         await self._get_session(
             session_id=session_id,
+            esid=esid,
             expected_scope=scope,
             expected_profile=profile,
         )
@@ -156,12 +162,14 @@ class EncryptionSessionManager:
         self,
         *,
         session_id: str,
+        esid: str | None,
         scope: EncryptionSessionScope,
         profile: EncryptionProfile,
         payload: JsonObject,
     ) -> EncryptedApiResponse:
         session = await self._get_session(
             session_id=session_id,
+            esid=esid,
             expected_scope=scope,
             expected_profile=profile,
         )
@@ -185,6 +193,7 @@ class EncryptionSessionManager:
         self,
         *,
         session_id: str,
+        esid: str | None,
         scope: EncryptionSessionScope,
         profile: EncryptionProfile,
         payload: EncryptedApiRequest,
@@ -193,6 +202,7 @@ class EncryptionSessionManager:
             raise EncryptionSessionError("encrypted request session mismatch")
         session = await self._get_session(
             session_id=session_id,
+            esid=esid,
             expected_scope=scope,
             expected_profile=profile,
         )
@@ -213,6 +223,7 @@ class EncryptionSessionManager:
         self,
         *,
         session_id: str,
+        esid: str | None,
         expected_scope: EncryptionSessionScope,
         expected_profile: EncryptionProfile,
     ) -> EncryptionSession:
@@ -226,6 +237,15 @@ class EncryptionSessionManager:
             raise EncryptionSessionError("encryption session scope mismatch")
         if expected_profile not in _profiles_for_scope(expected_scope):
             raise EncryptionSessionError("encryption profile is not allowed")
+        try:
+            validate_encryption_sid(
+                esid,
+                session_id=session.session_id,
+                scope=expected_scope,
+                key_material=session.key_material,
+            )
+        except EncryptionSidError as exc:
+            raise EncryptionSessionError("invalid encryption session sid") from exc
         return session
 
 

@@ -34,6 +34,12 @@ export type EncryptionSession = {
   expiresAt: number
 }
 
+const ESID_COOKIE_NAME = 'esid'
+const ESID_VERSION = 1
+const ESID_NONCE_LENGTH = 16
+const ESID_TAG_LENGTH = 16
+const ESID_ROUNDS = 8
+
 const activeSessions = new Map<EncryptionScope, EncryptionSession>()
 const pendingSessions = new Map<EncryptionScope, Promise<EncryptionSession>>()
 
@@ -216,13 +222,171 @@ async function createEncryptionSession(scope: EncryptionScope): Promise<Encrypti
     256,
   )
 
-  return {
+  const session = {
     id: sessionResponse.session_id,
     scope: sessionResponse.scope,
     sharedSecret: sharedBits,
     profiles: sessionResponse.profiles,
     expiresAt: parseApiTime(sessionResponse.expires_at),
   }
+  await writeEncryptionSidCookie(session)
+  return session
+}
+
+async function writeEncryptionSidCookie(
+  session: EncryptionSession,
+): Promise<void> {
+  const esid = await createEncryptionSid(session)
+  const maxAge = Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000))
+  const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+  document.cookie = [
+    `${ESID_COOKIE_NAME}=${esid}`,
+    'Path=/api',
+    `Max-Age=${maxAge}`,
+    'SameSite=Lax',
+    secure.trimStart(),
+  ]
+    .filter(Boolean)
+    .join('; ')
+}
+
+async function createEncryptionSid(session: EncryptionSession): Promise<string> {
+  const key = await deriveEsidKey(session.sharedSecret, session.scope, [
+    'sign',
+    'verify',
+  ])
+  const nonce = crypto.getRandomValues(new Uint8Array(ESID_NONCE_LENGTH))
+  const payload = JSON.stringify({
+    exp: Math.floor(session.expiresAt / 1000),
+    iat: Math.floor(Date.now() / 1000),
+    purpose: 'encryption-session-binding',
+    scope: session.scope,
+    session_id: session.id,
+  })
+  const transformed = await transformEsidForward(encoder.encode(payload), key, nonce)
+  const body = concatBytes(new Uint8Array([ESID_VERSION]), nonce, transformed)
+  const tag = new Uint8Array(
+    await crypto.subtle.sign('HMAC', key, toArrayBuffer(body)),
+  ).slice(0, ESID_TAG_LENGTH)
+  return base64urlEncode(concatBytes(body, tag))
+}
+
+async function deriveEsidKey(
+  sharedSecret: ArrayBuffer,
+  scope: EncryptionScope,
+  usages: KeyUsage[],
+): Promise<CryptoKey> {
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    sharedSecret,
+    'HKDF',
+    false,
+    ['deriveKey'],
+  )
+  return crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: textBytes('blog-cms-esid-v1'),
+      info: textBytes(`blog-cms:esid:${scope}`),
+    },
+    keyMaterial,
+    {
+      name: 'HMAC',
+      hash: 'SHA-256',
+      length: 256,
+    },
+    false,
+    usages,
+  )
+}
+
+async function transformEsidForward(
+  data: Uint8Array,
+  key: CryptoKey,
+  nonce: Uint8Array,
+): Promise<Uint8Array> {
+  let value = new Uint8Array(data)
+  for (let roundIndex = 0; roundIndex < ESID_ROUNDS; roundIndex += 1) {
+    const permutation = await esidPermutation(value.length, key, nonce, roundIndex)
+    value = Uint8Array.from(permutation, (index) => value[index] ?? 0)
+    const mask = await esidStream(key, nonce, 'mask', roundIndex, value.length)
+    const shifts = await esidStream(key, nonce, 'rotate', roundIndex, value.length)
+    for (let index = 0; index < value.length; index += 1) {
+      value[index] = rotateLeft(
+        ((value[index] ?? 0) ^ (mask[index] ?? 0)) & 0xff,
+        (shifts[index] ?? 0) & 7,
+      )
+    }
+  }
+  return value
+}
+
+async function esidPermutation(
+  length: number,
+  key: CryptoKey,
+  nonce: Uint8Array,
+  roundIndex: number,
+): Promise<number[]> {
+  const indexes = Array.from({ length }, (_, index) => index)
+  if (length <= 1) {
+    return indexes
+  }
+  const stream = await esidStream(key, nonce, 'perm', roundIndex, (length - 1) * 4)
+  let offset = 0
+  for (let index = length - 1; index > 0; index -= 1) {
+    const value =
+      (((stream[offset] ?? 0) << 24) |
+        ((stream[offset + 1] ?? 0) << 16) |
+        ((stream[offset + 2] ?? 0) << 8) |
+        (stream[offset + 3] ?? 0)) >>>
+      0
+    offset += 4
+    const swapIndex = value % (index + 1)
+    const current = indexes[index] ?? index
+    indexes[index] = indexes[swapIndex] ?? swapIndex
+    indexes[swapIndex] = current
+  }
+  return indexes
+}
+
+async function esidStream(
+  key: CryptoKey,
+  nonce: Uint8Array,
+  label: 'mask' | 'perm' | 'rotate',
+  roundIndex: number,
+  length: number,
+): Promise<Uint8Array> {
+  const output = new Uint8Array(length)
+  let written = 0
+  let counter = 0
+  while (written < length) {
+    const chunk = new Uint8Array(
+      await crypto.subtle.sign(
+        'HMAC',
+        key,
+        toArrayBuffer(
+          concatBytes(
+            encoder.encode(`blog-cms-esid:${label}:`),
+            new Uint8Array([roundIndex]),
+            nonce,
+            uint32be(counter),
+          ),
+        ),
+      ),
+    )
+    output.set(chunk.slice(0, Math.min(chunk.length, length - written)), written)
+    written += chunk.length
+    counter += 1
+  }
+  return output
+}
+
+function rotateLeft(value: number, shift: number): number {
+  if (shift === 0) {
+    return value
+  }
+  return ((value << shift) | (value >>> (8 - shift))) & 0xff
 }
 
 function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
@@ -267,4 +431,24 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const buffer = new ArrayBuffer(bytes.byteLength)
   new Uint8Array(buffer).set(bytes)
   return buffer
+}
+
+function concatBytes(...items: Uint8Array[]): Uint8Array {
+  const totalLength = items.reduce((total, item) => total + item.byteLength, 0)
+  const output = new Uint8Array(totalLength)
+  let offset = 0
+  for (const item of items) {
+    output.set(item, offset)
+    offset += item.byteLength
+  }
+  return output
+}
+
+function uint32be(value: number): Uint8Array {
+  return new Uint8Array([
+    (value >>> 24) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 8) & 0xff,
+    value & 0xff,
+  ])
 }
