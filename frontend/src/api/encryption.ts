@@ -49,7 +49,8 @@ export type EncryptionSession = {
   sharedSecret: ArrayBuffer
   profiles: EncryptionProfile[]
   expiresAt: number
-  esidBySaltId?: Map<string, string>
+  esid?: string
+  esidCookieWritten?: boolean
   loginChallenge?: LoginChallenge | null
   saltSocket?: SaltLeaseSocket
 }
@@ -59,8 +60,6 @@ const ESID_VERSION = 1
 const ESID_NONCE_LENGTH = 16
 const ESID_TAG_LENGTH = 16
 const ESID_ROUNDS = 8
-const ESID_BUNDLE_VERSION = 1
-const ESID_BUNDLE_MAX_ITEMS = 8
 const SALT_WRAP_INFO = 'blog-cms:wss-salt-wrap:v1'
 const SALT_SOCKET_REQUEST_TIMEOUT_MS = 8_000
 const SALT_SOCKET_HEARTBEAT_INTERVAL_MS = 25_000
@@ -685,7 +684,8 @@ export async function createEncryptionRequestHeaders(
   session: EncryptionSession,
   profile: EncryptionProfile,
 ): Promise<Record<string, string>> {
-  const esidSalt = await refreshEncryptionSidCookie(session)
+  await ensureEncryptionSidCookie(session)
+  const esidSalt = await takeSaltLease(session, 'esid', null)
   const responseSalt = await takeSaltLease(session, 'response', profile)
   rememberResponseSalt(session, responseSalt)
   return {
@@ -766,21 +766,22 @@ async function createEncryptionSession(scope: EncryptionScope): Promise<Encrypti
     loginChallenge: sessionResponse.login_challenge ?? null,
   }
   session.saltSocket = new SaltLeaseSocket(session)
-  await refreshEncryptionSidCookie(session)
+  await ensureEncryptionSidCookie(session)
   return session
 }
 
-async function refreshEncryptionSidCookie(
-  session: EncryptionSession,
-): Promise<EncryptionSaltLease> {
-  const esidSalt = await takeSaltLease(session, 'esid', null)
-  const esid = await createEncryptionSid(session, esidSalt.salt)
-  rememberEncryptionSid(session, esidSalt.leaseId, esid)
+async function ensureEncryptionSidCookie(session: EncryptionSession): Promise<void> {
+  if (!session.esid) {
+    session.esid = await createEncryptionSid(session)
+  }
+  if (session.esidCookieWritten) {
+    return
+  }
   const maxAge = Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000))
   const secure = window.location.protocol === 'https:' ? 'Secure' : ''
   const cookiePath = esidCookiePath(session.scope)
   document.cookie = [
-    `${ESID_COOKIE_NAME}=${encodeURIComponent(createEncryptionSidBundle(session))}`,
+    `${ESID_COOKIE_NAME}=${encodeURIComponent(session.esid)}`,
     `Path=${cookiePath}`,
     `Max-Age=${maxAge}`,
     'SameSite=Lax',
@@ -788,41 +789,7 @@ async function refreshEncryptionSidCookie(
   ]
     .filter(Boolean)
     .join('; ')
-  return esidSalt
-}
-
-function rememberEncryptionSid(
-  session: EncryptionSession,
-  saltId: string,
-  esid: string,
-): void {
-  const values = session.esidBySaltId ?? new Map<string, string>()
-  session.esidBySaltId = values
-  values.set(saltId, esid)
-  while (values.size > ESID_BUNDLE_MAX_ITEMS) {
-    const oldestKey = values.keys().next().value
-    if (typeof oldestKey !== 'string') {
-      break
-    }
-    values.delete(oldestKey)
-  }
-}
-
-function createEncryptionSidBundle(session: EncryptionSession): string {
-  return base64urlEncode(
-    encoder.encode(
-      JSON.stringify(
-        {
-          v: ESID_BUNDLE_VERSION,
-          session_id: session.id,
-          scope: session.scope,
-          items: Array.from(session.esidBySaltId ?? []),
-        },
-        null,
-        0,
-      ),
-    ),
-  )
+  session.esidCookieWritten = true
 }
 
 function esidCookiePath(scope: EncryptionScope): string {
@@ -835,11 +802,8 @@ function apiCookieBasePath(): string {
   return normalized || '/'
 }
 
-async function createEncryptionSid(
-  session: EncryptionSession,
-  salt: ArrayBuffer,
-): Promise<string> {
-  const key = await deriveEsidKey(session.sharedSecret, session.scope, salt, [
+async function createEncryptionSid(session: EncryptionSession): Promise<string> {
+  const key = await deriveEsidKey(session.sharedSecret, session.id, session.scope, [
     'sign',
     'verify',
   ])
@@ -861,8 +825,8 @@ async function createEncryptionSid(
 
 async function deriveEsidKey(
   sharedSecret: ArrayBuffer,
+  sessionId: string,
   scope: EncryptionScope,
-  salt: ArrayBuffer,
   usages: KeyUsage[],
 ): Promise<CryptoKey> {
   const keyMaterial = await crypto.subtle.importKey(
@@ -876,7 +840,7 @@ async function deriveEsidKey(
     {
       name: 'HKDF',
       hash: 'SHA-256',
-      salt,
+      salt: textBytes(`blog-cms:esid-stable:${scope}:${sessionId}`),
       info: textBytes(`blog-cms:esid:${scope}`),
     },
     keyMaterial,

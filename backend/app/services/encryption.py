@@ -455,7 +455,7 @@ class EncryptionSessionManager:
         try:
             if esid_salt_id is None:
                 raise EncryptionSidError("missing esid salt")
-            esid_salt = self._consume_salt(
+            self._consume_salt(
                 lease_id=esid_salt_id,
                 session_id=session.session_id,
                 scope=expected_scope,
@@ -467,8 +467,6 @@ class EncryptionSessionManager:
                 session_id=session.session_id,
                 scope=expected_scope,
                 key_material=session.key_material,
-                salt=esid_salt,
-                salt_id=esid_salt_id,
             )
         except (EncryptionSidError, EncryptionSaltError) as exc:
             raise EncryptionSessionError("invalid encryption session sid") from exc

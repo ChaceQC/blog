@@ -4,23 +4,23 @@
 
 ### 已完成
 
-- 修复公开页并发请求偶发 400：根因是多个 public 加密请求并发刷新同一个 `esid` Cookie，后发请求覆盖先发请求的 Cookie，导致先发请求的 `X-Encryption-Esid-Salt` 与浏览器实际携带的 `esid` 不匹配。
-- 前端 `esid` Cookie 改为按 `salt_id` 保存最多 8 个在途 sid 的 bundle；每个请求仍携带自己的 `X-Encryption-Esid-Salt`，后端按该 salt id 从同一个 `esid` bundle 中选择对应 sid 校验。
-- 后端 `validate_encryption_sid` 兼容新的 bundle 格式，同时继续兼容旧的单 sid Cookie 格式，避免已有测试和单请求路径被破坏。
-- 移除复用已缓存加密 session 时的额外 `esid` 刷新，避免一次业务请求前出现无意义的 Cookie 覆盖。
+- 修复公开页并发请求偶发 400 的后续方案已从 `esid` bundle 改为小型稳定 `esid` Cookie + 每请求一次性 `purpose=esid` salt lease：Cookie 不再按请求增长，也不再被并发请求反复覆盖。
+- 前端在加密会话创建后只写入一次当前 session/scope 绑定的稳定 `esid` Cookie；每个 HTTP 请求仍通过 WSS 获取新的 `X-Encryption-Esid-Salt`，并与响应 salt 分开携带。
+- 后端保留 `X-Encryption-Esid-Salt` 的 Redis/内存原子消费，消费通过后再用数据库会话 `key_material` 校验稳定 `esid` 的 HMAC、session、scope 和过期时间；固定 Cookie 单独不能放行请求。
+- 移除 `esid` bundle 解析和最多 8 个在途 sid 的 Cookie 编码，避免高并发时 Cookie 体积急剧增大。
 
 ### 阻塞与风险
 
-- 本轮未直接连线上服务器抓取真实浏览器网络包；已根据截图中“session/WSS 成功但并发 public API 部分 400”的模式定位并补充前后端回归测试。
+- 本轮未直接连线上服务器抓取真实浏览器网络包；已根据 `esid` Cookie 增长与并发请求顺序问题补充前后端回归测试。
 
 ### 下一步
 
-- 推送 `dev` 并合并到 `main` 后，在服务器重新部署前端和后端，复查首页首屏 public posts、site-profile、site-items、files 等并发请求不再出现 400。
+- 推送 `dev` 并合并到 `main` 后，在服务器重新部署前端和后端，复查首页首屏 public posts、site-profile、site-items、files 等并发请求不再出现 400，且 `esid` Cookie 长度不随请求数增加。
 
 ### 验证
 
-- 已运行 `uv run pytest tests/test_encryption.py tests/test_admin_encryption_api.py -q`，20 个测试通过。
-- 已运行 `uv run pytest -q`，247 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- 已运行 `uv run pytest tests/test_encryption.py tests/test_admin_encryption_api.py -q`，21 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- 已运行 `uv run pytest -q`，248 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 与 HTTP 状态常量的上游弃用警告。
 - 已运行 `uv run ruff check .`，通过。
 - 已运行 `npm.cmd test -- src/api/encryption.test.ts`，5 个前端加密会话测试通过。
 - 已运行 `npm.cmd run lint`，通过。
@@ -33,14 +33,14 @@
 
 - 将应用层加密中前后端写死的 HKDF salt 改为通过 WSS 下发的一次性动态 salt lease，覆盖 AES-GCM JSON 信封、`esid` Cookie 绑定和 `Login Capsule v2` 三类固定 salt。
 - 新增 `/api/{scope}/encryption/salts` WSS 协议：前端完成 P-256 ECDH 加密会话协商后建立 WSS，后端以 ECDH shared secret 派生包裹密钥并加密下发 salt lease；前端只缓存未过期未使用 lease。
-- 所有 salt lease 都按用途隔离并一次性消费：`esid` 只用于写一次 Cookie，`login_capsule` 只用于一次登录 capsule，`request` 只用于一次加密请求体，`response` 只用于一次加密响应体。
+- 所有 salt lease 都按用途隔离并一次性消费：`esid` 用作每个 HTTP 请求的会话新鲜度校验，`login_capsule` 只用于一次登录 capsule，`request` 只用于一次加密请求体，`response` 只用于一次加密响应体。
 - 后端 salt lease 共享状态采用 Redis 优先：签发时写入 Redis，HTTP 消费时用 Lua 脚本原子读取并删除，确保多 worker、多容器、WSS 与 HTTP 落到不同进程时仍不可重放；仅本地开发和测试允许 memory fallback。
 - 更新前端加密客户端，让所有需要 HKDF salt 的派生都从 WSS salt lease 取得，并在 HTTP 头或信封字段携带 `lease_id` 供后端消费。
 - 为 `/api/{scope}/encryption/salts` 长连接补充应用层加密心跳和自动重连：前端定时发送加密 `ping`，后端返回加密 `pong`，前端连续丢失响应后关闭并按指数退避重连，重连时清理未绑定 HTTP 请求的本地 salt 状态。
 
 ### 本轮进度
 
-- 已确认用户指向的 salt 是 AES-GCM JSON 信封中的 `blog-cms-encryption-v1`，并进一步确认本轮要把 `blog-cms-esid-v1` 与 `blog-login-capsule-v2` 也一起纳入 WSS 一次性 salt 协议。
+- 已确认用户指向的 salt 是 AES-GCM JSON 信封中的 `blog-cms-encryption-v1`，并进一步确认本轮要把 `blog-login-capsule-v2` 纳入 WSS 一次性 salt 协议；`esid` 改为稳定小 Cookie 配合每请求一次性 `purpose=esid` lease。
 - 已按要求先更新 `PROJECT_PLAN.md`，明确 WSS salt lease 的协议边界、一次性用途、Redis 共享与原子消费要求。
 - 已进一步补充 `PROJECT_PLAN.md`，明确 WSS 长连接必须使用加密 `ping` / `pong` 心跳、服务端空闲超时关闭、前端指数退避重连和断线 salt 缓存处理规则。
 - 已完成后端 WSS salt 通道心跳：收到加密 `ping` 后使用同一 AES-GCM 包裹格式返回加密 `pong`，并在 90 秒没有收到有效加密帧时关闭连接。
@@ -51,7 +51,7 @@
 
 - WSS 动态 salt 需要浏览器与反向代理支持 WebSocket 转发；Nginx 生产配置必须确认 `/api/*/encryption/salts` 的 `Upgrade` / `Connection` 头正确传递。
 - 生产多 worker 或多容器必须使用 Redis 共享 salt lease；如果 Redis 不可用却启用动态 salt，不能退回固定 salt，应拒绝加密会话或登录，避免安全边界静默降低。
-- `esid` 的 salt 在 Cookie 写入前就需要，因此首次 WSS salt 连接只能先依赖 `session_id + ECDH shared secret`，拿到 `esid` lease 并写入 Cookie 后，后续 WSS/HTTP 再强制校验 `esid`。
+- `esid` Cookie 本身保持 session/scope 绑定的小型稳定 token；HTTP 请求必须额外携带并消费一次性 `X-Encryption-Esid-Salt`，避免固定 Cookie 独立放行。
 - 动态 salt 仍不能替代 HTTPS；WSS 必须走 `wss://`，且所有明文、salt、lease、密钥材料和解密失败细节都不能进入日志。
 - 浏览器无法主动发送底层 WebSocket ping frame，因此必须依赖应用层加密心跳；Nginx `proxy_read_timeout` 只能减少代理误断，不能替代前端断线感知和重连。
 
@@ -744,7 +744,7 @@
 
 ### 阻塞与风险
 
-- 若前端页面仍保留旧 bundle 或旧 dev server 状态，需刷新页面后再保存文章；后端已重启到当前代码。
+- 若前端页面仍保留旧 dev server 状态，需刷新页面后再保存文章；后端已重启到当前代码。
 - 实际执行 `cleanup-encryption-sessions` 会删除当前配置数据库里的过期会话记录；本次仅验证 CLI 子命令可见性和业务方法测试，未在未确认目标库的情况下直接运行清理命令。
 - 后台文件下载接口返回文件流，不走 `content-v1` 加密信封；安全边界依赖后台 HttpOnly Cookie 或 Bearer Token 鉴权、`file:upload` 权限和后端路径校验。
 - 实际执行 `cleanup-deleted-files` 会删除当前配置数据库中的软删记录和本地物理文件；本次只跑服务层单元测试和 CLI 可见性检查，未在未确认目标库与上传目录的情况下直接运行清理命令。

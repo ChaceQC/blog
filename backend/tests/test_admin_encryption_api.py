@@ -1077,7 +1077,6 @@ def _set_esid_cookie(
         scope=scope,
         key_material=key_material,
         expires_at=expires_at,
-        salt=salt_lease.salt,
     )
     client.cookies.set(ESID_COOKIE_NAME, f"{esid}{suffix}", path="/api")
     return salt_lease

@@ -143,7 +143,7 @@ describe('getEncryptionSession', () => {
     expect(cookieWrites[1]).toContain('Path=/api/admin')
   })
 
-  it('keeps multiple in-flight esids in one scoped cookie bundle', async () => {
+  it('keeps esid cookie stable while issuing one-time esid salts', async () => {
     vi.setSystemTime(new Date('2026-06-23T00:00:00Z'))
     window.history.replaceState({}, '', '/')
     const cookieWrites = captureCookieWrites()
@@ -157,17 +157,12 @@ describe('getEncryptionSession', () => {
     const firstHeaders = await createEncryptionRequestHeaders(session, 'content-v1')
     const secondHeaders = await createEncryptionRequestHeaders(session, 'content-v1')
 
-    expect(firstHeaders['X-Encryption-Esid-Salt']).toBe('lease-2')
-    expect(secondHeaders['X-Encryption-Esid-Salt']).toBe('lease-4')
-    const publicBundle = decodeCookieBundle(cookieWrites.at(-1) ?? '')
-    expect(publicBundle.session_id).toBe('public-session')
-    expect(publicBundle.scope).toBe('public')
-    expect(publicBundle.items).toHaveLength(3)
-    expect(publicBundle.items.map(([saltId]) => saltId)).toEqual([
-      'lease-1',
-      'lease-2',
-      'lease-4',
-    ])
+    expect(firstHeaders['X-Encryption-Esid-Salt']).toBe('lease-1')
+    expect(secondHeaders['X-Encryption-Esid-Salt']).toBe('lease-3')
+    expect(cookieWrites).toHaveLength(1)
+    const publicEsid = readCookieValue(cookieWrites[0])
+    expect(publicEsid).toBeTruthy()
+    expect(publicEsid.length).toBeLessThan(ESID_COOKIE_SIZE_LIMIT)
   })
 
   it('keeps the salt websocket alive with encrypted heartbeat pongs', async () => {
@@ -176,9 +171,12 @@ describe('getEncryptionSession', () => {
     captureCookieWrites()
     vi.stubGlobal('fetch', sessionFetchMock('public-session', 'public'))
 
-    const { getEncryptionSession } = await import('./encryption.ts')
+    const { createEncryptionRequestHeaders, getEncryptionSession } = await import(
+      './encryption.ts'
+    )
 
-    await getEncryptionSession('content-v1', 'public')
+    const session = await getEncryptionSession('content-v1', 'public')
+    await createEncryptionRequestHeaders(session, 'content-v1')
     const socket = saltWebSocketInstances[0]
     expect(socket).toBeDefined()
 
@@ -203,9 +201,12 @@ describe('getEncryptionSession', () => {
     saltWebSocketRespondToPing = false
     vi.stubGlobal('fetch', sessionFetchMock('public-session', 'public'))
 
-    const { getEncryptionSession } = await import('./encryption.ts')
+    const { createEncryptionRequestHeaders, getEncryptionSession } = await import(
+      './encryption.ts'
+    )
 
-    await getEncryptionSession('content-v1', 'public')
+    const session = await getEncryptionSession('content-v1', 'public')
+    await createEncryptionRequestHeaders(session, 'content-v1')
     const firstSocket = saltWebSocketInstances[0]
     expect(firstSocket).toBeDefined()
 
@@ -242,19 +243,11 @@ function captureCookieWrites(): string[] {
   return writes
 }
 
-function decodeCookieBundle(cookieWrite: string): {
-  session_id: string
-  scope: string
-  items: [string, string][]
-} {
+const ESID_COOKIE_SIZE_LIMIT = 512
+
+function readCookieValue(cookieWrite: string): string {
   const value = cookieWrite.split(';')[0]?.split('=').slice(1).join('=') ?? ''
-  return JSON.parse(
-    new TextDecoder().decode(base64urlDecode(decodeURIComponent(value))),
-  ) as {
-    session_id: string
-    scope: string
-    items: [string, string][]
-  }
+  return decodeURIComponent(value)
 }
 
 function stubBrowserCrypto(): void {

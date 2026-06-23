@@ -18,7 +18,6 @@ _NONCE_LENGTH = 16
 _TAG_LENGTH = 16
 _ROUNDS = 8
 _PURPOSE = "encryption-session-binding"
-_BUNDLE_VERSION = 1
 
 
 class EncryptionSidError(Exception):
@@ -31,7 +30,6 @@ def create_encryption_sid(
     scope: EncryptionSessionScope,
     key_material: bytes,
     expires_at: datetime,
-    salt: bytes,
     issued_at: datetime | None = None,
     nonce: bytes | None = None,
 ) -> str:
@@ -43,7 +41,7 @@ def create_encryption_sid(
         "scope": scope,
         "session_id": session_id,
     }
-    key = _derive_sid_key(key_material, scope, salt=salt)
+    key = _derive_sid_key(key_material, session_id=session_id, scope=scope)
     token_nonce = nonce or urandom(_NONCE_LENGTH)
     if len(token_nonce) != _NONCE_LENGTH:
         raise EncryptionSidError("invalid esid nonce")
@@ -66,23 +64,15 @@ def validate_encryption_sid(
     session_id: str,
     scope: EncryptionSessionScope,
     key_material: bytes,
-    salt: bytes,
-    salt_id: str | None = None,
     now: datetime | None = None,
 ) -> None:
     if esid is None:
         raise EncryptionSidError("missing esid")
-    token = _select_esid_from_bundle(
-        esid,
-        session_id=session_id,
-        scope=scope,
-        salt_id=salt_id,
-    )
-    if not token or len(token) > ESID_MAX_LENGTH:
+    if not esid or len(esid) > ESID_MAX_LENGTH:
         raise EncryptionSidError("invalid esid")
 
     try:
-        raw = _base64url_decode(token)
+        raw = _base64url_decode(esid)
     except (ValueError, TypeError) as exc:
         raise EncryptionSidError("invalid esid") from exc
 
@@ -94,7 +84,7 @@ def validate_encryption_sid(
     tag = raw[-_TAG_LENGTH:]
     nonce = raw[1 : 1 + _NONCE_LENGTH]
     transformed = raw[1 + _NONCE_LENGTH : -_TAG_LENGTH]
-    key = _derive_sid_key(key_material, scope, salt=salt)
+    key = _derive_sid_key(key_material, session_id=session_id, scope=scope)
     if not compare_digest(_mac(key, body)[:_TAG_LENGTH], tag):
         raise EncryptionSidError("invalid esid")
 
@@ -133,42 +123,6 @@ def _validate_payload(
     current = now.timestamp()
     if iat is None or exp is None or iat > current + 60 or exp <= current:
         raise EncryptionSidError("expired esid")
-
-
-def _select_esid_from_bundle(
-    esid: str,
-    *,
-    session_id: str,
-    scope: EncryptionSessionScope,
-    salt_id: str | None,
-) -> str:
-    if not esid:
-        raise EncryptionSidError("invalid esid")
-    if salt_id is None:
-        return esid
-    try:
-        raw = _base64url_decode(esid)
-        payload = json.loads(raw.decode("utf-8"))
-    except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
-        return esid
-    if not isinstance(payload, dict):
-        return esid
-    if payload.get("v") != _BUNDLE_VERSION:
-        return esid
-    if payload.get("session_id") != session_id or payload.get("scope") != scope:
-        raise EncryptionSidError("esid bundle mismatch")
-    items = payload.get("items")
-    if not isinstance(items, list):
-        raise EncryptionSidError("invalid esid bundle")
-    for item in items:
-        if (
-            isinstance(item, list | tuple)
-            and len(item) == 2
-            and item[0] == salt_id
-            and isinstance(item[1], str)
-        ):
-            return item[1]
-    raise EncryptionSidError("missing esid for salt")
 
 
 def _transform_forward(data: bytes, *, key: bytes, nonce: bytes) -> bytes:
@@ -286,14 +240,13 @@ def _hmac_stream(
 
 def _derive_sid_key(
     key_material: bytes,
+    session_id: str,
     scope: EncryptionSessionScope,
-    *,
-    salt: bytes,
 ) -> bytes:
     return HKDF(
         algorithm=hashes.SHA256(),
         length=32,
-        salt=salt,
+        salt=f"blog-cms:esid-stable:{scope}:{session_id}".encode(),
         info=f"blog-cms:esid:{scope}".encode(),
     ).derive(key_material)
 

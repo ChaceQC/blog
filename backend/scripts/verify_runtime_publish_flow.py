@@ -433,7 +433,6 @@ class RuntimeApiClient:
             scope=session.scope,
             key_material=session.shared_key,
             expires_at=session.expires_at,
-            salt=esid_salt.salt,
         )
         cookie_path = f"/api/{session.scope}"
         self.client.cookies.set(
