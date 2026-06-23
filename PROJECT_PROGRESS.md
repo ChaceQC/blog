@@ -12,6 +12,7 @@
 - 后端 Dockerfile 已在安装 `tzdata` 前写入腾讯云 Debian trixie、trixie-updates 和 trixie-security 源，避免生产镜像构建时继续访问默认 `deb.debian.org`。
 - 继续修正后端镜像 Debian 源配置：`python:3.12-slim` 默认使用 `/etc/apt/sources.list.d/debian.sources`，仅写 `/etc/apt/sources.list` 会与官方源并存；当前已改为删除旧 `sources.list` 并覆盖 deb822 格式的 `debian.sources` 为腾讯云源。
 - 后端镜像构建缓存已补强：apt、pip 和 uv 下载目录接入 BuildKit cache mount，`uv sync --frozen --no-dev` 显式使用 `UV_DEFAULT_INDEX`，避免普通重建时反复下载 Pillow 等依赖；若执行 `--no-cache` 仍会按 Docker 语义跳过构建缓存并重新下载。
+- 后端锁文件下载源已重锁到腾讯云 PyPI 镜像：保持依赖版本不变，仅将 `uv.lock` 中的 registry 与包文件 URL 从 `pypi.org` / `files.pythonhosted.org` 改为 `mirrors.cloud.tencent.com`，避免 `uv sync --frozen` 按锁文件继续访问官方文件域名；`UV_CONCURRENT_DOWNLOADS=1` 保持不变。
 
 ### 进行中
 
@@ -30,6 +31,9 @@
 
 - 已运行 `uv run ruff check app/server.py tests/test_server.py`，通过。
 - 已运行 `uv run pytest tests/test_server.py tests/test_request_client_ip.py`，12 个测试通过。
+- 已运行 `uv lock --default-index https://mirrors.cloud.tencent.com/pypi/simple`，未升级依赖版本，`uv.lock` 中不再包含 `files.pythonhosted.org` 或 `https://pypi.org/simple`。
+- 已运行 `uv lock --check --default-index https://mirrors.cloud.tencent.com/pypi/simple`，锁文件状态有效。
+- 已运行 `uv sync --frozen --no-dev --default-index https://mirrors.cloud.tencent.com/pypi/simple`，生产依赖安装验证通过；该命令会移除本地 dev 依赖，随后已运行 `uv sync --default-index https://mirrors.cloud.tencent.com/pypi/simple` 恢复本地开发依赖。
 - 已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
 - 尝试运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml build backend` 验证镜像内腾讯云 Debian 源、`tzdata` 安装、UTF-8 默认环境和 BuildKit 依赖缓存，本机 Docker Desktop 未运行，无法连接 `dockerDesktopLinuxEngine`；服务器或 Docker 可用环境仍需执行 backend 镜像构建确认，并观察 `apt-get update` 不再出现 `deb.debian.org`。
 
