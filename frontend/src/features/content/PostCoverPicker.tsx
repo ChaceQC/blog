@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
-import { adminFileThumbnailUrl, listAdminFiles } from '../files/api.ts'
+import { adminFileThumbnailUrl, listAdminFiles } from '../files/adminApi.ts'
 import type { AdminFileItem } from '../files/types.ts'
 
 type PostCoverPickerProps = {

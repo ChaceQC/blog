@@ -11,7 +11,7 @@ import {
   getAdminFileTemporaryUrl,
   listAdminFiles,
   uploadAdminFile,
-} from '../../features/files/api.ts'
+} from '../../features/files/adminApi.ts'
 import { AdminFileUploadPanel } from '../../features/files/AdminFileUploadPanel.tsx'
 import { FileDetail } from '../../features/files/FileDetail.tsx'
 import { useAuth } from '../../features/auth/useAuth.ts'

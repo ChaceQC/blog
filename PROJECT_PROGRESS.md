@@ -20,10 +20,13 @@
 - 修复从后台返回首页后公开请求 400 的前端会话串扰问题：`esid` Cookie 改为按 `/api/public` 与 `/api/admin` 路径写入，并在复用已缓存加密 session 时重新写入当前 scope 的 `esid`，避免 public/admin scope 互相覆盖。
 - 前端生产构建改为先按 vendor、公开业务、后台业务和加密请求模块拆分 JavaScript chunk，再只混淆包含 `src/` 项目源码的非第三方 chunk，避免第三方库被混淆后膨胀成单个超大 JS。
 - 前端 build 后新增 `.gz` 预压缩静态资源生成步骤，Nginx 开启 `gzip_static` 与 `gzip_vary`，浏览器支持 gzip 时优先传输预压缩 JS/CSS/HTML/SVG/JSON/XML/TXT。
+- 前端生产产物文件名改为纯 hash，去掉 `app-*`、`vendor-*` 等可识别业务含义的命名。
+- 后台工作区路由改为登录校验通过后动态加载：`/admin/login` 登录页和鉴权入口仍在初始包，后台总览、文章、页面、文件、友链、导航、日志和设置页面集中到 `AdminWorkspaceRoutes` 异步 chunk。
+- 拆分前端公开 API 与后台 API：`files`、`links`、`settings` 的公开接口保留在原 `api.ts`，后台 CRUD、上传、日志相关调用迁移到 `adminApi.ts`，避免公开页或登录页 import 时顺带打入后台管理接口代码。
 
 ### 进行中
 
-- 当前运行日志 IP、时间戳时区、UTF-8 默认环境和加密会话 `esid` 绑定已完成，等待部署服务器重建 backend/nginx 镜像后用真实公网请求复核日志输出与加密会话链路。
+- 当前运行日志 IP、时间戳时区、UTF-8 默认环境、加密会话 `esid` 绑定和前端生产构建分包策略已完成，等待部署服务器重建 backend/nginx 镜像后用真实公网请求复核日志输出、加密会话链路、gzip 静态资源和后台动态加载。
 
 ### 阻塞与风险
 
@@ -34,7 +37,7 @@
 
 ### 下一步
 
-- 在服务器确认真实 `deploy/env/backend.env` 包含 `TZ=Asia/Shanghai` 或目标时区后，执行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml up -d --build backend nginx`，访问公开页面并用浏览器网络面板复核 `/api/*` 请求携带 `X-Encryption-Session` 与 `esid`，再用 `docker compose ... logs --tail=200 backend` 复核真实 IP 与容器时区时间戳。
+- 在服务器确认真实 `deploy/env/backend.env` 包含 `TZ=Asia/Shanghai` 或目标时区后，执行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml up -d --build backend nginx`，访问公开页面并用浏览器网络面板复核 `/api/*` 请求携带 `X-Encryption-Session` 与 `esid`、JS/CSS 优先返回 `.gz` 压缩资源、未登录访问 `/admin` 不下载后台工作区 chunk，再用 `docker compose ... logs --tail=200 backend` 复核真实 IP 与容器时区时间戳。
 
 ### 验证
 
@@ -54,6 +57,9 @@
 - 尝试运行 `docker compose -f deploy\docker-compose.yml -f deploy\docker-compose.prod.yml build nginx` 复验 Docker 内 Linux `npm ci`，本机 Docker Desktop 未运行，无法连接 `dockerDesktopLinuxEngine`；服务器或 Docker 可用环境仍需执行构建确认。
 - 已运行 `npm.cmd test -- src/api/encryption.test.ts`，2 个前端加密会话测试通过，覆盖单个协商被取消时共享请求仍继续、public/admin scope 切换后复用 session 会重新写入对应路径 `esid`。
 - 已运行 `npm.cmd run build`，通过；构建输出已拆为多个 JS chunk，最大 JS chunk 约 257.50 kB，并生成 `.gz` 预压缩文件供 Nginx `gzip_static` 返回。
+- 已运行 `npm.cmd run lint`，通过。
+- 已再次运行 `npm.cmd test -- src/api/encryption.test.ts`，2 个前端加密会话测试通过。
+- 已再次运行 `npm.cmd run build`，通过；构建输出文件名为纯 hash，生成 `.gz` 预压缩文件，后台工作区动态 chunk 未出现在 `dist/index.html` 初始资源列表中，登录页文本仍保留在入口 chunk。
 
 ## 2026-06-20
 

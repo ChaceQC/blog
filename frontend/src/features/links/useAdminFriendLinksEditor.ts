@@ -9,7 +9,7 @@ import {
   listAdminFriendLinks,
   reviewAdminFriendLink,
   updateAdminFriendLink,
-} from './api.ts'
+} from './adminApi.ts'
 import {
   emptyFriendLinkForm,
   formToPayload,

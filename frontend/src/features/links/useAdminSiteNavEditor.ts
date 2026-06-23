@@ -8,7 +8,7 @@ import {
   listAdminSiteNavGroups,
   listAdminSiteNavItems,
   updateAdminSiteNavItem,
-} from './api.ts'
+} from './adminApi.ts'
 import {
   emptySiteForm,
   siteFormToPayload,

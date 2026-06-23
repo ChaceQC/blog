@@ -6,7 +6,7 @@ import { invalidateFriendLinkCaches } from '../../app/queryInvalidation.ts'
 import {
   createAdminFriendLinkGroup,
   updateAdminFriendLinkGroup,
-} from './api.ts'
+} from './adminApi.ts'
 import { useAuth } from '../auth/useAuth.ts'
 
 import type {

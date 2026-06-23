@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 
 import { invalidateSiteNavCaches } from '../../app/queryInvalidation.ts'
 import { emptyToNull } from '../../utils/formText.ts'
-import { createAdminSiteNavGroup, updateAdminSiteNavGroup } from './api.ts'
+import { createAdminSiteNavGroup, updateAdminSiteNavGroup } from './adminApi.ts'
 import { useAuth } from '../auth/useAuth.ts'
 
 import type {

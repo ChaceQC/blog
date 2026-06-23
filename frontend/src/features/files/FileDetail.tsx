@@ -8,7 +8,7 @@ import {
   Trash2,
 } from 'lucide-react'
 
-import { adminFileDownloadUrl } from './api.ts'
+import { adminFileDownloadUrl } from './adminApi.ts'
 import { formatChinaDateTime } from '../../utils/datetime.ts'
 
 import type { AdminFileItem, AdminFileTemporaryUrlResponse } from './types.ts'

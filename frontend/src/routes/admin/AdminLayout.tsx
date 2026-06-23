@@ -10,7 +10,7 @@ import {
   Settings,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useEffect, type PropsWithChildren } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
 import { hasAnyAdminPermission } from '../../features/auth/permissions.ts'
@@ -30,7 +30,7 @@ const adminLinks = [
   { to: '/admin/settings', label: '设置', icon: Settings, permissions: adminAccess.settings },
 ]
 
-export function AdminLayout() {
+export function AdminLayout({ children }: PropsWithChildren) {
   const { logout, session } = useAuth()
   const navigate = useNavigate()
   const { data: siteProfile } = useQuery({
@@ -81,7 +81,7 @@ export function AdminLayout() {
         </div>
       </aside>
       <main className="admin-main">
-        <Outlet />
+        {children ?? <Outlet />}
       </main>
     </div>
   )

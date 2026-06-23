@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { FileImage, UploadCloud } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-import { listAdminFiles } from './api.ts'
+import { listAdminFiles } from './adminApi.ts'
 
 export function FileQueuePreview() {
   const { data, isError, isLoading } = useQuery({

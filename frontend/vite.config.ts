@@ -38,7 +38,9 @@ export default defineConfig(({ command }) => ({
     chunkSizeWarningLimit: 900,
     rolldownOptions: {
       output: {
-        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[hash][extname]',
+        chunkFileNames: 'assets/[hash].js',
+        entryFileNames: 'assets/[hash].js',
         codeSplitting: {
           groups: [
             {
@@ -76,12 +78,6 @@ export default defineConfig(({ command }) => ({
               test: /src[\\/]api[\\/](encryption|client|config)\.ts$/,
               priority: 60,
               maxSize: 240 * 1024,
-            },
-            {
-              name: 'app-admin',
-              test: /src[\\/](routes[\\/]admin|features[\\/](auth|content|files|links|logs|settings))[\\/]/,
-              priority: 50,
-              maxSize: 360 * 1024,
             },
             {
               name: 'app-public',

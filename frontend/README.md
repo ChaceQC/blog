@@ -15,7 +15,7 @@ npm run lint
 npm run build
 ```
 
-本地开发端口、预览端口和 API 地址来自 `config/development.json`，不要写死在启动脚本或业务代码里。`npm run dev` 会把前端 API 基础路径固定为同源 `/api`，并按配置把 `/api` 代理到后端，保证加密会话协商后前端可写入 `esid` Cookie 并随 `/api` 请求发送。`esid` 会按 `/api/public` 与 `/api/admin` 路径隔离，避免前后台 scope 切换时互相覆盖。生产 `npm run build` 会先拆分第三方 vendor chunk，再混淆所有包含 `src/` 项目源码的 JavaScript chunk，并为文本型静态资源生成 `.gz` 预压缩文件；混淆只提高前端算法阅读成本，真正校验仍依赖后端数据库会话密钥与 `esid` HMAC。
+本地开发端口、预览端口和 API 地址来自 `config/development.json`，不要写死在启动脚本或业务代码里。`npm run dev` 会把前端 API 基础路径固定为同源 `/api`，并按配置把 `/api` 代理到后端，保证加密会话协商后前端可写入 `esid` Cookie 并随 `/api` 请求发送。`esid` 会按 `/api/public` 与 `/api/admin` 路径隔离，避免前后台 scope 切换时互相覆盖。生产 `npm run build` 会先拆分第三方 vendor chunk，再混淆所有包含 `src/` 项目源码的 JavaScript chunk，输出纯 hash 文件名，并为文本型静态资源生成 `.gz` 预压缩文件；后台登录页和鉴权入口留在初始包，后台工作区页面与后台 CRUD API 代码只在登录校验通过后动态加载。混淆只提高前端算法阅读成本，真正校验仍依赖后端数据库会话密钥与 `esid` HMAC。
 
 ## 目录约定
 

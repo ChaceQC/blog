@@ -3,7 +3,7 @@ import { BarChart3, CheckCircle2, Clock3, Sparkles } from 'lucide-react'
 
 import { listAdminPosts } from '../../features/content/api.ts'
 import { contentStatusLabels } from '../../features/content/contentLabels.ts'
-import { listAdminFiles } from '../../features/files/api.ts'
+import { listAdminFiles } from '../../features/files/adminApi.ts'
 import { FileQueuePreview } from '../../features/files/FileQueuePreview.tsx'
 
 export function AdminDashboardPage() {

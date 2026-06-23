@@ -165,7 +165,7 @@ npm.cmd run lint
 npm.cmd run build
 ```
 
-生产构建会先把 React、Query、KaTeX、图标等第三方依赖拆成 vendor chunk，再只对包含 `src/` 项目源码的 JavaScript chunk 做混淆；随后会为文本型静态资源生成 `.gz` 预压缩文件，Nginx 通过 `gzip_static` 优先传输压缩资源。混淆只提高前端算法阅读和复刻成本，后端仍以数据库中的加密会话 `key_material`、`X-Encryption-Session` 和 `esid` Cookie 校验作为安全边界。
+生产构建会先把 React、Query、KaTeX、图标等第三方依赖拆成 vendor chunk，再只对包含 `src/` 项目源码的 JavaScript chunk 做混淆，产物文件名使用纯 hash，避免从资源名识别业务模块；后台登录页和鉴权入口保留在初始包，后台工作区页面与后台 CRUD 接口代码只在登录校验通过后通过动态 import 加载。构建随后会为文本型静态资源生成 `.gz` 预压缩文件，Nginx 通过 `gzip_static` 优先传输压缩资源。混淆只提高前端算法阅读和复刻成本，后端仍以数据库中的加密会话 `key_material`、`X-Encryption-Session` 和 `esid` Cookie 校验作为安全边界。
 
 ### 联调约束
 

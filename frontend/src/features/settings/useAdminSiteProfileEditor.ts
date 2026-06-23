@@ -6,7 +6,7 @@ import {
   listAdminSettings,
   SITE_PROFILE_SETTING_KEY,
   updateAdminSetting,
-} from './api.ts'
+} from './adminApi.ts'
 import {
   formToSettingValue,
   settingToForm,
