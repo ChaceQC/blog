@@ -114,7 +114,7 @@ class EncryptionSessionManager:
         client_ip: str | None = None,
         active_session_limit: int | None = None,
     ) -> CreateEncryptionSessionResponse:
-        now = datetime.now(UTC)
+        now = _utc_now()
         await self._repository.delete_expired_sessions(now=now)
         if (
             active_session_limit is not None
@@ -169,12 +169,12 @@ class EncryptionSessionManager:
                 server_private_key.public_key(),
             ),
             profiles=_profiles_for_scope(scope),
-            expires_at=expires_at,
+            expires_at=_as_utc_aware(expires_at),
             login_challenge=(
                 LoginChallengeResponse(
                     challenge_id=login_challenge_id,
                     challenge_salt=_base64url_encode(login_challenge_salt),
-                    expires_at=login_challenge_expires_at,
+                    expires_at=_as_utc_aware(login_challenge_expires_at),
                 )
                 if login_challenge_id
                 and login_challenge_salt
@@ -184,7 +184,7 @@ class EncryptionSessionManager:
         )
 
     async def cleanup_expired_sessions(self, *, now: datetime | None = None) -> int:
-        now = now or datetime.now(UTC)
+        now = _as_utc_naive(now or datetime.now(UTC))
         deleted_count = await self._repository.delete_expired_sessions(now=now)
         if deleted_count > 0:
             await self._repository.commit()
@@ -283,20 +283,27 @@ class EncryptionSessionManager:
             _LOGIN_CAPSULE_CLOCK_SKEW_SECONDS
         ):
             raise EncryptionSessionError("login capsule timestamp is invalid")
+        db_now = _as_utc_naive(now)
 
         session = await self._get_session(
             session_id=session_id,
             esid=esid,
             expected_scope="admin",
             expected_profile=EncryptionProfile.SENSITIVE,
+            now=db_now,
+        )
+        challenge_expires_at = (
+            _as_utc_naive(session.login_challenge_expires_at)
+            if session.login_challenge_expires_at is not None
+            else None
         )
         if (
             session.login_challenge_id is None
             or session.login_challenge_salt is None
-            or session.login_challenge_expires_at is None
+            or challenge_expires_at is None
             or session.login_challenge_used_at is not None
             or session.login_challenge_id != payload.challenge_id
-            or session.login_challenge_expires_at <= now
+            or challenge_expires_at <= db_now
         ):
             raise EncryptionSessionError("login challenge is invalid or expired")
 
@@ -320,7 +327,7 @@ class EncryptionSessionManager:
         consumed = await self._repository.consume_login_challenge(
             session_id=session.session_id,
             challenge_id=session.login_challenge_id,
-            now=now,
+            now=db_now,
         )
         if not consumed:
             raise EncryptionSessionError("login challenge is already used")
@@ -334,10 +341,11 @@ class EncryptionSessionManager:
         esid: str | None,
         expected_scope: EncryptionSessionScope,
         expected_profile: EncryptionProfile,
+        now: datetime | None = None,
     ) -> EncryptionSession:
         session = await self._repository.get_active_session(
             session_id=session_id,
-            now=datetime.now(UTC),
+            now=_as_utc_naive(now or datetime.now(UTC)),
         )
         if session is None:
             raise EncryptionSessionError("encryption session is invalid or expired")
@@ -399,6 +407,22 @@ def _profiles_for_scope(scope: EncryptionSessionScope) -> list[EncryptionProfile
     if scope == "public":
         return [EncryptionProfile.CONTENT]
     return [EncryptionProfile.SENSITIVE, EncryptionProfile.CONTENT]
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _as_utc_naive(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)
+
+
+def _as_utc_aware(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _base64url_encode(value: bytes) -> str:

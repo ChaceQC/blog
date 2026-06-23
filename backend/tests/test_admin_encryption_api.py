@@ -59,9 +59,13 @@ class FakeEncryptionSessionRepository:
             key_material=key_material,
             login_challenge_id=login_challenge_id,
             login_challenge_salt=login_challenge_salt,
-            login_challenge_expires_at=login_challenge_expires_at,
+            login_challenge_expires_at=(
+                _as_utc_naive(login_challenge_expires_at)
+                if login_challenge_expires_at is not None
+                else None
+            ),
             login_challenge_used_at=None,
-            expires_at=expires_at,
+            expires_at=_as_utc_naive(expires_at),
         )
         self.sessions[session_id] = session
         return session
@@ -73,12 +77,13 @@ class FakeEncryptionSessionRepository:
         client_ip: str,
         now: datetime,
     ) -> int:
+        current_time = _as_utc_naive(now)
         return sum(
             1
             for session in self.sessions.values()
             if session.scope == scope
             and session.client_ip == client_ip
-            and session.expires_at > now
+            and _as_utc_naive(session.expires_at) > current_time
         )
 
     async def get_active_session(
@@ -87,8 +92,9 @@ class FakeEncryptionSessionRepository:
         session_id: str,
         now: datetime,
     ) -> SimpleNamespace | None:
+        current_time = _as_utc_naive(now)
         session = self.sessions.get(session_id)
-        if session is None or session.expires_at <= now:
+        if session is None or _as_utc_naive(session.expires_at) <= current_time:
             return None
         return session
 
@@ -99,24 +105,31 @@ class FakeEncryptionSessionRepository:
         challenge_id: str,
         now: datetime,
     ) -> bool:
+        current_time = _as_utc_naive(now)
         session = self.sessions.get(session_id)
+        challenge_expires_at = (
+            _as_utc_naive(session.login_challenge_expires_at)
+            if session is not None and session.login_challenge_expires_at is not None
+            else None
+        )
         if (
             session is None
             or session.login_challenge_id != challenge_id
             or session.login_challenge_used_at is not None
-            or session.login_challenge_expires_at is None
-            or session.login_challenge_expires_at <= now
-            or session.expires_at <= now
+            or challenge_expires_at is None
+            or challenge_expires_at <= current_time
+            or _as_utc_naive(session.expires_at) <= current_time
         ):
             return False
-        session.login_challenge_used_at = now
+        session.login_challenge_used_at = current_time
         return True
 
     async def delete_expired_sessions(self, *, now: datetime) -> int:
+        current_time = _as_utc_naive(now)
         expired_ids = [
             session_id
             for session_id, session in self.sessions.items()
-            if session.expires_at <= now
+            if _as_utc_naive(session.expires_at) <= current_time
         ]
         for session_id in expired_ids:
             self.sessions.pop(session_id)
@@ -983,3 +996,9 @@ def _set_esid_cookie(
 
 def _parse_api_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _as_utc_naive(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)

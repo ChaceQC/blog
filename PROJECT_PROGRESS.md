@@ -40,10 +40,12 @@
 - 后台登录已接入 `Login Capsule v2`：`/api/admin/encryption/sessions` 对 admin scope 返回一次性 `login_challenge`，前端每次登录都新建 admin 加密会话，用 AES-CTR 加密带固定分桶 padding 的用户名/密码载荷，并用 HMAC-SHA256 绑定 scheme、session、challenge、方法、路径、时间戳、nonce 和 ciphertext；后端验证 `X-Encryption-Session`、`esid`、challenge 未过期未使用、时间窗口和 tag 后才解密，并在解密成功后原子标记 challenge 已使用。
 - 新增迁移 `20260623_0010_login_capsule_challenge.py`，为 `encryption_sessions` 增加 `login_challenge_id`、`login_challenge_salt`、`login_challenge_expires_at` 和 `login_challenge_used_at` 字段。
 - 后端登录限流保持在 capsule 解密之后执行，用户名级限流仍使用解密后的用户名；IP 级限流继续覆盖不同用户名轮换尝试，测试已改为每次登录使用新 challenge。
+- 修复生产环境后台登录 500：MySQL `DATETIME` 回传无时区 UTC 时间，`Login Capsule v2` 登录校验曾直接与带时区 `datetime.now(UTC)` 比较，触发 Python naive/aware datetime 比较异常；现在加密会话服务统一以 naive UTC 写入和查询数据库，API 响应与 `esid` 校验再转换为 UTC aware 时间。
+- 后台加密会话测试仓库已模拟 MySQL 的 naive UTC 时间存储，并兼容测试中传入的 aware UTC 时间，覆盖登录 capsule challenge 过期判断和消费路径，避免同类时间比较问题再次变成 500。
 
 ### 进行中
 
-- 当前 `Login Capsule v2` 已完成本地代码验证，等待部署服务器执行数据库迁移并重建 backend/nginx 后做真实浏览器登录复核。
+- 当前 `Login Capsule v2` 生产登录 500 修复已完成本地代码验证，等待服务器拉取最新 `main` 后重建 backend，并用真实浏览器复核 `/api/admin/auth/login` 返回 200。
 
 ### 阻塞与风险
 
@@ -52,10 +54,11 @@
 - `esid` 由前端 JavaScript 写入，不能设置 `HttpOnly`；因此已用 ECDH shared secret 派生密钥和 HMAC 防伪，前端混淆仅作为门槛提升，不作为密码学安全边界。当前生产 build 已按第三方和项目源码分包，纯第三方 vendor chunk 不混淆，包含 `src/` 的项目源码 chunk 会混淆。
 - `Login Capsule v2` 能避免登录载荷明文传输并降低重放风险，但不能替代 HTTPS；前端 JS 仍可被下载，安全边界依赖每次协商的 ECDH shared secret、一次性 challenge、`esid` 校验、HMAC 和服务端状态。
 - 本机 Docker Desktop 仍未运行，无法在本机完成 Linux nginx 镜像构建复验；已用 `npm.cmd ci` 验证 lock 与 package 在 clean install 下同步，服务器或 Docker 可用环境仍需重新执行 nginx 镜像构建确认。
+- 本次 500 修复未改变数据库结构、前端协议或部署配置；服务器仍需确认已执行 `20260623_0010_login_capsule_challenge.py` 迁移，否则登录 challenge 字段缺失会导致登录不可用。
 
 ### 下一步
 
-- 在服务器执行 `uv run alembic upgrade head` 或容器内等价迁移后，重建 backend/nginx，使用浏览器 Network 面板确认 `/api/admin/auth/login` 请求体不再出现 `username`/`password` 明文字段，只发送 `login-capsule-v2` capsule，并确认登录、失败重试、刷新和返回首页公开请求都正常。
+- 在服务器拉取最新代码后重建 backend，复查 `/api/admin/encryption/sessions` 和 `/api/admin/auth/login`：登录请求应只发送 `login-capsule-v2` capsule，成功登录返回 200，失败重试返回业务错误而不是 500，并确认返回首页公开请求仍正常。
 
 ### 验证
 
@@ -82,6 +85,9 @@
 - 已运行 `uv run pytest tests/test_admin_encryption_api.py tests/test_admin_security.py tests/test_rate_limit_redis_integration.py`，25 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 - 已运行 `npm.cmd run lint`，通过。
 - 已运行 `npm.cmd run build`，通过；生产 build 完成混淆和 `.gz` 预压缩，仍提示混淆插件耗时较高。
+- 修复登录 500 后已运行 `uv run pytest tests/test_admin_encryption_api.py -q`，14 个测试通过，覆盖模拟 MySQL naive UTC 时间的登录 capsule 路径；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- 修复登录 500 后已运行 `uv run ruff check .`，通过。
+- 修复登录 500 后已运行 `uv run pytest tests/test_admin_encryption_api.py tests/test_admin_security.py tests/test_rate_limit_redis_integration.py`，25 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
 
 ## 2026-06-20
 
