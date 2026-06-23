@@ -101,6 +101,8 @@ async def salt_websocket(
                         ciphertext=request_frame.ciphertext,
                     ),
                     key_material=session.key_material,
+                    context_seed=session.context_seed,
+                    scope=scope,
                 )
                 if request_payload.get("kind") == "ping":
                     ping = SaltPingPayload.model_validate(request_payload)
@@ -115,6 +117,8 @@ async def salt_websocket(
                                         "ts": ping.ts,
                                     },
                                     key_material=session.key_material,
+                                    context_seed=session.context_seed,
+                                    scope=scope,
                                 ).__dict__,
                             ),
                         ).model_dump(mode="json"),
@@ -135,6 +139,7 @@ async def salt_websocket(
                             profile=lease_request.profile,
                         ),
                         key_material=session.key_material,
+                        context_seed=session.context_seed,
                     )
                     for lease_request in lease_requests
                     for _ in range(lease_request.count)

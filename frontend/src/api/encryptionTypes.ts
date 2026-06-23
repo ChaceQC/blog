@@ -47,6 +47,7 @@ export type EncryptionSession = {
   id: string
   scope: EncryptionScope
   sharedSecret: ArrayBuffer
+  contextSeed: ArrayBuffer
   profiles: EncryptionProfile[]
   expiresAt: number
   esid?: string

@@ -7,6 +7,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
+from app.core.crypto_context import ContextOpcode, binary_context
 from app.schemas.auth import LoginCapsuleRequest, LoginRequest
 
 LOGIN_CAPSULE_SCHEME = "login-capsule-v2"
@@ -28,6 +29,7 @@ class LoginCapsuleError(Exception):
 def derive_login_capsule_keys(
     *,
     key_material: bytes,
+    context_seed: bytes,
     challenge_salt: bytes,
     transport_salt: bytes,
     session_id: str,
@@ -36,17 +38,19 @@ def derive_login_capsule_keys(
     return LoginCapsuleKeys(
         encryption_key=_derive_key(
             key_material=key_material,
+            context_seed=context_seed,
             challenge_salt=challenge_salt,
             transport_salt=transport_salt,
-            purpose="enc",
+            opcode=ContextOpcode.LOGIN_ENC,
             session_id=session_id,
             challenge_id=challenge_id,
         ),
         mac_key=_derive_key(
             key_material=key_material,
+            context_seed=context_seed,
             challenge_salt=challenge_salt,
             transport_salt=transport_salt,
-            purpose="mac",
+            opcode=ContextOpcode.LOGIN_MAC,
             session_id=session_id,
             challenge_id=challenge_id,
         ),
@@ -110,9 +114,10 @@ def decrypt_login_capsule_payload(
 def _derive_key(
     *,
     key_material: bytes,
+    context_seed: bytes,
     challenge_salt: bytes,
     transport_salt: bytes,
-    purpose: str,
+    opcode: ContextOpcode,
     session_id: str,
     challenge_id: str,
 ) -> bytes:
@@ -120,7 +125,15 @@ def _derive_key(
         algorithm=hashes.SHA256(),
         length=32,
         salt=transport_salt + challenge_salt,
-        info=f"blog-login-v2:{purpose}:{session_id}:{challenge_id}".encode(),
+        info=binary_context(
+            seed=context_seed,
+            opcode=opcode,
+            scope="admin",
+            profile="sensitive-v1",
+            purpose="login_capsule",
+            session_id=session_id,
+            challenge_id=challenge_id,
+        ),
     ).derive(key_material)
 
 

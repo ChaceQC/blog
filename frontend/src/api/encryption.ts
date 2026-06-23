@@ -1,4 +1,5 @@
 import { API_BASE_URL } from './config.ts'
+import { base64urlDecode } from './encryptionCore.ts'
 import { parseApiTime } from '../utils/datetime.ts'
 
 export type {
@@ -31,6 +32,7 @@ type EncryptionSessionResponse = {
   session_id: string
   scope: EncryptionScope
   server_public_key: BrowserPublicKey
+  context_seed: string
   profiles: EncryptionProfile[]
   expires_at: string
   login_challenge?: LoginChallenge | null
@@ -197,6 +199,7 @@ async function createEncryptionSession(scope: EncryptionScope): Promise<Encrypti
     id: sessionResponse.session_id,
     scope: sessionResponse.scope,
     sharedSecret: sharedBits,
+    contextSeed: base64urlDecode(sessionResponse.context_seed),
     profiles: sessionResponse.profiles,
     expiresAt: parseApiTime(sessionResponse.expires_at),
     loginChallenge: sessionResponse.login_challenge ?? null,

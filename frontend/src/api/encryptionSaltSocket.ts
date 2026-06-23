@@ -5,10 +5,10 @@ import {
   decoder,
   encoder,
   sleep,
-  textBytes,
   toArrayBuffer,
   toError,
 } from './encryptionCore.ts'
+import { ContextOpcode, binaryContext } from './encryptionContext.ts'
 
 import type {
   EncryptionProfile,
@@ -71,7 +71,6 @@ type SaltPongWire = {
   ts: number
 }
 
-const SALT_WRAP_INFO = 'blog-cms:wss-salt-wrap:v1'
 const SALT_SOCKET_OPEN_TIMEOUT_MS = 8_000
 const SALT_SOCKET_REQUEST_TIMEOUT_MS = 8_000
 const SALT_SOCKET_HEARTBEAT_INTERVAL_MS = 25_000
@@ -480,14 +479,12 @@ export class SaltLeaseSocket {
   ): Promise<SaltFrame> {
     const wrapSalt = crypto.getRandomValues(new Uint8Array(32))
     const nonce = crypto.getRandomValues(new Uint8Array(12))
-    const key = await deriveSaltWrapKey(this.session.sharedSecret, wrapSalt, [
-      'encrypt',
-    ])
+    const key = await deriveSaltWrapKey(this.session, wrapSalt, ['encrypt'])
     const ciphertext = await crypto.subtle.encrypt(
       {
         name: 'AES-GCM',
         iv: nonce,
-        additionalData: saltWrapAssociatedData(this.session.id),
+        additionalData: await saltWrapAssociatedData(this.session),
         tagLength: 128,
       },
       key,
@@ -506,7 +503,7 @@ export class SaltLeaseSocket {
       throw new Error('salt lease session mismatch')
     }
     const key = await deriveSaltWrapKey(
-      this.session.sharedSecret,
+      this.session,
       new Uint8Array(base64urlDecode(frame.wrap_salt)),
       ['decrypt'],
     )
@@ -514,7 +511,7 @@ export class SaltLeaseSocket {
       {
         name: 'AES-GCM',
         iv: base64urlDecode(frame.nonce),
-        additionalData: saltWrapAssociatedData(this.session.id),
+        additionalData: await saltWrapAssociatedData(this.session),
         tagLength: 128,
       },
       key,
@@ -615,13 +612,13 @@ function isRetryableSaltSocketError(error: Error): boolean {
 }
 
 async function deriveSaltWrapKey(
-  sharedSecret: ArrayBuffer,
+  session: EncryptionSession,
   wrapSalt: Uint8Array,
   usages: KeyUsage[],
 ): Promise<CryptoKey> {
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
-    sharedSecret,
+    session.sharedSecret,
     'HKDF',
     false,
     ['deriveKey'],
@@ -631,7 +628,12 @@ async function deriveSaltWrapKey(
       name: 'HKDF',
       hash: 'SHA-256',
       salt: toArrayBuffer(wrapSalt),
-      info: textBytes(SALT_WRAP_INFO),
+      info: await binaryContext({
+        seed: session.contextSeed,
+        opcode: ContextOpcode.WssWrapKey,
+        scope: session.scope,
+        sessionId: session.id,
+      }),
     },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
@@ -640,8 +642,15 @@ async function deriveSaltWrapKey(
   )
 }
 
-function saltWrapAssociatedData(sessionId: string): ArrayBuffer {
-  return textBytes(`blog-cms:wss-salt-wrap:${sessionId}`)
+async function saltWrapAssociatedData(
+  session: EncryptionSession,
+): Promise<ArrayBuffer> {
+  return binaryContext({
+    seed: session.contextSeed,
+    opcode: ContextOpcode.WssWrapAad,
+    scope: session.scope,
+    sessionId: session.id,
+  })
 }
 
 function saltWebSocketUrl(scope: EncryptionScope): string {

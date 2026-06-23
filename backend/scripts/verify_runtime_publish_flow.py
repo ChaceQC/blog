@@ -22,6 +22,7 @@ from PIL import Image, ImageDraw
 from playwright.sync_api import sync_playwright
 from websockets.sync.client import connect as ws_connect
 
+from app.core.crypto_context import ContextOpcode, binary_context
 from app.core.encryption_sid import ESID_COOKIE_NAME, create_encryption_sid
 from app.core.login_capsule import LOGIN_CAPSULE_SCHEME, derive_login_capsule_keys
 
@@ -29,14 +30,12 @@ EncryptionProfile = Literal["sensitive-v1", "content-v1"]
 EncryptionScope = Literal["admin", "public"]
 SaltPurpose = Literal["esid", "login_capsule", "request", "response"]
 
-SALT_WRAP_INFO = b"blog-cms:wss-salt-wrap:v1"
-
-
 @dataclass(frozen=True)
 class EncryptionSession:
     id: str
     scope: EncryptionScope
     shared_key: bytes
+    context_seed: bytes
     profiles: list[str]
     expires_at: datetime
     login_challenge: dict[str, Any] | None = None
@@ -128,6 +127,7 @@ class RuntimeApiClient:
             id=payload["session_id"],
             scope=payload["scope"],
             shared_key=shared_key,
+            context_seed=_b64url_decode(str(payload["context_seed"])),
             profiles=list(payload["profiles"]),
             expires_at=datetime.fromisoformat(
                 str(payload["expires_at"]).replace("Z", "+00:00"),
@@ -155,11 +155,27 @@ class RuntimeApiClient:
             purpose="response",
             profile=profile,
         )
-        aesgcm = AESGCM(_derive_key(session.shared_key, profile, response_salt.salt))
+        aesgcm = AESGCM(
+            _derive_key(
+                session.shared_key,
+                context_seed=session.context_seed,
+                profile=profile,
+                salt=response_salt.salt,
+                scope=session.scope,
+                session_id=session.id,
+                lease_id=response_salt.lease_id,
+            ),
+        )
         plaintext = aesgcm.decrypt(
             _b64url_decode(str(envelope["nonce"])),
             _b64url_decode(str(envelope["ciphertext"])),
-            _associated_data(profile),
+            _associated_data(
+                context_seed=session.context_seed,
+                profile=profile,
+                scope=session.scope,
+                session_id=session.id,
+                lease_id=response_salt.lease_id,
+            ),
         )
         decoded = json.loads(plaintext.decode("utf-8"))
         if not isinstance(decoded, dict):
@@ -185,11 +201,25 @@ class RuntimeApiClient:
             separators=(",", ":"),
         ).encode("utf-8")
         ciphertext = AESGCM(
-            _derive_key(session.shared_key, profile, request_salt.salt),
+            _derive_key(
+                session.shared_key,
+                context_seed=session.context_seed,
+                profile=profile,
+                salt=request_salt.salt,
+                scope=session.scope,
+                session_id=session.id,
+                lease_id=request_salt.lease_id,
+            ),
         ).encrypt(
             nonce,
             plaintext,
-            _associated_data(profile),
+            _associated_data(
+                context_seed=session.context_seed,
+                profile=profile,
+                scope=session.scope,
+                session_id=session.id,
+                lease_id=request_salt.lease_id,
+            ),
         )
         return {
             "session_id": session.id,
@@ -432,6 +462,7 @@ class RuntimeApiClient:
             session_id=session.id,
             scope=session.scope,
             key_material=session.shared_key,
+            context_seed=session.context_seed,
             expires_at=session.expires_at,
         )
         cookie_path = f"/api/{session.scope}"
@@ -472,6 +503,7 @@ class RuntimeApiClient:
         )
         keys = derive_login_capsule_keys(
             key_material=session.shared_key,
+            context_seed=session.context_seed,
             challenge_salt=_b64url_decode(str(challenge["challenge_salt"])),
             transport_salt=login_salt.salt,
             session_id=session.id,
@@ -533,8 +565,7 @@ class RuntimeApiClient:
                 json.dumps(
                     _wrap_salt_payload(
                         request_payload,
-                        session_id=session.id,
-                        key_material=session.shared_key,
+                        session=session,
                     ),
                     separators=(",", ":"),
                 ),
@@ -547,8 +578,7 @@ class RuntimeApiClient:
             raise RuntimeVerifyError("salt WSS 未返回 lease")
         lease = _unwrap_salt_frame(
             frames[0],
-            session_id=session.id,
-            key_material=session.shared_key,
+            session=session,
         )
         if (
             lease.purpose != purpose
@@ -1811,12 +1841,19 @@ def _assert_media_type(
 def _wrap_salt_payload(
     payload: dict[str, object],
     *,
-    session_id: str,
-    key_material: bytes,
+    session: EncryptionSession,
 ) -> dict[str, str]:
     wrap_salt = secrets.token_bytes(32)
     nonce = secrets.token_bytes(12)
-    ciphertext = AESGCM(_derive_salt_wrap_key(key_material, wrap_salt)).encrypt(
+    ciphertext = AESGCM(
+        _derive_salt_wrap_key(
+            session.shared_key,
+            context_seed=session.context_seed,
+            wrap_salt=wrap_salt,
+            session_id=session.id,
+            scope=session.scope,
+        ),
+    ).encrypt(
         nonce,
         json.dumps(
             payload,
@@ -1824,10 +1861,14 @@ def _wrap_salt_payload(
             separators=(",", ":"),
             sort_keys=True,
         ).encode("utf-8"),
-        _salt_wrap_associated_data(session_id),
+        _salt_wrap_associated_data(
+            context_seed=session.context_seed,
+            session_id=session.id,
+            scope=session.scope,
+        ),
     )
     return {
-        "session_id": session_id,
+        "session_id": session.id,
         "wrap_salt": _b64url(wrap_salt),
         "nonce": _b64url(nonce),
         "ciphertext": _b64url(ciphertext),
@@ -1837,20 +1878,26 @@ def _wrap_salt_payload(
 def _unwrap_salt_frame(
     frame: dict[str, Any],
     *,
-    session_id: str,
-    key_material: bytes,
+    session: EncryptionSession,
 ) -> SaltLease:
-    if frame.get("session_id") != session_id:
+    if frame.get("session_id") != session.id:
         raise RuntimeVerifyError("salt frame session_id 不匹配")
     plaintext = AESGCM(
         _derive_salt_wrap_key(
-            key_material,
-            _b64url_decode(str(frame["wrap_salt"])),
+            session.shared_key,
+            context_seed=session.context_seed,
+            wrap_salt=_b64url_decode(str(frame["wrap_salt"])),
+            session_id=session.id,
+            scope=session.scope,
         ),
     ).decrypt(
         _b64url_decode(str(frame["nonce"])),
         _b64url_decode(str(frame["ciphertext"])),
-        _salt_wrap_associated_data(session_id),
+        _salt_wrap_associated_data(
+            context_seed=session.context_seed,
+            session_id=session.id,
+            scope=session.scope,
+        ),
     )
     payload = json.loads(plaintext.decode("utf-8"))
     if not isinstance(payload, dict):
@@ -1875,17 +1922,39 @@ def _salt_ws_url(base_url: str, scope: EncryptionScope) -> str:
     return str(parsed.copy_with(scheme=scheme, path=f"/api/{scope}/encryption/salts"))
 
 
-def _derive_salt_wrap_key(key_material: bytes, wrap_salt: bytes) -> bytes:
+def _derive_salt_wrap_key(
+    key_material: bytes,
+    *,
+    context_seed: bytes,
+    wrap_salt: bytes,
+    session_id: str,
+    scope: EncryptionScope,
+) -> bytes:
     return HKDF(
         algorithm=hashes.SHA256(),
         length=32,
         salt=wrap_salt,
-        info=SALT_WRAP_INFO,
+        info=binary_context(
+            seed=context_seed,
+            opcode=ContextOpcode.WSS_WRAP_KEY,
+            scope=scope,
+            session_id=session_id,
+        ),
     ).derive(key_material)
 
 
-def _salt_wrap_associated_data(session_id: str) -> bytes:
-    return f"blog-cms:wss-salt-wrap:{session_id}".encode()
+def _salt_wrap_associated_data(
+    *,
+    context_seed: bytes,
+    session_id: str,
+    scope: EncryptionScope,
+) -> bytes:
+    return binary_context(
+        seed=context_seed,
+        opcode=ContextOpcode.WSS_WRAP_AAD,
+        scope=scope,
+        session_id=session_id,
+    )
 
 
 def _login_capsule_signing_input(capsule: dict[str, Any], path: str) -> bytes:
@@ -1906,19 +1975,45 @@ def _login_capsule_signing_input(capsule: dict[str, Any], path: str) -> bytes:
 
 def _derive_key(
     key_material: bytes,
+    *,
+    context_seed: bytes,
     profile: EncryptionProfile,
     salt: bytes,
+    scope: EncryptionScope,
+    session_id: str,
+    lease_id: str,
 ) -> bytes:
     return HKDF(
         algorithm=hashes.SHA256(),
         length=32,
         salt=salt,
-        info=f"blog-cms:{profile}".encode(),
+        info=binary_context(
+            seed=context_seed,
+            opcode=ContextOpcode.JSON_KEY,
+            scope=scope,
+            profile=profile,
+            session_id=session_id,
+            lease_id=lease_id,
+        ),
     ).derive(key_material)
 
 
-def _associated_data(profile: EncryptionProfile) -> bytes:
-    return f"blog-cms:{profile}:json".encode()
+def _associated_data(
+    *,
+    context_seed: bytes,
+    profile: EncryptionProfile,
+    scope: EncryptionScope,
+    session_id: str,
+    lease_id: str,
+) -> bytes:
+    return binary_context(
+        seed=context_seed,
+        opcode=ContextOpcode.JSON_AAD,
+        scope=scope,
+        profile=profile,
+        session_id=session_id,
+        lease_id=lease_id,
+    )
 
 
 def _b64url(value: bytes) -> str:

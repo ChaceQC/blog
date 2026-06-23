@@ -15,6 +15,7 @@ from redis import Redis
 from redis.exceptions import RedisError
 
 from app.core.config import Settings
+from app.core.crypto_context import ContextOpcode, binary_context
 from app.core.encryption import EncryptionProfile
 from app.schemas.encryption import EncryptionSessionScope
 
@@ -25,7 +26,6 @@ _SALT_BYTES = 32
 _WRAP_SALT_BYTES = 32
 _WRAP_NONCE_BYTES = 12
 _LEASE_TTL_SECONDS = 45
-_WRAP_SALT_INFO = b"blog-cms:wss-salt-wrap:v1"
 
 
 class EncryptionSaltError(Exception):
@@ -269,9 +269,16 @@ class SaltLeaseService:
             profile=profile,
         )
 
-    def wrap(self, *, lease: SaltLease, key_material: bytes) -> WrappedSaltFrame:
+    def wrap(
+        self,
+        *,
+        lease: SaltLease,
+        key_material: bytes,
+        context_seed: bytes,
+    ) -> WrappedSaltFrame:
         return self.wrap_payload(
             session_id=lease.session_id,
+            scope=lease.scope,
             payload={
                 "lease_id": lease.lease_id,
                 "purpose": lease.purpose,
@@ -281,14 +288,17 @@ class SaltLeaseService:
                 "expires_at": int(lease.expires_at.timestamp()),
             },
             key_material=key_material,
+            context_seed=context_seed,
         )
 
     def wrap_payload(
         self,
         *,
         session_id: str,
+        scope: EncryptionSessionScope,
         payload: dict[str, object],
         key_material: bytes,
+        context_seed: bytes,
     ) -> WrappedSaltFrame:
         plaintext = json.dumps(
             payload,
@@ -298,10 +308,22 @@ class SaltLeaseService:
         ).encode("utf-8")
         wrap_salt = urandom(_WRAP_SALT_BYTES)
         nonce = urandom(_WRAP_NONCE_BYTES)
-        ciphertext = AESGCM(_derive_wrap_key(key_material, wrap_salt)).encrypt(
+        ciphertext = AESGCM(
+            _derive_wrap_key(
+                key_material,
+                context_seed=context_seed,
+                wrap_salt=wrap_salt,
+                session_id=session_id,
+                scope=scope,
+            ),
+        ).encrypt(
             nonce,
             plaintext,
-            _wrap_associated_data(session_id),
+            _wrap_associated_data(
+                context_seed=context_seed,
+                session_id=session_id,
+                scope=scope,
+            ),
         )
         return WrappedSaltFrame(
             session_id=session_id,
@@ -315,14 +337,26 @@ class SaltLeaseService:
         frame: WrappedSaltFrame,
         *,
         key_material: bytes,
+        context_seed: bytes,
+        scope: EncryptionSessionScope,
     ) -> dict[str, object]:
         try:
             plaintext = AESGCM(
-                _derive_wrap_key(key_material, _base64url_decode(frame.wrap_salt)),
+                _derive_wrap_key(
+                    key_material,
+                    context_seed=context_seed,
+                    wrap_salt=_base64url_decode(frame.wrap_salt),
+                    session_id=frame.session_id,
+                    scope=scope,
+                ),
             ).decrypt(
                 _base64url_decode(frame.nonce),
                 _base64url_decode(frame.ciphertext),
-                _wrap_associated_data(frame.session_id),
+                _wrap_associated_data(
+                    context_seed=context_seed,
+                    session_id=frame.session_id,
+                    scope=scope,
+                ),
             )
             payload = json.loads(plaintext.decode("utf-8"))
         except (InvalidTag, ValueError, UnicodeDecodeError, TypeError) as exc:
@@ -448,17 +482,39 @@ def _purpose(value: str) -> SaltPurpose:
     return value  # type: ignore[return-value]
 
 
-def _derive_wrap_key(key_material: bytes, wrap_salt: bytes) -> bytes:
+def _derive_wrap_key(
+    key_material: bytes,
+    *,
+    context_seed: bytes,
+    wrap_salt: bytes,
+    session_id: str,
+    scope: EncryptionSessionScope,
+) -> bytes:
     return HKDF(
         algorithm=hashes.SHA256(),
         length=32,
         salt=wrap_salt,
-        info=_WRAP_SALT_INFO,
+        info=binary_context(
+            seed=context_seed,
+            opcode=ContextOpcode.WSS_WRAP_KEY,
+            scope=scope,
+            session_id=session_id,
+        ),
     ).derive(key_material)
 
 
-def _wrap_associated_data(session_id: str) -> bytes:
-    return f"blog-cms:wss-salt-wrap:{session_id}".encode()
+def _wrap_associated_data(
+    *,
+    context_seed: bytes,
+    session_id: str,
+    scope: EncryptionSessionScope,
+) -> bytes:
+    return binary_context(
+        seed=context_seed,
+        opcode=ContextOpcode.WSS_WRAP_AAD,
+        scope=scope,
+        session_id=session_id,
+    )
 
 
 def _base64url_encode(value: bytes) -> str:

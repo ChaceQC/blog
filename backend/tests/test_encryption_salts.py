@@ -11,6 +11,8 @@ from app.services.encryption_salts import (
     SaltLeaseService,
 )
 
+TEST_CONTEXT_SEED = b"c" * 32
+
 
 def test_in_memory_salt_lease_is_single_use() -> None:
     service = SaltLeaseService(store=InMemorySaltLeaseStore())
@@ -88,11 +90,20 @@ def test_salt_lease_wss_frames_are_encrypted() -> None:
         purpose="login_capsule",
         profile=EncryptionProfile.SENSITIVE,
     )
-    frame = service.wrap(lease=lease, key_material=b"k" * 32)
+    frame = service.wrap(
+        lease=lease,
+        key_material=b"k" * 32,
+        context_seed=TEST_CONTEXT_SEED,
+    )
 
     assert lease.lease_id not in frame.ciphertext
     assert "login_capsule" not in frame.ciphertext
-    unwrapped = service.unwrap_request(frame, key_material=b"k" * 32)
+    unwrapped = service.unwrap_request(
+        frame,
+        key_material=b"k" * 32,
+        context_seed=TEST_CONTEXT_SEED,
+        scope="admin",
+    )
 
     assert unwrapped["lease_id"] == lease.lease_id
     assert unwrapped["purpose"] == "login_capsule"
@@ -104,26 +115,40 @@ def test_salt_lease_wss_ping_pong_frames_are_encrypted() -> None:
     key_material = b"k" * 32
     ping = service.wrap_payload(
         session_id="session-1",
+        scope="admin",
         payload={"kind": "ping", "seq": 7, "ts": 1782220000},
         key_material=key_material,
+        context_seed=TEST_CONTEXT_SEED,
     )
 
     assert "ping" not in ping.ciphertext
-    unwrapped_ping = service.unwrap_request(ping, key_material=key_material)
+    unwrapped_ping = service.unwrap_request(
+        ping,
+        key_material=key_material,
+        context_seed=TEST_CONTEXT_SEED,
+        scope="admin",
+    )
     assert unwrapped_ping == {"kind": "ping", "seq": 7, "ts": 1782220000}
 
     pong = service.wrap_payload(
         session_id="session-1",
+        scope="admin",
         payload={
             "kind": "pong",
             "seq": unwrapped_ping["seq"],
             "ts": unwrapped_ping["ts"],
         },
         key_material=key_material,
+        context_seed=TEST_CONTEXT_SEED,
     )
 
     assert "pong" not in pong.ciphertext
-    assert service.unwrap_request(pong, key_material=key_material) == {
+    assert service.unwrap_request(
+        pong,
+        key_material=key_material,
+        context_seed=TEST_CONTEXT_SEED,
+        scope="admin",
+    ) == {
         "kind": "pong",
         "seq": 7,
         "ts": 1782220000,

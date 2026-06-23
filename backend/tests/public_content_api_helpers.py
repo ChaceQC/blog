@@ -116,6 +116,7 @@ class FakeEncryptionSessionManager:
                 x="server-x",
                 y="server-y",
             ),
+            context_seed="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
             profiles=[EncryptionProfile.CONTENT],
             expires_at=datetime(2026, 6, 16, tzinfo=UTC),
         )

@@ -40,6 +40,7 @@ class CreateEncryptionSessionResponse(BaseModel):
     session_id: str
     scope: EncryptionSessionScope
     server_public_key: BrowserPublicKey
+    context_seed: str = Field(min_length=1, max_length=128)
     profiles: list[EncryptionProfile]
     expires_at: datetime
     login_challenge: LoginChallengeResponse | None = None

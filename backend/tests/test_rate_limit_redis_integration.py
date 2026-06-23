@@ -153,6 +153,7 @@ class FakeEncryptionSessionManager:
             session_id="redis-test-session",
             scope="admin",
             server_public_key=client_public_key,
+            context_seed="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
             profiles=[EncryptionProfile.SENSITIVE, EncryptionProfile.CONTENT],
             expires_at=datetime.now(UTC) + timedelta(minutes=5),
         )

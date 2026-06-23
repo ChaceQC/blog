@@ -77,6 +77,7 @@ describe('getEncryptionSession', () => {
             x: 'server-x',
             y: 'server-y',
           },
+          context_seed: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
           profiles: ['content-v1'],
           expires_at: '2099-01-01T00:00:00Z',
         }),
@@ -115,6 +116,7 @@ describe('getEncryptionSession', () => {
               x: 'server-x',
               y: 'server-y',
             },
+            context_seed: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
             profiles:
               scope === 'admin' ? ['sensitive-v1', 'content-v1'] : ['content-v1'],
             expires_at: '2099-01-01T00:00:00Z',
@@ -319,6 +321,7 @@ function stubBrowserCrypto(): void {
       }),
       deriveBits: vi.fn().mockResolvedValue(sharedSecret.buffer),
       deriveKey: vi.fn().mockResolvedValue({} as CryptoKey),
+      digest: vi.fn().mockResolvedValue(new Uint8Array(32).buffer),
       encrypt: vi.fn().mockImplementation((_: AesGcmParams, __, data) => {
         return Promise.resolve(toArrayBuffer(data))
       }),
@@ -437,6 +440,7 @@ function sessionFetchMock(
             x: 'server-x',
             y: 'server-y',
           },
+          context_seed: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
           profiles: scope === 'admin' ? ['sensitive-v1', 'content-v1'] : ['content-v1'],
           expires_at: '2099-01-01T00:00:00Z',
         }),

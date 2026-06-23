@@ -10,6 +10,8 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
+from app.core.crypto_context import ContextOpcode, binary_context
+
 
 class EncryptionProfile(StrEnum):
     SENSITIVE = "sensitive-v1"
@@ -31,14 +33,22 @@ def encrypt_json_payload(
     payload: dict[str, Any],
     *,
     secret_key: str,
+    context_seed: bytes,
     profile: EncryptionProfile,
     salt: bytes,
+    scope: str,
+    session_id: str,
+    lease_id: str,
 ) -> EncryptedEnvelope:
     return encrypt_json_payload_with_key_material(
         payload,
         key_material=secret_key.encode("utf-8"),
+        context_seed=context_seed,
         profile=profile,
         salt=salt,
+        scope=scope,
+        session_id=session_id,
+        lease_id=lease_id,
     )
 
 
@@ -46,8 +56,12 @@ def encrypt_json_payload_with_key_material(
     payload: dict[str, Any],
     *,
     key_material: bytes,
+    context_seed: bytes,
     profile: EncryptionProfile,
     salt: bytes,
+    scope: str,
+    session_id: str,
+    lease_id: str,
 ) -> EncryptedEnvelope:
     nonce = urandom(12)
     plaintext = json.dumps(
@@ -56,10 +70,26 @@ def encrypt_json_payload_with_key_material(
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
-    ciphertext = AESGCM(_derive_profile_key(key_material, profile, salt)).encrypt(
+    ciphertext = AESGCM(
+        _derive_profile_key(
+            key_material,
+            context_seed=context_seed,
+            profile=profile,
+            salt=salt,
+            scope=scope,
+            session_id=session_id,
+            lease_id=lease_id,
+        ),
+    ).encrypt(
         nonce,
         plaintext,
-        _associated_data(profile),
+        _associated_data(
+            context_seed=context_seed,
+            profile=profile,
+            scope=scope,
+            session_id=session_id,
+            lease_id=lease_id,
+        ),
     )
     return EncryptedEnvelope(
         profile=profile,
@@ -72,14 +102,22 @@ def decrypt_json_payload(
     envelope: EncryptedEnvelope,
     *,
     secret_key: str,
+    context_seed: bytes,
     expected_profile: EncryptionProfile,
     salt: bytes,
+    scope: str,
+    session_id: str,
+    lease_id: str,
 ) -> dict[str, Any]:
     return decrypt_json_payload_with_key_material(
         envelope,
         key_material=secret_key.encode("utf-8"),
+        context_seed=context_seed,
         expected_profile=expected_profile,
         salt=salt,
+        scope=scope,
+        session_id=session_id,
+        lease_id=lease_id,
     )
 
 
@@ -87,19 +125,37 @@ def decrypt_json_payload_with_key_material(
     envelope: EncryptedEnvelope,
     *,
     key_material: bytes,
+    context_seed: bytes,
     expected_profile: EncryptionProfile,
     salt: bytes,
+    scope: str,
+    session_id: str,
+    lease_id: str,
 ) -> dict[str, Any]:
     if envelope.profile != expected_profile:
         raise EncryptionError("unexpected encryption profile")
 
     try:
         plaintext = AESGCM(
-            _derive_profile_key(key_material, expected_profile, salt),
+            _derive_profile_key(
+                key_material,
+                context_seed=context_seed,
+                profile=expected_profile,
+                salt=salt,
+                scope=scope,
+                session_id=session_id,
+                lease_id=lease_id,
+            ),
         ).decrypt(
             _base64url_decode(envelope.nonce),
             _base64url_decode(envelope.ciphertext),
-            _associated_data(expected_profile),
+            _associated_data(
+                context_seed=context_seed,
+                profile=expected_profile,
+                scope=scope,
+                session_id=session_id,
+                lease_id=lease_id,
+            ),
         )
     except (InvalidTag, ValueError) as exc:
         raise EncryptionError("invalid encrypted payload") from exc
@@ -112,19 +168,45 @@ def decrypt_json_payload_with_key_material(
 
 def _derive_profile_key(
     key_material: bytes,
+    *,
+    context_seed: bytes,
     profile: EncryptionProfile,
     salt: bytes,
+    scope: str,
+    session_id: str,
+    lease_id: str,
 ) -> bytes:
     return HKDF(
         algorithm=hashes.SHA256(),
         length=32,
         salt=salt,
-        info=f"blog-cms:{profile.value}".encode(),
+        info=binary_context(
+            seed=context_seed,
+            opcode=ContextOpcode.JSON_KEY,
+            scope=scope,
+            profile=profile,
+            session_id=session_id,
+            lease_id=lease_id,
+        ),
     ).derive(key_material)
 
 
-def _associated_data(profile: EncryptionProfile) -> bytes:
-    return f"blog-cms:{profile.value}:json".encode()
+def _associated_data(
+    *,
+    context_seed: bytes,
+    profile: EncryptionProfile,
+    scope: str,
+    session_id: str,
+    lease_id: str,
+) -> bytes:
+    return binary_context(
+        seed=context_seed,
+        opcode=ContextOpcode.JSON_AAD,
+        scope=scope,
+        profile=profile,
+        session_id=session_id,
+        lease_id=lease_id,
+    )
 
 
 def _base64url_encode(value: bytes) -> str:

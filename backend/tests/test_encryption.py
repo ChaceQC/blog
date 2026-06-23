@@ -18,6 +18,10 @@ from app.core.encryption_sid import (
 
 SECRET_KEY = "test-secret-key-with-at-least-32-characters"
 TEST_SALT = b"test-dynamic-salt-for-json-envelope"
+TEST_CONTEXT_SEED = b"c" * 32
+TEST_SCOPE = "public"
+TEST_SESSION_ID = "session-1"
+TEST_LEASE_ID = "lease-1"
 
 
 def test_sensitive_encryption_round_trip() -> None:
@@ -26,16 +30,24 @@ def test_sensitive_encryption_round_trip() -> None:
     envelope = encrypt_json_payload(
         payload,
         secret_key=SECRET_KEY,
+        context_seed=TEST_CONTEXT_SEED,
         profile=EncryptionProfile.SENSITIVE,
         salt=TEST_SALT,
+        scope=TEST_SCOPE,
+        session_id=TEST_SESSION_ID,
+        lease_id=TEST_LEASE_ID,
     )
 
     assert envelope.profile == EncryptionProfile.SENSITIVE
     assert decrypt_json_payload(
         envelope,
         secret_key=SECRET_KEY,
+        context_seed=TEST_CONTEXT_SEED,
         expected_profile=EncryptionProfile.SENSITIVE,
         salt=TEST_SALT,
+        scope=TEST_SCOPE,
+        session_id=TEST_SESSION_ID,
+        lease_id=TEST_LEASE_ID,
     ) == payload
 
 
@@ -44,16 +56,24 @@ def test_content_profile_uses_separate_key_context() -> None:
     envelope = encrypt_json_payload(
         payload,
         secret_key=SECRET_KEY,
+        context_seed=TEST_CONTEXT_SEED,
         profile=EncryptionProfile.CONTENT,
         salt=TEST_SALT,
+        scope=TEST_SCOPE,
+        session_id=TEST_SESSION_ID,
+        lease_id=TEST_LEASE_ID,
     )
 
     with pytest.raises(EncryptionError):
         decrypt_json_payload(
             envelope,
             secret_key=SECRET_KEY,
+            context_seed=TEST_CONTEXT_SEED,
             expected_profile=EncryptionProfile.SENSITIVE,
             salt=TEST_SALT,
+            scope=TEST_SCOPE,
+            session_id=TEST_SESSION_ID,
+            lease_id=TEST_LEASE_ID,
         )
 
 
@@ -62,8 +82,12 @@ def test_encryption_rejects_tampered_ciphertext() -> None:
     envelope = encrypt_json_payload(
         payload,
         secret_key=SECRET_KEY,
+        context_seed=TEST_CONTEXT_SEED,
         profile=EncryptionProfile.CONTENT,
         salt=TEST_SALT,
+        scope=TEST_SCOPE,
+        session_id=TEST_SESSION_ID,
+        lease_id=TEST_LEASE_ID,
     )
     ciphertext_bytes = bytearray(_base64url_decode(envelope.ciphertext))
     ciphertext_bytes[-1] ^= 1
@@ -77,8 +101,12 @@ def test_encryption_rejects_tampered_ciphertext() -> None:
         decrypt_json_payload(
             tampered,
             secret_key=SECRET_KEY,
+            context_seed=TEST_CONTEXT_SEED,
             expected_profile=EncryptionProfile.CONTENT,
             salt=TEST_SALT,
+            scope=TEST_SCOPE,
+            session_id=TEST_SESSION_ID,
+            lease_id=TEST_LEASE_ID,
         )
 
 
@@ -86,8 +114,12 @@ def test_encrypted_envelope_does_not_expose_plaintext() -> None:
     envelope = encrypt_json_payload(
         {"username": "admin"},
         secret_key=SECRET_KEY,
+        context_seed=TEST_CONTEXT_SEED,
         profile=EncryptionProfile.SENSITIVE,
         salt=TEST_SALT,
+        scope=TEST_SCOPE,
+        session_id=TEST_SESSION_ID,
+        lease_id=TEST_LEASE_ID,
     )
 
     assert "admin" not in envelope.ciphertext
@@ -98,6 +130,7 @@ def test_esid_stable_token_validates_for_session_scope() -> None:
         session_id="session-1",
         scope="public",
         key_material=b"k" * 32,
+        context_seed=TEST_CONTEXT_SEED,
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
     )
 
@@ -106,6 +139,7 @@ def test_esid_stable_token_validates_for_session_scope() -> None:
         session_id="session-1",
         scope="public",
         key_material=b"k" * 32,
+        context_seed=TEST_CONTEXT_SEED,
     )
 
     with pytest.raises(EncryptionSidError):
@@ -114,6 +148,7 @@ def test_esid_stable_token_validates_for_session_scope() -> None:
             session_id="session-2",
             scope="public",
             key_material=b"k" * 32,
+            context_seed=TEST_CONTEXT_SEED,
         )
 
     with pytest.raises(EncryptionSidError):
@@ -122,6 +157,7 @@ def test_esid_stable_token_validates_for_session_scope() -> None:
             session_id="session-1",
             scope="admin",
             key_material=b"k" * 32,
+            context_seed=TEST_CONTEXT_SEED,
         )
 
 
@@ -130,6 +166,7 @@ def test_esid_uses_session_specific_key_material() -> None:
         session_id="session-1",
         scope="public",
         key_material=b"k" * 32,
+        context_seed=TEST_CONTEXT_SEED,
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
     )
 
@@ -139,6 +176,7 @@ def test_esid_uses_session_specific_key_material() -> None:
             session_id="session-1",
             scope="public",
             key_material=b"x" * 32,
+            context_seed=TEST_CONTEXT_SEED,
         )
 
 
@@ -147,6 +185,7 @@ def test_esid_rejects_expired_token() -> None:
         session_id="session-1",
         scope="public",
         key_material=b"k" * 32,
+        context_seed=TEST_CONTEXT_SEED,
         expires_at=datetime.now(UTC) - timedelta(seconds=1),
     )
 
@@ -156,6 +195,7 @@ def test_esid_rejects_expired_token() -> None:
             session_id="session-1",
             scope="public",
             key_material=b"k" * 32,
+            context_seed=TEST_CONTEXT_SEED,
         )
 
 

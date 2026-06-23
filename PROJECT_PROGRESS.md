@@ -4,6 +4,30 @@
 
 ### 本轮计划
 
+- 收敛前端核心 crypto path 中可静态抠出的可读协议上下文字符串：`blog-cms:*`、`blog-login-v2:*`、JSON AAD/profile 拼接和 esid HMAC stream label 不再直接作为 WebCrypto HKDF `info` / AES-GCM `additionalData` 输入。
+- 保留 WebCrypto primitive 名称的现实边界：`HKDF`、`AES-GCM`、`HMAC`、`SHA-256`、`AES-CTR` 这类算法名浏览器运行时必须可见，本轮只降低静态协议语义识别成本，不把隐藏 primitive 当作密码学安全边界。
+- 新增加密会话级随机 `context_seed`，由后端在 `/api/{scope}/encryption/sessions` 下发并保存到 `encryption_sessions`，后续请求由后端查表复用同一 seed。
+- 前后端统一使用二进制上下文构造：`context_seed + version/opcode + scope_id + profile_id + purpose_id + session_hash/lease_hash/challenge_hash`，替代可读字符串拼接的 HKDF info 和 AAD。
+- 将 JSON 信封、WSS salt 包裹、`esid` key/stream、Login Capsule v2 key 派生切到二进制上下文；HTTP schema 中现有 `profile` / `purpose` 业务字段暂保留，用于后端路由校验和日志语义，不进入核心 crypto 派生字符串。
+- 不兼容旧 session、旧 `esid` 或旧上下文派生；迁移上线后旧短期加密会话直接失效，浏览器刷新后重新协商。
+- 同步迁移、文档和测试，确认生产 build 仍可完成混淆与 gzip。
+
+### 本轮进度
+
+- 已完成现状审计：可读协议字符串集中在 `frontend/src/api/encryptionEnvelope.ts`、`encryptionSaltSocket.ts`、`encryptionEsid.ts`、`loginCapsule.ts` 及后端 `app/core/encryption.py`、`encryption_sid.py`、`login_capsule.py`、`services/encryption_salts.py`。
+- 已确认本轮需要数据库迁移新增 `encryption_sessions.context_seed`；新 session 必须写入 32 字节随机 seed，旧未携带 seed 的短期 session 不做兼容。
+- 已新增前后端二进制 crypto context：JSON 信封、WSS salt 包裹、`esid` key/stream 和 Login Capsule key 派生均改为使用 `context_seed + opcode + scope/profile/purpose id + session/challenge/lease hash`。
+- 已同步后端 schema、repository、service、迁移、运行流验证脚本和前后端测试桩；前端加密单测、前端 lint/build、后端全量 pytest、ruff、Alembic SQL 生成、Docker Compose config 与 diff check 均已通过。
+
+### 阻塞与风险
+
+- WebCrypto 算法名仍会在运行时出现，逆向者也可动态 hook `crypto.subtle`；本轮目标是移除静态可读协议语义，不替代 HTTPS、一次性 salt、Redis 原子消费和服务端校验。
+- `context_seed` 新增迁移上线后需要重启/重建后端，旧 active encryption session 会失效。
+
+## 2026-06-24
+
+### 本轮计划
+
 - 优先修复冷缓存打开页面时“只有 `/encryption/sessions` 请求能发出，WSS 和后续业务请求没有启动”的加载阻塞问题。
 - 保留多业务 chunk + 源码 chunk 混淆策略，不把构建分包重新收敛成少量大 JS；冷缓存请求压力通过增大 Nginx/API/WSS 限流余量、静态资源长期缓存和请求链路顺序修复处理。
 - 调整 WSS salt 启动顺序：业务请求创建加密请求头时必须先建立 WSS 并拿到一次性 salt，再执行 `esid` Cookie 生成，避免 `esid` 动态 chunk、WASM 或混淆执行异常导致 WSS 根本不启动。

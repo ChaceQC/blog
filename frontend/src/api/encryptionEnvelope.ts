@@ -3,8 +3,8 @@ import {
   base64urlEncode,
   decoder,
   encoder,
-  textBytes,
 } from './encryptionCore.ts'
+import { ContextOpcode, binaryContext } from './encryptionContext.ts'
 
 import type {
   EncryptedApiResponse,
@@ -34,7 +34,14 @@ export async function decryptEnvelopePayload<T>(
       name: 'HKDF',
       hash: 'SHA-256',
       salt: responseSalt.salt,
-      info: textBytes(`blog-cms:${profile}`),
+      info: await binaryContext({
+        seed: session.contextSeed,
+        opcode: ContextOpcode.JsonKey,
+        scope: session.scope,
+        profile,
+        sessionId: session.id,
+        leaseId: responseSalt.leaseId,
+      }),
     },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
@@ -45,7 +52,14 @@ export async function decryptEnvelopePayload<T>(
     {
       name: 'AES-GCM',
       iv: base64urlDecode(envelope.nonce),
-      additionalData: textBytes(`blog-cms:${profile}:json`),
+      additionalData: await binaryContext({
+        seed: session.contextSeed,
+        opcode: ContextOpcode.JsonAad,
+        scope: session.scope,
+        profile,
+        sessionId: session.id,
+        leaseId: responseSalt.leaseId,
+      }),
       tagLength: 128,
     },
     aesKey,
@@ -73,7 +87,14 @@ export async function encryptEnvelopePayload<T>(
       name: 'HKDF',
       hash: 'SHA-256',
       salt: requestSalt.salt,
-      info: textBytes(`blog-cms:${profile}`),
+      info: await binaryContext({
+        seed: session.contextSeed,
+        opcode: ContextOpcode.JsonKey,
+        scope: session.scope,
+        profile,
+        sessionId: session.id,
+        leaseId: requestSalt.leaseId,
+      }),
     },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
@@ -85,7 +106,14 @@ export async function encryptEnvelopePayload<T>(
     {
       name: 'AES-GCM',
       iv: nonce,
-      additionalData: textBytes(`blog-cms:${profile}:json`),
+      additionalData: await binaryContext({
+        seed: session.contextSeed,
+        opcode: ContextOpcode.JsonAad,
+        scope: session.scope,
+        profile,
+        sessionId: session.id,
+        leaseId: requestSalt.leaseId,
+      }),
       tagLength: 128,
     },
     aesKey,

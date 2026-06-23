@@ -1,5 +1,6 @@
 import { ApiError } from './client.ts'
 import { API_BASE_URL } from './config.ts'
+import { ContextOpcode, binaryContext } from './encryptionContext.ts'
 import {
   createEncryptionRequestHeaders,
   createFreshEncryptionSession,
@@ -156,9 +157,16 @@ async function deriveLoginCapsuleKey(
           new Uint8Array(base64urlDecode(challengeSalt)),
         ),
       ),
-      info: encoder.encode(
-        `blog-login-v2:${purpose}:${session.id}:${challengeId}`,
-      ),
+      info: await binaryContext({
+        seed: session.contextSeed,
+        opcode:
+          purpose === 'enc' ? ContextOpcode.LoginEnc : ContextOpcode.LoginMac,
+        scope: 'admin',
+        profile: 'sensitive-v1',
+        purpose: 'login_capsule',
+        sessionId: session.id,
+        challengeId,
+      }),
     },
     keyMaterial,
     derivedAlgorithm,

@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.serialization import (
 )
 
 from app.core.config import Settings
+from app.core.crypto_context import CONTEXT_SEED_BYTES
 from app.core.encryption import (
     EncryptedEnvelope,
     EncryptionError,
@@ -56,6 +57,7 @@ class EncryptionSessionRepositoryProtocol(Protocol):
         scope: str,
         client_ip: str | None,
         key_material: bytes,
+        context_seed: bytes,
         expires_at: datetime,
         login_challenge_id: str | None = None,
         login_challenge_salt: bytes | None = None,
@@ -147,6 +149,7 @@ class EncryptionSessionManager:
             _load_browser_public_key(client_public_key),
         )
         session_id = _random_token()
+        context_seed = urandom(CONTEXT_SEED_BYTES)
         expires_at = now + timedelta(
             seconds=self._settings.encryption_session_expire_seconds,
         )
@@ -165,6 +168,7 @@ class EncryptionSessionManager:
             scope=scope,
             client_ip=client_ip,
             key_material=shared_key,
+            context_seed=context_seed,
             expires_at=expires_at,
             login_challenge_id=login_challenge_id,
             login_challenge_salt=login_challenge_salt,
@@ -178,6 +182,7 @@ class EncryptionSessionManager:
             server_public_key=_export_browser_public_key(
                 server_private_key.public_key(),
             ),
+            context_seed=_base64url_encode(context_seed),
             profiles=_profiles_for_scope(scope),
             expires_at=_as_utc_aware(expires_at),
             login_challenge=(
@@ -262,8 +267,12 @@ class EncryptionSessionManager:
             envelope = encrypt_json_payload_with_key_material(
                 payload,
                 key_material=session.key_material,
+                context_seed=session.context_seed,
                 profile=profile,
                 salt=response_salt,
+                scope=scope,
+                session_id=session.session_id,
+                lease_id=response_salt_id,
             )
         except EncryptionError as exc:
             raise EncryptionSessionError("failed to encrypt response") from exc
@@ -302,8 +311,12 @@ class EncryptionSessionManager:
             envelope = encrypt_json_payload_with_key_material(
                 payload,
                 key_material=session.key_material,
+                context_seed=session.context_seed,
                 profile=profile,
                 salt=response_salt,
+                scope=scope,
+                session_id=session.session_id,
+                lease_id=response_salt_id,
             )
         except EncryptionError as exc:
             raise EncryptionSessionError("failed to encrypt response") from exc
@@ -349,8 +362,12 @@ class EncryptionSessionManager:
                     ciphertext=payload.ciphertext,
                 ),
                 key_material=session.key_material,
+                context_seed=session.context_seed,
                 expected_profile=profile,
                 salt=request_salt,
+                scope=scope,
+                session_id=session.session_id,
+                lease_id=payload.salt_id,
             )
         except EncryptionError as exc:
             raise EncryptionSessionError("failed to decrypt request") from exc
@@ -400,6 +417,7 @@ class EncryptionSessionManager:
 
         keys = derive_login_capsule_keys(
             key_material=session.key_material,
+            context_seed=session.context_seed,
             challenge_salt=session.login_challenge_salt,
             transport_salt=self._consume_salt(
                 lease_id=payload.salt_id,
@@ -467,6 +485,7 @@ class EncryptionSessionManager:
                 session_id=session.session_id,
                 scope=expected_scope,
                 key_material=session.key_material,
+                context_seed=session.context_seed,
             )
         except (EncryptionSidError, EncryptionSaltError) as exc:
             raise EncryptionSessionError("invalid encryption session sid") from exc

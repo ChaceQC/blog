@@ -2,31 +2,34 @@ import {
   base64urlEncode,
   concatBytes,
   encoder,
-  textBytes,
   toArrayBuffer,
   uint32be,
 } from './encryptionCore.ts'
+import { ContextOpcode, binaryContext } from './encryptionContext.ts'
 import { loadEsidWasmByteMixer } from './encryptionWasm.ts'
 
-import type { EncryptionScope, EncryptionSession } from './encryptionTypes.ts'
+import type { EncryptionSession } from './encryptionTypes.ts'
 
 const ESID_VERSION = 1
 const ESID_NONCE_LENGTH = 16
 const ESID_TAG_LENGTH = 16
 const ESID_ROUNDS = 8
+const ESID_PURPOSE_ID = 1
+const ESID_STREAM_LABELS = {
+  mask: 1,
+  rotate: 2,
+  perm: 3,
+} as const
 
 export async function createEncryptionSid(
   session: EncryptionSession,
 ): Promise<string> {
-  const key = await deriveEsidKey(session.sharedSecret, session.id, session.scope, [
-    'sign',
-    'verify',
-  ])
+  const key = await deriveEsidKey(session, ['sign', 'verify'])
   const nonce = crypto.getRandomValues(new Uint8Array(ESID_NONCE_LENGTH))
   const payload = JSON.stringify({
     exp: Math.floor(session.expiresAt / 1000),
     iat: Math.floor(Date.now() / 1000),
-    purpose: 'encryption-session-binding',
+    purpose: ESID_PURPOSE_ID,
     scope: session.scope,
     session_id: session.id,
   })
@@ -39,14 +42,12 @@ export async function createEncryptionSid(
 }
 
 async function deriveEsidKey(
-  sharedSecret: ArrayBuffer,
-  sessionId: string,
-  scope: EncryptionScope,
+  session: EncryptionSession,
   usages: KeyUsage[],
 ): Promise<CryptoKey> {
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
-    sharedSecret,
+    session.sharedSecret,
     'HKDF',
     false,
     ['deriveKey'],
@@ -55,8 +56,22 @@ async function deriveEsidKey(
     {
       name: 'HKDF',
       hash: 'SHA-256',
-      salt: textBytes(`blog-cms:esid-stable:${scope}:${sessionId}`),
-      info: textBytes(`blog-cms:esid:${scope}`),
+      salt: await binaryContext({
+        seed: session.contextSeed,
+        opcode: ContextOpcode.EsidKey,
+        scope: session.scope,
+        purpose: 'esid',
+        sessionId: session.id,
+        labelId: 1,
+      }),
+      info: await binaryContext({
+        seed: session.contextSeed,
+        opcode: ContextOpcode.EsidKey,
+        scope: session.scope,
+        purpose: 'esid',
+        sessionId: session.id,
+        labelId: 2,
+      }),
     },
     keyMaterial,
     {
@@ -137,8 +152,11 @@ async function esidStream(
         key,
         toArrayBuffer(
           concatBytes(
-            encoder.encode(`blog-cms-esid:${label}:`),
-            new Uint8Array([roundIndex]),
+            new Uint8Array([
+              ContextOpcode.EsidStream,
+              ESID_STREAM_LABELS[label],
+              roundIndex,
+            ]),
             nonce,
             uint32be(counter),
           ),

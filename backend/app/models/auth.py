@@ -110,6 +110,7 @@ class EncryptionSession(Base):
     scope: Mapped[str] = mapped_column(String(16), nullable=False)
     client_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     key_material: Mapped[bytes] = mapped_column(LargeBinary(64), nullable=False)
+    context_seed: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
     login_challenge_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     login_challenge_salt: Mapped[bytes | None] = mapped_column(
         LargeBinary(32),

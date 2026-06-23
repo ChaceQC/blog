@@ -8,6 +8,7 @@ from typing import Any
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
+from app.core.crypto_context import ContextOpcode, binary_context
 from app.schemas.encryption import EncryptionSessionScope
 
 ESID_COOKIE_NAME = "esid"
@@ -17,7 +18,12 @@ _VERSION = 1
 _NONCE_LENGTH = 16
 _TAG_LENGTH = 16
 _ROUNDS = 8
-_PURPOSE = "encryption-session-binding"
+_PURPOSE_ID = 1
+_STREAM_LABELS = {
+    b"mask": 1,
+    b"rotate": 2,
+    b"perm": 3,
+}
 
 
 class EncryptionSidError(Exception):
@@ -29,6 +35,7 @@ def create_encryption_sid(
     session_id: str,
     scope: EncryptionSessionScope,
     key_material: bytes,
+    context_seed: bytes,
     expires_at: datetime,
     issued_at: datetime | None = None,
     nonce: bytes | None = None,
@@ -37,11 +44,16 @@ def create_encryption_sid(
     payload = {
         "exp": _timestamp(expires_at),
         "iat": _timestamp(now),
-        "purpose": _PURPOSE,
+        "purpose": _PURPOSE_ID,
         "scope": scope,
         "session_id": session_id,
     }
-    key = _derive_sid_key(key_material, session_id=session_id, scope=scope)
+    key = _derive_sid_key(
+        key_material,
+        context_seed=context_seed,
+        session_id=session_id,
+        scope=scope,
+    )
     token_nonce = nonce or urandom(_NONCE_LENGTH)
     if len(token_nonce) != _NONCE_LENGTH:
         raise EncryptionSidError("invalid esid nonce")
@@ -64,6 +76,7 @@ def validate_encryption_sid(
     session_id: str,
     scope: EncryptionSessionScope,
     key_material: bytes,
+    context_seed: bytes,
     now: datetime | None = None,
 ) -> None:
     if esid is None:
@@ -84,7 +97,12 @@ def validate_encryption_sid(
     tag = raw[-_TAG_LENGTH:]
     nonce = raw[1 : 1 + _NONCE_LENGTH]
     transformed = raw[1 + _NONCE_LENGTH : -_TAG_LENGTH]
-    key = _derive_sid_key(key_material, session_id=session_id, scope=scope)
+    key = _derive_sid_key(
+        key_material,
+        context_seed=context_seed,
+        session_id=session_id,
+        scope=scope,
+    )
     if not compare_digest(_mac(key, body)[:_TAG_LENGTH], tag):
         raise EncryptionSidError("invalid esid")
 
@@ -111,7 +129,7 @@ def _validate_payload(
 ) -> None:
     if not isinstance(payload, dict):
         raise EncryptionSidError("invalid esid payload")
-    if payload.get("purpose") != _PURPOSE:
+    if payload.get("purpose") != _PURPOSE_ID:
         raise EncryptionSidError("invalid esid payload")
     if payload.get("session_id") != session_id:
         raise EncryptionSidError("esid session mismatch")
@@ -226,10 +244,7 @@ def _hmac_stream(
     counter = 0
     while len(output) < length:
         message = (
-            b"blog-cms-esid:"
-            + label
-            + b":"
-            + bytes([round_index])
+            bytes((int(ContextOpcode.ESID_STREAM), _STREAM_LABELS[label], round_index))
             + nonce
             + counter.to_bytes(4, "big")
         )
@@ -240,14 +255,30 @@ def _hmac_stream(
 
 def _derive_sid_key(
     key_material: bytes,
+    *,
+    context_seed: bytes,
     session_id: str,
     scope: EncryptionSessionScope,
 ) -> bytes:
     return HKDF(
         algorithm=hashes.SHA256(),
         length=32,
-        salt=f"blog-cms:esid-stable:{scope}:{session_id}".encode(),
-        info=f"blog-cms:esid:{scope}".encode(),
+        salt=binary_context(
+            seed=context_seed,
+            opcode=ContextOpcode.ESID_KEY,
+            scope=scope,
+            purpose="esid",
+            session_id=session_id,
+            label_id=1,
+        ),
+        info=binary_context(
+            seed=context_seed,
+            opcode=ContextOpcode.ESID_KEY,
+            scope=scope,
+            purpose="esid",
+            session_id=session_id,
+            label_id=2,
+        ),
     ).derive(key_material)
 
 

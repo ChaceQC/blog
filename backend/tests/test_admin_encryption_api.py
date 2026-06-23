@@ -35,6 +35,8 @@ from app.services.encryption import (
 from app.services.encryption_salts import InMemorySaltLeaseStore, SaltLeaseService
 from app.services.rate_limit import RateLimitService
 
+TEST_CONTEXT_SEED = b"c" * 32
+
 
 class FakeEncryptionSessionRepository:
     def __init__(self) -> None:
@@ -48,6 +50,7 @@ class FakeEncryptionSessionRepository:
         scope: str,
         client_ip: str | None,
         key_material: bytes,
+        context_seed: bytes,
         expires_at: datetime,
         login_challenge_id: str | None = None,
         login_challenge_salt: bytes | None = None,
@@ -58,6 +61,7 @@ class FakeEncryptionSessionRepository:
             scope=scope,
             client_ip=client_ip,
             key_material=key_material,
+            context_seed=context_seed,
             login_challenge_id=login_challenge_id,
             login_challenge_salt=login_challenge_salt,
             login_challenge_expires_at=(
@@ -260,6 +264,7 @@ def test_login_response_can_use_sensitive_encryption_session() -> None:
         session_id=session_payload["session_id"],
         scope="admin",
         key_material=shared_key,
+        context_seed=_session_context_seed(session_payload),
         expires_at=_parse_api_datetime(session_payload["expires_at"]),
         salt_leases=salt_leases,
     )
@@ -304,8 +309,12 @@ def test_login_response_can_use_sensitive_encryption_session() -> None:
             ciphertext=envelope_payload["ciphertext"],
         ),
         key_material=shared_key,
+        context_seed=_session_context_seed(session_payload),
         expected_profile=EncryptionProfile.SENSITIVE,
         salt=response_salt.salt,
+        scope="admin",
+        session_id=session_payload["session_id"],
+        lease_id=response_salt.lease_id,
     )
 
     assert decrypted["user"]["username"] == "admin"
@@ -433,6 +442,7 @@ def test_login_rejects_tampered_encryption_session_sid() -> None:
         session_id=session_payload["session_id"],
         scope="admin",
         key_material=shared_key,
+        context_seed=_session_context_seed(session_payload),
         expires_at=_parse_api_datetime(session_payload["expires_at"]),
         salt_leases=salt_leases,
         suffix="x",
@@ -583,6 +593,7 @@ def test_admin_login_ip_rate_limit_blocks_rotating_usernames() -> None:
                 session_id=session_payload["session_id"],
                 scope="admin",
                 key_material=shared_key,
+                context_seed=_session_context_seed(session_payload),
                 expires_at=_parse_api_datetime(session_payload["expires_at"]),
                 salt_leases=salt_leases,
             )
@@ -703,6 +714,7 @@ def test_refresh_uses_cookie_without_csrf_header() -> None:
         session_id=session_payload["session_id"],
         scope="admin",
         key_material=shared_key,
+        context_seed=_session_context_seed(session_payload),
         expires_at=_parse_api_datetime(session_payload["expires_at"]),
         salt_leases=salt_leases,
     )
@@ -748,8 +760,12 @@ def test_refresh_uses_cookie_without_csrf_header() -> None:
             ciphertext=envelope_payload["ciphertext"],
         ),
         key_material=shared_key,
+        context_seed=_session_context_seed(session_payload),
         expected_profile=EncryptionProfile.SENSITIVE,
         salt=response_salt.salt,
+        scope="admin",
+        session_id=session_payload["session_id"],
+        lease_id=response_salt.lease_id,
     )
 
     assert decrypted["user"]["username"] == "admin"
@@ -793,6 +809,7 @@ def test_refresh_rejects_body_refresh_token_without_cookie() -> None:
         session_id=session_payload["session_id"],
         scope="admin",
         key_material=shared_key,
+        context_seed=_session_context_seed(session_payload),
         expires_at=_parse_api_datetime(session_payload["expires_at"]),
         salt_leases=salt_leases,
     )
@@ -825,12 +842,14 @@ def test_cleanup_expired_encryption_sessions_deletes_only_expired() -> None:
         session_id="expired",
         scope="admin",
         key_material=b"expired-key",
+        context_seed=TEST_CONTEXT_SEED,
         expires_at=now - timedelta(seconds=1),
     )
     repository.sessions["active"] = SimpleNamespace(
         session_id="active",
         scope="admin",
         key_material=b"active-key",
+        context_seed=TEST_CONTEXT_SEED,
         expires_at=now + timedelta(seconds=1),
     )
     manager = EncryptionSessionManager(
@@ -853,6 +872,7 @@ def test_cleanup_expired_encryption_sessions_skips_empty_commit() -> None:
         session_id="active",
         scope="admin",
         key_material=b"active-key",
+        context_seed=TEST_CONTEXT_SEED,
         expires_at=now + timedelta(seconds=1),
     )
     manager = EncryptionSessionManager(
@@ -876,6 +896,7 @@ def test_create_session_rejects_active_session_overflow() -> None:
         scope="public",
         client_ip="203.0.113.9",
         key_material=b"active-key",
+        context_seed=TEST_CONTEXT_SEED,
         expires_at=now + timedelta(minutes=5),
     )
     manager = EncryptionSessionManager(
@@ -954,6 +975,7 @@ def _make_login_capsule(
     )
     keys = derive_login_capsule_keys(
         key_material=shared_key,
+        context_seed=_session_context_seed(session_payload),
         challenge_salt=_base64url_decode(str(challenge["challenge_salt"])),
         transport_salt=login_salt.salt,
         session_id=session_id,
@@ -1061,6 +1083,7 @@ def _set_esid_cookie(
     session_id: str,
     scope: str,
     key_material: bytes,
+    context_seed: bytes,
     expires_at: datetime,
     salt_leases: SaltLeaseService,
     suffix: str = "",
@@ -1076,6 +1099,7 @@ def _set_esid_cookie(
         session_id=session_id,
         scope=scope,
         key_material=key_material,
+        context_seed=context_seed,
         expires_at=expires_at,
     )
     client.cookies.set(ESID_COOKIE_NAME, f"{esid}{suffix}", path="/api")
@@ -1106,3 +1130,7 @@ def _issue_salt(
         purpose=purpose,  # type: ignore[arg-type]
         profile=profile,
     )
+
+
+def _session_context_seed(session_payload: dict[str, object]) -> bytes:
+    return _base64url_decode(str(session_payload["context_seed"]))
