@@ -23,7 +23,14 @@ from app.core.encryption_sid import (
     EncryptionSidError,
     validate_encryption_sid,
 )
+from app.core.login_capsule import (
+    LoginCapsuleError,
+    decrypt_login_capsule_payload,
+    derive_login_capsule_keys,
+    verify_login_capsule_tag,
+)
 from app.models.auth import EncryptionSession
+from app.schemas.auth import LoginCapsuleRequest, LoginRequest
 from app.schemas.encryption import (
     BrowserPublicKey,
     CreateEncryptionSessionResponse,
@@ -31,6 +38,7 @@ from app.schemas.encryption import (
     EncryptedApiResponse,
     EncryptionSessionScope,
     JsonObject,
+    LoginChallengeResponse,
 )
 
 
@@ -43,6 +51,9 @@ class EncryptionSessionRepositoryProtocol(Protocol):
         client_ip: str | None,
         key_material: bytes,
         expires_at: datetime,
+        login_challenge_id: str | None = None,
+        login_challenge_salt: bytes | None = None,
+        login_challenge_expires_at: datetime | None = None,
     ) -> EncryptionSession: ...
 
     async def count_active_sessions_by_client(
@@ -60,6 +71,14 @@ class EncryptionSessionRepositoryProtocol(Protocol):
         now: datetime,
     ) -> EncryptionSession | None: ...
 
+    async def consume_login_challenge(
+        self,
+        *,
+        session_id: str,
+        challenge_id: str,
+        now: datetime,
+    ) -> bool: ...
+
     async def delete_expired_sessions(self, *, now: datetime) -> int: ...
 
     async def commit(self) -> None: ...
@@ -71,6 +90,10 @@ class EncryptionSessionError(Exception):
 
 class ActiveEncryptionSessionLimitExceeded(EncryptionSessionError):
     pass
+
+
+_LOGIN_CHALLENGE_EXPIRE_SECONDS = 180
+_LOGIN_CAPSULE_CLOCK_SKEW_SECONDS = 30
 
 
 class EncryptionSessionManager:
@@ -117,12 +140,25 @@ class EncryptionSessionManager:
         expires_at = now + timedelta(
             seconds=self._settings.encryption_session_expire_seconds,
         )
+        login_challenge_id: str | None = None
+        login_challenge_salt: bytes | None = None
+        login_challenge_expires_at: datetime | None = None
+        if scope == "admin":
+            login_challenge_id = _random_token()
+            login_challenge_salt = urandom(32)
+            login_challenge_expires_at = min(
+                expires_at,
+                now + timedelta(seconds=_LOGIN_CHALLENGE_EXPIRE_SECONDS),
+            )
         await self._repository.create_session(
             session_id=session_id,
             scope=scope,
             client_ip=client_ip,
             key_material=shared_key,
             expires_at=expires_at,
+            login_challenge_id=login_challenge_id,
+            login_challenge_salt=login_challenge_salt,
+            login_challenge_expires_at=login_challenge_expires_at,
         )
         await self._repository.commit()
 
@@ -134,6 +170,17 @@ class EncryptionSessionManager:
             ),
             profiles=_profiles_for_scope(scope),
             expires_at=expires_at,
+            login_challenge=(
+                LoginChallengeResponse(
+                    challenge_id=login_challenge_id,
+                    challenge_salt=_base64url_encode(login_challenge_salt),
+                    expires_at=login_challenge_expires_at,
+                )
+                if login_challenge_id
+                and login_challenge_salt
+                and login_challenge_expires_at
+                else None
+            ),
         )
 
     async def cleanup_expired_sessions(self, *, now: datetime | None = None) -> int:
@@ -218,6 +265,67 @@ class EncryptionSessionManager:
             )
         except EncryptionError as exc:
             raise EncryptionSessionError("failed to decrypt request") from exc
+
+    async def decrypt_login_capsule(
+        self,
+        *,
+        session_id: str,
+        esid: str | None,
+        payload: LoginCapsuleRequest,
+        method: str,
+        path: str,
+    ) -> LoginRequest:
+        if payload.session_id != session_id:
+            raise EncryptionSessionError("login capsule session mismatch")
+
+        now = datetime.now(UTC)
+        if abs(float(payload.issued_at) - now.timestamp()) > (
+            _LOGIN_CAPSULE_CLOCK_SKEW_SECONDS
+        ):
+            raise EncryptionSessionError("login capsule timestamp is invalid")
+
+        session = await self._get_session(
+            session_id=session_id,
+            esid=esid,
+            expected_scope="admin",
+            expected_profile=EncryptionProfile.SENSITIVE,
+        )
+        if (
+            session.login_challenge_id is None
+            or session.login_challenge_salt is None
+            or session.login_challenge_expires_at is None
+            or session.login_challenge_used_at is not None
+            or session.login_challenge_id != payload.challenge_id
+            or session.login_challenge_expires_at <= now
+        ):
+            raise EncryptionSessionError("login challenge is invalid or expired")
+
+        keys = derive_login_capsule_keys(
+            key_material=session.key_material,
+            challenge_salt=session.login_challenge_salt,
+            session_id=session.session_id,
+            challenge_id=session.login_challenge_id,
+        )
+        try:
+            verify_login_capsule_tag(
+                payload,
+                keys=keys,
+                method=method,
+                path=path,
+            )
+            login_payload = decrypt_login_capsule_payload(payload, keys=keys)
+        except LoginCapsuleError as exc:
+            raise EncryptionSessionError("invalid login capsule") from exc
+
+        consumed = await self._repository.consume_login_challenge(
+            session_id=session.session_id,
+            challenge_id=session.login_challenge_id,
+            now=now,
+        )
+        if not consumed:
+            raise EncryptionSessionError("login challenge is already used")
+        await self._repository.commit()
+        return login_payload
 
     async def _get_session(
         self,

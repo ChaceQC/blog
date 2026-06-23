@@ -2,6 +2,20 @@
 
 ## 2026-06-23
 
+### 本轮计划
+
+- 设计并实现后台登录专用 `Login Capsule v2`，让 `POST /api/admin/auth/login` 的用户名和密码不再以明文 JSON 传输，也不只是复用现有 `sensitive-v1` AES-GCM 请求信封。
+- 后台加密会话协商返回一次性 `login_challenge`；登录请求通过 AES-CTR + HMAC-SHA256 + 固定分桶 padding + path/method/session/challenge/nonce 绑定完成加密和认证。
+- 后端在登录前校验 `X-Encryption-Session`、`esid`、challenge 未过期未使用、HMAC、时间窗口和 nonce，解密后再执行现有 IP/用户名限流与认证流程。
+- 本轮不再调整 admin chunk 访问边界、构建产物命名或 gzip 预压缩，这些内容已在前一轮完成。
+
+### 本轮进度
+
+- 已确认当前分支为 `dev`，并按本轮范围只推进 `Login Capsule v2`，不再调整已完成的 admin chunk 访问边界、构建产物命名或 gzip 预压缩。
+- 已读取现有前端加密会话、后端 `encryption_sid`、认证登录路由和加密会话服务，确认登录请求需要独立于 `sensitive-v1` AES-GCM 请求信封。
+- 已完成后台加密会话一次性 `login_challenge` 下发、数据库字段与 Alembic 迁移、前端 `loginCapsule.ts`、后端解密校验链路和登录接口接入。
+- 已更新 `PROJECT_PLAN.md` 和 `README.md`，记录 `Login Capsule v2` 的协议边界、challenge、AES-CTR、HMAC、padding 与 HTTPS 关系。
+
 ### 已完成
 
 - 修复生产后端运行访问日志的代理 IP 与时间戳问题：新增 `python -m app.server` 容器启动入口，读取 `BLOG_TRUSTED_PROXY_HOSTS` 后传给 Uvicorn 的 `forwarded_allow_ips`，让 `docker compose logs backend` 中的 access log 按可信 `X-Forwarded-For` 显示真实访客 IP。
@@ -23,21 +37,25 @@
 - 前端生产产物文件名改为纯 hash，去掉 `app-*`、`vendor-*` 等可识别业务含义的命名。
 - 后台工作区路由改为登录校验通过后动态加载：`/admin/login` 登录页和鉴权入口仍在初始包，后台总览、文章、页面、文件、友链、导航、日志和设置页面集中到 `AdminWorkspaceRoutes` 异步 chunk。
 - 拆分前端公开 API 与后台 API：`files`、`links`、`settings` 的公开接口保留在原 `api.ts`，后台 CRUD、上传、日志相关调用迁移到 `adminApi.ts`，避免公开页或登录页 import 时顺带打入后台管理接口代码。
+- 后台登录已接入 `Login Capsule v2`：`/api/admin/encryption/sessions` 对 admin scope 返回一次性 `login_challenge`，前端每次登录都新建 admin 加密会话，用 AES-CTR 加密带固定分桶 padding 的用户名/密码载荷，并用 HMAC-SHA256 绑定 scheme、session、challenge、方法、路径、时间戳、nonce 和 ciphertext；后端验证 `X-Encryption-Session`、`esid`、challenge 未过期未使用、时间窗口和 tag 后才解密，并在解密成功后原子标记 challenge 已使用。
+- 新增迁移 `20260623_0010_login_capsule_challenge.py`，为 `encryption_sessions` 增加 `login_challenge_id`、`login_challenge_salt`、`login_challenge_expires_at` 和 `login_challenge_used_at` 字段。
+- 后端登录限流保持在 capsule 解密之后执行，用户名级限流仍使用解密后的用户名；IP 级限流继续覆盖不同用户名轮换尝试，测试已改为每次登录使用新 challenge。
 
 ### 进行中
 
-- 当前运行日志 IP、时间戳时区、UTF-8 默认环境、加密会话 `esid` 绑定和前端生产构建分包策略已完成，等待部署服务器重建 backend/nginx 镜像后用真实公网请求复核日志输出、加密会话链路、gzip 静态资源和后台动态加载。
+- 当前 `Login Capsule v2` 已完成本地代码验证，等待部署服务器执行数据库迁移并重建 backend/nginx 后做真实浏览器登录复核。
 
 ### 阻塞与风险
 
 - 本机未启动生产容器做端到端日志截图验证；已通过单元测试覆盖 Uvicorn 可信代理配置和日志格式，并通过 Compose 配置展开检查。后端镜像新增 `tzdata` 和 Debian 镜像源配置，需要服务器或 Docker 可用环境在构建时拉取 Debian 包。
 - 服务器真实 `deploy/env/backend.env` 仍必须保留后端看到的代理 IP/CIDR，例如宿主机 Nginx 场景常用 `BLOG_TRUSTED_PROXY_HOSTS=["172.16.0.0/12"]`；如果配置为空或不匹配，运行日志仍会显示 Docker 网关地址。
 - `esid` 由前端 JavaScript 写入，不能设置 `HttpOnly`；因此已用 ECDH shared secret 派生密钥和 HMAC 防伪，前端混淆仅作为门槛提升，不作为密码学安全边界。当前生产 build 已按第三方和项目源码分包，纯第三方 vendor chunk 不混淆，包含 `src/` 的项目源码 chunk 会混淆。
+- `Login Capsule v2` 能避免登录载荷明文传输并降低重放风险，但不能替代 HTTPS；前端 JS 仍可被下载，安全边界依赖每次协商的 ECDH shared secret、一次性 challenge、`esid` 校验、HMAC 和服务端状态。
 - 本机 Docker Desktop 仍未运行，无法在本机完成 Linux nginx 镜像构建复验；已用 `npm.cmd ci` 验证 lock 与 package 在 clean install 下同步，服务器或 Docker 可用环境仍需重新执行 nginx 镜像构建确认。
 
 ### 下一步
 
-- 在服务器确认真实 `deploy/env/backend.env` 包含 `TZ=Asia/Shanghai` 或目标时区后，执行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local.yml up -d --build backend nginx`，访问公开页面并用浏览器网络面板复核 `/api/*` 请求携带 `X-Encryption-Session` 与 `esid`、JS/CSS 优先返回 `.gz` 压缩资源、未登录访问 `/admin` 不下载后台工作区 chunk，再用 `docker compose ... logs --tail=200 backend` 复核真实 IP 与容器时区时间戳。
+- 在服务器执行 `uv run alembic upgrade head` 或容器内等价迁移后，重建 backend/nginx，使用浏览器 Network 面板确认 `/api/admin/auth/login` 请求体不再出现 `username`/`password` 明文字段，只发送 `login-capsule-v2` capsule，并确认登录、失败重试、刷新和返回首页公开请求都正常。
 
 ### 验证
 
@@ -60,6 +78,10 @@
 - 已运行 `npm.cmd run lint`，通过。
 - 已再次运行 `npm.cmd test -- src/api/encryption.test.ts`，2 个前端加密会话测试通过。
 - 已再次运行 `npm.cmd run build`，通过；构建输出文件名为纯 hash，生成 `.gz` 预压缩文件，后台工作区动态 chunk 未出现在 `dist/index.html` 初始资源列表中，登录页文本仍保留在入口 chunk。
+- 已运行 `uv run ruff check .`，通过。
+- 已运行 `uv run pytest tests/test_admin_encryption_api.py tests/test_admin_security.py tests/test_rate_limit_redis_integration.py`，25 个测试通过，2 个 Redis 集成测试因未设置 `BLOG_TEST_REDIS_URL` 跳过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；生产 build 完成混淆和 `.gz` 预压缩，仍提示混淆插件耗时较高。
 
 ## 2026-06-20
 

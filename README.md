@@ -156,6 +156,8 @@ npm run dev
 
 本地开发时前端 dev server 使用同源 `/api` 代理到 `config/development.json` 中的后端地址，保证应用层加密协商后前端可写入并随请求携带 `esid` Cookie。`esid` 按 `/api/public` 和 `/api/admin` 路径隔离，避免前台和后台切换时不同 scope 的加密会话互相覆盖。
 
+后台登录请求体不走普通明文 JSON，也不复用 `sensitive-v1` 的 AES-GCM 请求信封。前端会在后台加密会话协商返回的一次性 `login_challenge` 基础上使用 `Login Capsule v2`：对带固定分桶 padding 的用户名和密码载荷做 AES-CTR 加密，并用独立 HMAC 密钥绑定 session、challenge、请求方法、路径、时间戳、nonce 和密文；后端验证 `X-Encryption-Session`、`esid`、challenge、tag 和 nonce 后才解密登录载荷。
+
 常用命令：
 
 ```powershell

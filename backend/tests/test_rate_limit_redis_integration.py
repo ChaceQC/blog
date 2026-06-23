@@ -15,6 +15,7 @@ from app.api.dependencies import (
 from app.core.config import get_settings
 from app.core.encryption import EncryptionProfile
 from app.main import app
+from app.schemas.auth import LoginRequest
 from app.schemas.encryption import (
     BrowserPublicKey,
     CreateEncryptionSessionResponse,
@@ -83,12 +84,12 @@ def test_admin_login_rate_limit_uses_real_redis(redis_url: str) -> None:
         first = client.post(
             "/api/admin/auth/login",
             headers={"X-Encryption-Session": "redis-test-session"},
-            json={"username": "admin", "password": "correct-password"},
+            json=_login_capsule_payload(),
         )
         second = client.post(
             "/api/admin/auth/login",
             headers={"X-Encryption-Session": "redis-test-session"},
-            json={"username": "admin", "password": "correct-password"},
+            json=_login_capsule_payload(),
         )
     finally:
         app.dependency_overrides.clear()
@@ -116,6 +117,18 @@ def _redis_settings(redis_url: str):
 
 def _public_key_payload() -> dict[str, str]:
     return {"kty": "EC", "crv": "P-256", "x": "test-x", "y": "test-y"}
+
+
+def _login_capsule_payload() -> dict[str, object]:
+    return {
+        "scheme": "login-capsule-v2",
+        "session_id": "redis-test-session",
+        "challenge_id": "redis-test-challenge",
+        "nonce": "redis-test-nonce",
+        "issued_at": int(datetime.now(UTC).timestamp()),
+        "ciphertext": "redis-test-ciphertext",
+        "tag": "redis-test-tag",
+    }
 
 
 class FakeEncryptionSessionManager:
@@ -164,6 +177,22 @@ class FakeEncryptionSessionManager:
         assert session_id == "redis-test-session"
         assert scope == "admin"
         assert profile == EncryptionProfile.SENSITIVE
+
+    async def decrypt_login_capsule(
+        self,
+        *,
+        session_id: str,
+        esid: str | None,
+        payload: object,
+        method: str,
+        path: str,
+    ) -> LoginRequest:
+        assert session_id == "redis-test-session"
+        assert esid is None
+        assert method == "POST"
+        assert path == "/api/admin/auth/login"
+        assert payload.scheme == "login-capsule-v2"
+        return LoginRequest(username="admin", password="correct-password")
 
 
 class FakeAuthService:

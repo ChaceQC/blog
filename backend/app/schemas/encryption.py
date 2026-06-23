@@ -9,6 +9,7 @@ EncryptionSessionScope = Literal["admin", "public"]
 ENCRYPTION_SESSION_ID_MAX_LENGTH = 128
 ENCRYPTION_NONCE_MAX_LENGTH = 64
 ENCRYPTION_CIPHERTEXT_MAX_LENGTH = 2_000_000
+ENCRYPTION_TAG_MAX_LENGTH = 128
 
 
 class BrowserPublicKey(BaseModel):
@@ -26,12 +27,21 @@ class CreateEncryptionSessionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class LoginChallengeResponse(BaseModel):
+    challenge_id: str = Field(min_length=1, max_length=128)
+    challenge_salt: str = Field(min_length=1, max_length=128)
+    expires_at: datetime
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class CreateEncryptionSessionResponse(BaseModel):
     session_id: str
     scope: EncryptionSessionScope
     server_public_key: BrowserPublicKey
     profiles: list[EncryptionProfile]
     expires_at: datetime
+    login_challenge: LoginChallengeResponse | None = None
 
     model_config = ConfigDict(extra="forbid")
 

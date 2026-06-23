@@ -110,6 +110,19 @@ class EncryptionSession(Base):
     scope: Mapped[str] = mapped_column(String(16), nullable=False)
     client_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     key_material: Mapped[bytes] = mapped_column(LargeBinary(64), nullable=False)
+    login_challenge_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    login_challenge_salt: Mapped[bytes | None] = mapped_column(
+        LargeBinary(32),
+        nullable=True,
+    )
+    login_challenge_expires_at: Mapped[datetime | None] = mapped_column(
+        DATETIME_6,
+        nullable=True,
+    )
+    login_challenge_used_at: Mapped[datetime | None] = mapped_column(
+        DATETIME_6,
+        nullable=True,
+    )
     expires_at: Mapped[datetime] = mapped_column(DATETIME_6, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DATETIME_6,

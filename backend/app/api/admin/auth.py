@@ -21,17 +21,20 @@ from app.api.dependencies import (
 )
 from app.api.encrypted_response import (
     encrypted_response,
+    encryption_sid_from_request,
+    require_encryption_session,
     validate_encryption_session,
 )
 from app.api.limits import enforce_rate_limit
 from app.core.encryption import EncryptionProfile
 from app.core.request import client_ip
 from app.schemas.auth import (
-    LoginRequest,
+    LoginCapsuleRequest,
     LogoutResponse,
 )
 from app.schemas.encryption import EncryptedApiResponse
 from app.services.auth import AuthenticationError
+from app.services.encryption import EncryptionSessionError
 from app.services.rate_limit import RateLimitRule
 
 router = APIRouter(prefix="/auth", tags=["admin-auth"])
@@ -39,7 +42,7 @@ router = APIRouter(prefix="/auth", tags=["admin-auth"])
 
 @router.post("/login", response_model=EncryptedApiResponse)
 async def login(
-    payload: LoginRequest,
+    payload: LoginCapsuleRequest,
     request: Request,
     response: Response,
     service: AuthServiceDependency,
@@ -48,11 +51,21 @@ async def login(
     rate_limiter: RateLimitServiceDependency,
     logs: LogServiceDependency,
 ) -> EncryptedApiResponse:
-    await validate_encryption_session(
-        request,
-        manager=encryption_manager,
-        profile=EncryptionProfile.SENSITIVE,
-    )
+    session_id = require_encryption_session(request)
+    try:
+        login_payload = await encryption_manager.decrypt_login_capsule(
+            session_id=session_id,
+            esid=encryption_sid_from_request(request),
+            payload=payload,
+            method=request.method,
+            path=str(request.url.path),
+        )
+    except EncryptionSessionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid login capsule",
+        ) from exc
+
     client = client_ip(request) or "unknown"
     await enforce_rate_limit(
         request=request,
@@ -68,7 +81,7 @@ async def login(
     )
     limit_key = (
         f"admin-login:{client}:"
-        f"{payload.username.casefold()}"
+        f"{login_payload.username.casefold()}"
     )
     await enforce_rate_limit(
         request=request,
@@ -84,8 +97,8 @@ async def login(
     )
     try:
         tokens = await service.login(
-            username=payload.username,
-            password=payload.password,
+            username=login_payload.username,
+            password=login_payload.password,
             ip=client_ip(request),
             user_agent=request.headers.get("user-agent"),
         )

@@ -1,10 +1,14 @@
 ﻿import asyncio
+import json
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from datetime import UTC, datetime, timedelta
+from hmac import digest
+from os import urandom
 from types import SimpleNamespace
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from fastapi.testclient import TestClient
 
 from app.api.admin.dependencies import get_auth_service
@@ -20,6 +24,7 @@ from app.core.encryption import (
     decrypt_json_payload_with_key_material,
 )
 from app.core.encryption_sid import ESID_COOKIE_NAME, create_encryption_sid
+from app.core.login_capsule import derive_login_capsule_keys
 from app.main import app
 from app.schemas.encryption import BrowserPublicKey
 from app.services.auth import AuthenticatedUser, TokenPair
@@ -43,12 +48,19 @@ class FakeEncryptionSessionRepository:
         client_ip: str | None,
         key_material: bytes,
         expires_at: datetime,
+        login_challenge_id: str | None = None,
+        login_challenge_salt: bytes | None = None,
+        login_challenge_expires_at: datetime | None = None,
     ) -> SimpleNamespace:
         session = SimpleNamespace(
             session_id=session_id,
             scope=scope,
             client_ip=client_ip,
             key_material=key_material,
+            login_challenge_id=login_challenge_id,
+            login_challenge_salt=login_challenge_salt,
+            login_challenge_expires_at=login_challenge_expires_at,
+            login_challenge_used_at=None,
             expires_at=expires_at,
         )
         self.sessions[session_id] = session
@@ -79,6 +91,26 @@ class FakeEncryptionSessionRepository:
         if session is None or session.expires_at <= now:
             return None
         return session
+
+    async def consume_login_challenge(
+        self,
+        *,
+        session_id: str,
+        challenge_id: str,
+        now: datetime,
+    ) -> bool:
+        session = self.sessions.get(session_id)
+        if (
+            session is None
+            or session.login_challenge_id != challenge_id
+            or session.login_challenge_used_at is not None
+            or session.login_challenge_expires_at is None
+            or session.login_challenge_expires_at <= now
+            or session.expires_at <= now
+        ):
+            return False
+        session.login_challenge_used_at = now
+        return True
 
     async def delete_expired_sessions(self, *, now: datetime) -> int:
         expired_ids = [
@@ -225,7 +257,10 @@ def test_login_response_can_use_sensitive_encryption_session() -> None:
         login_response = client.post(
             "/api/admin/auth/login",
             headers={"X-Encryption-Session": session_payload["session_id"]},
-            json={"username": "admin", "password": "correct-password"},
+            json=_make_login_capsule(
+                session_payload=session_payload,
+                shared_key=shared_key,
+            ),
         )
     finally:
         app.dependency_overrides.clear()
@@ -262,7 +297,7 @@ def test_login_rejects_missing_encryption_session_header() -> None:
     try:
         response = client.post(
             "/api/admin/auth/login",
-            json={"username": "admin", "password": "correct-password"},
+            json=_dummy_login_capsule(),
         )
     finally:
         app.dependency_overrides.clear()
@@ -299,6 +334,10 @@ def test_login_rejects_missing_encryption_session_sid() -> None:
 
     assert session_response.status_code == 200
     session_payload = session_response.json()
+    shared_key = client_private_key.exchange(
+        ec.ECDH(),
+        _load_public_key(session_payload["server_public_key"]),
+    )
 
     app.dependency_overrides[get_auth_service] = lambda: RaisingAuthService()
     app.dependency_overrides[get_encryption_session_manager] = lambda: (
@@ -310,13 +349,16 @@ def test_login_rejects_missing_encryption_session_sid() -> None:
         response = client.post(
             "/api/admin/auth/login",
             headers={"X-Encryption-Session": session_payload["session_id"]},
-            json={"username": "admin", "password": "correct-password"},
+            json=_make_login_capsule(
+                session_payload=session_payload,
+                shared_key=shared_key,
+            ),
         )
     finally:
         app.dependency_overrides.clear()
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "invalid encryption session"
+    assert response.json()["detail"] == "invalid login capsule"
 
 
 def test_login_rejects_tampered_encryption_session_sid() -> None:
@@ -370,13 +412,16 @@ def test_login_rejects_tampered_encryption_session_sid() -> None:
         response = client.post(
             "/api/admin/auth/login",
             headers={"X-Encryption-Session": session_payload["session_id"]},
-            json={"username": "admin", "password": "correct-password"},
+            json=_make_login_capsule(
+                session_payload=session_payload,
+                shared_key=shared_key,
+            ),
         )
     finally:
         app.dependency_overrides.clear()
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "invalid encryption session"
+    assert response.json()["detail"] == "invalid login capsule"
 
 
 def test_login_rejects_oversized_encryption_session_header() -> None:
@@ -394,7 +439,7 @@ def test_login_rejects_oversized_encryption_session_header() -> None:
         response = client.post(
             "/api/admin/auth/login",
             headers={"X-Encryption-Session": "s" * 129},
-            json={"username": "admin", "password": "correct-password"},
+            json=_dummy_login_capsule(),
         )
     finally:
         app.dependency_overrides.clear()
@@ -440,13 +485,13 @@ def test_login_rejects_public_encryption_session_before_authentication() -> None
         response = client.post(
             "/api/admin/auth/login",
             headers={"X-Encryption-Session": session_payload["session_id"]},
-            json={"username": "admin", "password": "correct-password"},
+            json=_dummy_login_capsule(session_payload["session_id"]),
         )
     finally:
         app.dependency_overrides.clear()
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "invalid encryption session"
+    assert response.json()["detail"] == "invalid login capsule"
 
 
 def test_admin_login_ip_rate_limit_blocks_rotating_usernames() -> None:
@@ -456,7 +501,6 @@ def test_admin_login_ip_rate_limit_blocks_rotating_usernames() -> None:
             "admin_login_rate_limit_window_seconds": 60,
         },
     )
-    client_private_key = ec.generate_private_key(ec.SECP256R1())
     client = TestClient(app)
     encryption_repository = FakeEncryptionSessionRepository()
     encryption_manager = EncryptionSessionManager(
@@ -474,35 +518,41 @@ def test_admin_login_ip_rate_limit_blocks_rotating_usernames() -> None:
     app.dependency_overrides[get_rate_limit_service] = lambda: rate_limiter
 
     try:
-        session_response = client.post(
-            "/api/admin/encryption/sessions",
-            json={
-                "client_public_key": _export_public_key(
-                    client_private_key.public_key(),
-                ),
-            },
-        )
-        session_payload = session_response.json()
-        session_id = session_payload["session_id"]
-        shared_key = client_private_key.exchange(
-            ec.ECDH(),
-            _load_public_key(session_payload["server_public_key"]),
-        )
-        _set_esid_cookie(
-            client,
-            session_id=session_id,
-            scope="admin",
-            key_material=shared_key,
-            expires_at=_parse_api_datetime(session_payload["expires_at"]),
-        )
-        responses = [
-            client.post(
-                "/api/admin/auth/login",
-                headers={"X-Encryption-Session": session_id},
-                json={"username": f"missing-{index}", "password": "wrong-password"},
+        responses = []
+        for index in range(4):
+            client_private_key = ec.generate_private_key(ec.SECP256R1())
+            session_response = client.post(
+                "/api/admin/encryption/sessions",
+                json={
+                    "client_public_key": _export_public_key(
+                        client_private_key.public_key(),
+                    ),
+                },
             )
-            for index in range(4)
-        ]
+            session_payload = session_response.json()
+            shared_key = client_private_key.exchange(
+                ec.ECDH(),
+                _load_public_key(session_payload["server_public_key"]),
+            )
+            _set_esid_cookie(
+                client,
+                session_id=session_payload["session_id"],
+                scope="admin",
+                key_material=shared_key,
+                expires_at=_parse_api_datetime(session_payload["expires_at"]),
+            )
+            responses.append(
+                client.post(
+                    "/api/admin/auth/login",
+                    headers={"X-Encryption-Session": session_payload["session_id"]},
+                    json=_make_login_capsule(
+                        session_payload=session_payload,
+                        shared_key=shared_key,
+                        username=f"missing-{index}",
+                        password="wrong-password",
+                    ),
+                ),
+            )
     finally:
         app.dependency_overrides.clear()
 
@@ -800,6 +850,90 @@ def test_admin_encryption_session_rejects_active_session_overflow() -> None:
         "scope": "admin",
         "profile": "sensitive-v1",
     }
+
+
+def _make_login_capsule(
+    *,
+    session_payload: dict[str, object],
+    shared_key: bytes,
+    username: str = "admin",
+    password: str = "correct-password",
+    path: str = "/api/admin/auth/login",
+) -> dict[str, object]:
+    challenge = session_payload["login_challenge"]
+    assert isinstance(challenge, dict)
+    session_id = str(session_payload["session_id"])
+    challenge_id = str(challenge["challenge_id"])
+    keys = derive_login_capsule_keys(
+        key_material=shared_key,
+        challenge_salt=_base64url_decode(str(challenge["challenge_salt"])),
+        session_id=session_id,
+        challenge_id=challenge_id,
+    )
+    payload = json.dumps(
+        {"username": username, "password": password},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    bucket_size = next(
+        size for size in (256, 512, 1024, 2048) if size >= len(payload) + 2
+    )
+    plaintext = len(payload).to_bytes(2, "big") + payload + urandom(
+        bucket_size - len(payload) - 2,
+    )
+    nonce = urandom(16)
+    encryptor = Cipher(
+        algorithms.AES(keys.encryption_key),
+        modes.CTR(nonce),
+    ).encryptor()
+    ciphertext = encryptor.update(plaintext) + encryptor.finalize()
+    capsule = {
+        "scheme": "login-capsule-v2",
+        "session_id": session_id,
+        "challenge_id": challenge_id,
+        "nonce": _base64url_encode(nonce),
+        "issued_at": int(datetime.now(UTC).timestamp()),
+        "ciphertext": _base64url_encode(ciphertext),
+    }
+    capsule["tag"] = _base64url_encode(
+        digest(
+            keys.mac_key,
+            _login_capsule_signing_input(capsule, path=path),
+            "sha256",
+        ),
+    )
+    return capsule
+
+
+def _dummy_login_capsule(session_id: str = "dummy-session") -> dict[str, object]:
+    return {
+        "scheme": "login-capsule-v2",
+        "session_id": session_id,
+        "challenge_id": "dummy-challenge",
+        "nonce": "AA",
+        "issued_at": int(datetime.now(UTC).timestamp()),
+        "ciphertext": "AA",
+        "tag": "AA",
+    }
+
+
+def _login_capsule_signing_input(
+    capsule: dict[str, object],
+    *,
+    path: str,
+) -> bytes:
+    return "\n".join(
+        (
+            str(capsule["scheme"]),
+            str(capsule["session_id"]),
+            str(capsule["challenge_id"]),
+            "POST",
+            path,
+            str(capsule["issued_at"]),
+            str(capsule["nonce"]),
+            str(capsule["ciphertext"]),
+        ),
+    ).encode("utf-8")
 
 
 def _export_public_key(public_key: ec.EllipticCurvePublicKey) -> dict[str, str]:

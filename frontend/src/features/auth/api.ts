@@ -3,14 +3,14 @@ import {
   apiPost,
   apiPostEncrypted,
 } from '../../api/client.ts'
+import { apiPostLoginCapsule } from '../../api/loginCapsule.ts'
 
 import type { AuthSessionResponse, LoginPayload } from './types.ts'
 
 export function loginAdmin(payload: LoginPayload): Promise<AuthSessionResponse> {
-  return apiPostEncrypted<LoginPayload, AuthSessionResponse>(
+  return apiPostLoginCapsule<LoginPayload, AuthSessionResponse>(
     '/admin/auth/login',
     payload,
-    'sensitive-v1',
   )
 }
 

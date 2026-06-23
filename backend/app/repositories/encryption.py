@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import EncryptionSession
@@ -18,6 +18,9 @@ class EncryptionSessionRepository:
         client_ip: str | None,
         key_material: bytes,
         expires_at: datetime,
+        login_challenge_id: str | None = None,
+        login_challenge_salt: bytes | None = None,
+        login_challenge_expires_at: datetime | None = None,
     ) -> EncryptionSession:
         session = EncryptionSession(
             session_id=session_id,
@@ -25,6 +28,9 @@ class EncryptionSessionRepository:
             client_ip=client_ip,
             key_material=key_material,
             expires_at=expires_at,
+            login_challenge_id=login_challenge_id,
+            login_challenge_salt=login_challenge_salt,
+            login_challenge_expires_at=login_challenge_expires_at,
         )
         self.session.add(session)
         await self.session.flush()
@@ -59,6 +65,26 @@ class EncryptionSessionRepository:
             ),
         )
         return result.scalar_one_or_none()
+
+    async def consume_login_challenge(
+        self,
+        *,
+        session_id: str,
+        challenge_id: str,
+        now: datetime,
+    ) -> bool:
+        result = await self.session.execute(
+            update(EncryptionSession)
+            .where(
+                EncryptionSession.session_id == session_id,
+                EncryptionSession.login_challenge_id == challenge_id,
+                EncryptionSession.login_challenge_used_at.is_(None),
+                EncryptionSession.login_challenge_expires_at > now,
+                EncryptionSession.expires_at > now,
+            )
+            .values(login_challenge_used_at=now),
+        )
+        return (result.rowcount or 0) == 1
 
     async def delete_expired_sessions(self, *, now: datetime) -> int:
         result = await self.session.execute(

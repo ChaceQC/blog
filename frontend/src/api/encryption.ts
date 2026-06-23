@@ -24,6 +24,13 @@ type EncryptionSessionResponse = {
   server_public_key: BrowserPublicKey
   profiles: EncryptionProfile[]
   expires_at: string
+  login_challenge?: LoginChallenge | null
+}
+
+export type LoginChallenge = {
+  challenge_id: string
+  challenge_salt: string
+  expires_at: string
 }
 
 export type EncryptionSession = {
@@ -32,6 +39,7 @@ export type EncryptionSession = {
   sharedSecret: ArrayBuffer
   profiles: EncryptionProfile[]
   expiresAt: number
+  loginChallenge?: LoginChallenge | null
 }
 
 const ESID_COOKIE_NAME = 'esid'
@@ -79,6 +87,20 @@ export async function getEncryptionSession(
     pendingSessions.set(scope, pendingSession)
   }
   return await abortable(pendingSession, signal)
+}
+
+export async function createFreshEncryptionSession(
+  scope: EncryptionScope,
+  signal?: AbortSignal,
+): Promise<EncryptionSession> {
+  activeSessions.delete(scope)
+  pendingSessions.delete(scope)
+  if (signal?.aborted) {
+    return Promise.reject(abortError())
+  }
+  const session = await abortable(createEncryptionSession(scope), signal)
+  activeSessions.set(scope, session)
+  return session
 }
 
 export async function decryptEncryptedResponse<T>(
@@ -229,6 +251,7 @@ async function createEncryptionSession(scope: EncryptionScope): Promise<Encrypti
     sharedSecret: sharedBits,
     profiles: sessionResponse.profiles,
     expiresAt: parseApiTime(sessionResponse.expires_at),
+    loginChallenge: sessionResponse.login_challenge ?? null,
   }
   await writeEncryptionSidCookie(session)
   return session
