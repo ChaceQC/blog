@@ -1,10 +1,13 @@
 import asyncio
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from app.api.state import get_app_rate_limit_service
+from app.core.config import get_settings
 from app.core.encryption import EncryptionProfile
+from app.core.request import client_ip
 from app.schemas.encryption import (
     ENCRYPTION_CIPHERTEXT_MAX_LENGTH,
     ENCRYPTION_NONCE_MAX_LENGTH,
@@ -21,6 +24,7 @@ from app.services.encryption_salts import (
     SaltPurpose,
     WrappedSaltFrame,
 )
+from app.services.rate_limit import RateLimitExceeded, RateLimitRule, RateLimitService
 
 
 class SaltFrameRequest(BaseModel):
@@ -81,6 +85,13 @@ async def salt_websocket(
     salt_leases: SaltLeaseService,
 ) -> None:
     await websocket.accept()
+    settings = get_settings()
+    rate_limiter = get_app_rate_limit_service(websocket.app, settings)
+    rate_limit_rule = RateLimitRule(
+        max_attempts=settings.encryption_session_rate_limit_max_attempts,
+        window_seconds=settings.encryption_session_rate_limit_window_seconds,
+    )
+    ip = client_ip(cast(Any, websocket))
     try:
         while True:
             try:
@@ -89,6 +100,13 @@ async def salt_websocket(
                     timeout=_SALT_STREAM_IDLE_TIMEOUT_SECONDS,
                 )
                 request_frame = SaltFrameRequest.model_validate(raw_payload)
+                _enforce_message_rate_limit(
+                    limiter=rate_limiter,
+                    rule=rate_limit_rule,
+                    scope=scope,
+                    ip=ip,
+                    session_id=request_frame.session_id,
+                )
                 session = await manager.get_session_for_salt_stream(
                     session_id=request_frame.session_id,
                     scope=scope,
@@ -168,8 +186,29 @@ async def salt_websocket(
             ):
                 await websocket.close(code=1008)
                 return
+            except RateLimitExceeded:
+                await websocket.close(code=1008)
+                return
     except WebSocketDisconnect:
         return
+
+
+def _enforce_message_rate_limit(
+    *,
+    limiter: RateLimitService,
+    rule: RateLimitRule,
+    scope: EncryptionSessionScope,
+    ip: str | None,
+    session_id: str,
+) -> None:
+    limiter.check(
+        key=f"salt-stream-message:{scope}:ip:{ip or 'unknown'}",
+        rule=rule,
+    )
+    limiter.check(
+        key=f"salt-stream-message:{scope}:session:{session_id}",
+        rule=rule,
+    )
 
 
 def _normalize_salt_request_payload(payload: dict[str, Any]) -> dict[str, Any]:

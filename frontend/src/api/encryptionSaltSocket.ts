@@ -77,6 +77,14 @@ const SALT_SOCKET_HEARTBEAT_INTERVAL_MS = 25_000
 const SALT_SOCKET_MAX_MISSED_PONGS = 2
 const SALT_SOCKET_RECONNECT_BASE_MS = 1_000
 const SALT_SOCKET_RECONNECT_MAX_MS = 30_000
+const SALT_SOCKET_POLICY_CLOSE_CODE = 1008
+
+class SaltSocketPolicyError extends Error {
+  constructor(message = 'salt lease socket closed by policy') {
+    super(message)
+    this.name = 'SaltSocketPolicyError'
+  }
+}
 
 export class SaltLeaseSocket {
   private readonly session: EncryptionSession
@@ -215,8 +223,8 @@ export class SaltLeaseSocket {
     socket.addEventListener('message', (event) => {
       void this.handleMessage(event)
     })
-    socket.addEventListener('close', () => {
-      this.handleSocketClosed(socket, new Error('salt lease socket closed'))
+    socket.addEventListener('close', (event) => {
+      this.handleSocketClosed(socket, closeEventError(event))
     })
     socket.addEventListener('error', () => {
       this.closeSocketForReconnect(new Error('salt lease socket failed'))
@@ -255,13 +263,13 @@ export class SaltLeaseSocket {
         cleanup()
         reject(new Error('salt lease socket failed'))
       }
-      const handleClose = () => {
+      const handleClose = (event: CloseEvent) => {
         if (settled) {
           return
         }
         settled = true
         cleanup()
-        reject(new Error('salt lease socket closed'))
+        reject(closeEventError(event))
       }
       socket.addEventListener('open', handleOpen, { once: true })
       socket.addEventListener('error', handleError, { once: true })
@@ -335,13 +343,13 @@ export class SaltLeaseSocket {
         cleanup()
         reject(new Error('salt lease socket failed'))
       }
-      const handleClose = () => {
+      const handleClose = (event: CloseEvent) => {
         if (settled) {
           return
         }
         settled = true
         cleanup()
-        reject(new Error('salt lease socket closed'))
+        reject(closeEventError(event))
       }
       socket.addEventListener('open', handleOpen, { once: true })
       socket.addEventListener('error', handleError, { once: true })
@@ -414,6 +422,10 @@ export class SaltLeaseSocket {
     this.opening = null
     this.clearHeartbeat()
     this.rejectPending(error)
+    if (error instanceof SaltSocketPolicyError) {
+      this.clearReconnectTimer()
+      return
+    }
     this.scheduleReconnect()
   }
 
@@ -604,11 +616,21 @@ function isEncryptionProfile(value: unknown): value is EncryptionProfile {
 }
 
 function isRetryableSaltSocketError(error: Error): boolean {
+  if (error instanceof SaltSocketPolicyError) {
+    return false
+  }
   return (
     error.message.includes('socket') ||
     error.message.includes('timed out') ||
     error.message.includes('heartbeat')
   )
+}
+
+function closeEventError(event: CloseEvent): Error {
+  if (event.code === SALT_SOCKET_POLICY_CLOSE_CODE) {
+    return new SaltSocketPolicyError()
+  }
+  return new Error('salt lease socket closed')
 }
 
 async function deriveSaltWrapKey(

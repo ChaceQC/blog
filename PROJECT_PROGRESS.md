@@ -4,6 +4,43 @@
 
 ### 本轮计划
 
+- 检查 WSS salt 通道现有连接和消息处理路径，确认可复用的后端限流服务。
+- 只为 `/api/{scope}/encryption/salts` 增加消息级限流，不扩展其他功能。
+- 运行加密和限流相关后端测试，并检查文档同步。
+
+### 已完成
+
+- 在 WSS salt 通道每条已解析消息进入 session 查询和解密前，复用现有 `RateLimitService` 执行消息级限流。
+- 限流维度同时覆盖 `scope + client_ip` 和 `scope + session_id`，任一维度超限时关闭 WebSocket，避免有效会话持续高频请求 salt lease 或 ping 帧。
+- 限流窗口沿用现有加密会话协商限流配置，避免新增环境变量和部署配置面。
+- 前端 salt WebSocket 已识别服务端 `1008` 策略关闭，不再自动重连，并将 pending salt 请求以不可重试错误结束。
+- 已同步 README 与项目计划中关于 WSS 消息级限流的安全说明。
+
+### 进行中
+
+- 本轮 WSS 消息级限流与前端 `1008` 处理已完成，等待确认是否按项目约束提交并推送。
+
+### 阻塞与风险
+
+- 当前 WSS 超限只关闭连接，未额外写入安全事件日志；如需审计 WSS 消息滥用，需要后续给 WebSocket 路径接入日志服务或单独事件记录。
+- 本轮没有引入新的独立 WSS 限流配置，消息级限流会跟随现有加密协商限流窗口调整。
+
+### 下一步
+
+- 确认是否需要为 WSS 消息限流补充独立配置项和安全事件记录。
+
+### 验证
+
+- 已运行 `uv run pytest tests/test_admin_encryption_api.py tests/test_public_encryption_api.py tests/test_encryption_salts.py tests/test_rate_limit.py`，29 个测试通过；仍存在 FastAPI/Starlette TestClient 上游弃用警告。
+- 已运行 `uv run ruff check .`，通过。
+- 已运行 `npm.cmd run test -- src/api/encryption.test.ts`，8 个测试通过。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；Vite/Rolldown 仍提示混淆插件耗时较高。
+
+## 2026-06-24
+
+### 本轮计划
+
 - 为后台页面、文章、友链和导航补齐删除功能，包含后端删除接口、权限校验、审计日志、前端按钮与删除后列表刷新。
 - 优先沿用现有软删除模型：文章和页面使用 `deleted_at` 隐藏；友链和导航若无软删除字段，则按现有数据模型安全删除记录。
 - 补充对应后端 API 测试与前端类型/构建验证，确保公开列表不会继续展示已删除内容。

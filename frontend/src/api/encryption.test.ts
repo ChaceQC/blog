@@ -6,12 +6,14 @@ type MockSaltSocketInstance = EventTarget & {
   readyState: number
   sentPayloads: unknown[]
   close: () => void
+  closeWithCode: (code: number) => void
 }
 
 let restoreDocumentCookie: (() => void) | undefined
 const saltSessionScopes = new Map<string, 'admin' | 'public'>()
 let saltWebSocketInstances: MockSaltSocketInstance[] = []
 let saltWebSocketRespondToPing = true
+let saltWebSocketCloseCodeOnSaltRequest: number | null = null
 
 describe('getEncryptionSession', () => {
   beforeEach(() => {
@@ -19,6 +21,7 @@ describe('getEncryptionSession', () => {
     saltSessionScopes.clear()
     saltWebSocketInstances = []
     saltWebSocketRespondToPing = true
+    saltWebSocketCloseCodeOnSaltRequest = null
     vi.useFakeTimers()
     stubBrowserCrypto()
     stubSaltWebSocket()
@@ -275,6 +278,27 @@ describe('getEncryptionSession', () => {
     expect(saltWebSocketInstances.length).toBeGreaterThan(1)
     expect(saltWebSocketInstances.at(-1)?.readyState).toBe(WebSocket.OPEN)
   })
+
+  it('does not reconnect the salt websocket after policy close', async () => {
+    vi.setSystemTime(new Date('2026-06-23T00:00:00Z'))
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    window.history.replaceState({}, '', '/')
+    captureCookieWrites()
+    saltWebSocketCloseCodeOnSaltRequest = 1008
+    vi.stubGlobal('fetch', sessionFetchMock('public-session', 'public'))
+
+    const { createEncryptionRequestHeaders, getEncryptionSession } = await import(
+      './encryption.ts'
+    )
+
+    const session = await getEncryptionSession('content-v1', 'public')
+    const request = createEncryptionRequestHeaders(session, 'content-v1')
+    await expect(request).rejects.toThrow('salt lease socket closed by policy')
+
+    await vi.advanceTimersByTimeAsync(30_000)
+
+    expect(saltWebSocketInstances).toHaveLength(1)
+  })
 })
 
 function captureCookieWrites(): string[] {
@@ -391,6 +415,10 @@ function stubSaltWebSocket(): void {
         })
         return
       }
+      if (saltWebSocketCloseCodeOnSaltRequest !== null) {
+        this.closeWithCode(saltWebSocketCloseCodeOnSaltRequest)
+        return
+      }
       queueMicrotask(() => {
         const scope = this.url.includes('/admin/') ? 'admin' : 'public'
         const requests = saltLeaseRequestsFromPayload(payload)
@@ -416,8 +444,12 @@ function stubSaltWebSocket(): void {
     }
 
     close(): void {
+      this.closeWithCode(1000)
+    }
+
+    closeWithCode(code: number): void {
       this.readyState = MockWebSocket.CLOSED
-      this.dispatchEvent(new Event('close'))
+      this.dispatchEvent(new CloseEvent('close', { code }))
     }
   }
 

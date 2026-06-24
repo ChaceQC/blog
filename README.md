@@ -158,7 +158,7 @@ npm run dev
 
 后台登录请求体不走普通明文 JSON，也不复用 `sensitive-v1` 的 AES-GCM 请求信封。前端会在后台加密会话协商返回的一次性 `login_challenge` 基础上使用 `Login Capsule v2`：对带固定分桶 padding 的用户名和密码载荷做 AES-CTR 加密，并用独立 HMAC 密钥绑定 session、challenge、请求方法、路径、时间戳、nonce 和密文；后端验证 `X-Encryption-Session`、`esid`、challenge、tag 和 nonce 后才解密登录载荷。
 
-应用层加密使用 `/api/{scope}/encryption/salts` WebSocket 下发一次性动态 salt。WSS 帧本身会用 ECDH shared secret 派生 AES-GCM 包裹密钥加密，每帧还有随机 `wrap_salt`；salt lease 按用途分为 `esid`、`login_capsule`、`request` 和 `response`，只能消费一次。HTTP 请求会同时携带 `X-Encryption-Session`、`X-Encryption-Esid-Salt`、`X-Encryption-Response-Salt`，加密请求/登录 capsule 信封还会携带 `salt_id`；后端校验并消费 Redis 中的 lease 后才会继续处理。WSS 长连接使用同一加密帧格式传输应用层 `ping` / `pong` 心跳，前端连续丢失响应会关闭连接并按指数退避重连，重连期间不会降级回固定 salt。
+应用层加密使用 `/api/{scope}/encryption/salts` WebSocket 下发一次性动态 salt。WSS 帧本身会用 ECDH shared secret 派生 AES-GCM 包裹密钥加密，每帧还有随机 `wrap_salt`；salt lease 按用途分为 `esid`、`login_capsule`、`request` 和 `response`，只能消费一次。HTTP 请求会同时携带 `X-Encryption-Session`、`X-Encryption-Esid-Salt`、`X-Encryption-Response-Salt`，加密请求/登录 capsule 信封还会携带 `salt_id`；后端校验并消费 Redis 中的 lease 后才会继续处理。WSS 长连接使用同一加密帧格式传输应用层 `ping` / `pong` 心跳，前端连续丢失响应会关闭连接并按指数退避重连，重连期间不会降级回固定 salt；服务端对 WSS 消息按客户端 IP 和 `session_id` 做消息级限流，超过窗口后直接关闭连接。
 
 前端创建加密请求头时会先建立 WSS salt 通道并批量获取当前请求需要的 `esid` 与 `response` lease，随后再生成并写入 `esid` Cookie，避免 `esid` 动态 chunk、WASM 或混淆后执行异常时阻断 WSS 启动。首屏多个公开查询并发时同一加密 session 只共享一个 salt WebSocket 创建过程，避免冷缓存下重复建连放大限流压力。
 
