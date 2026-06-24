@@ -70,8 +70,52 @@ class FakeContentService:
             updated_at=datetime(2026, 6, 16, tzinfo=UTC),
         )
 
+    async def delete_post(self, post_id: int) -> object:
+        assert post_id == 1
+        return SimpleNamespace(
+            id=1,
+            title="第一篇文章",
+            slug="first-post",
+            summary="摘要",
+            content_md="正文",
+            content_html="<p>正文</p>",
+            status="draft",
+            visibility="public",
+            cover_file_id=None,
+            author_id=1,
+            word_count=1,
+            seo_title=None,
+            seo_description=None,
+            seo_keywords=None,
+            category_names=[],
+            tag_names=[],
+            published_at=None,
+            created_at=datetime(2026, 6, 16, tzinfo=UTC),
+            updated_at=datetime(2026, 6, 16, tzinfo=UTC),
+        )
+
+    async def delete_page(self, page_id: int) -> object:
+        assert page_id == 1
+        return SimpleNamespace(
+            id=1,
+            title="关于",
+            slug="about",
+            content_md="关于正文",
+            content_html="<p>关于正文</p>",
+            status="published",
+            show_in_nav=True,
+            sort_order=0,
+            seo_title=None,
+            seo_description=None,
+            created_at=datetime(2026, 6, 16, tzinfo=UTC),
+            updated_at=datetime(2026, 6, 16, tzinfo=UTC),
+        )
+
     def admin_post_response(self, post: object) -> object:
         return post
+
+    def admin_page_response(self, page: object) -> object:
+        return page
 
     def render_preview(self, content_md: str) -> str:
         assert content_md
@@ -288,6 +332,82 @@ def test_create_admin_post_decrypts_content_request() -> None:
     }
     assert "title" not in logs.audit_items[0]["after_json"]
     assert "slug" not in logs.audit_items[0]["after_json"]
+
+
+def test_delete_admin_post_requires_csrf_and_records_audit() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    logs = FakeLogService()
+    manager = FakeEncryptionSessionManager()
+    app.dependency_overrides[get_current_admin_user] = lambda: AuthenticatedUser(
+        id=1,
+        username="admin",
+        display_name="管理员",
+        roles=["super_admin"],
+        permissions=["*"],
+    )
+    app.dependency_overrides[get_content_service] = lambda: FakeContentService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.delete(
+            "/api/admin/posts/1",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "content-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload is not None
+    assert manager.payload["slug"] == "first-post"
+    assert logs.audit_items[0]["action"] == "post.delete"
+    assert logs.audit_items[0]["entity_type"] == "post"
+    assert logs.audit_items[0]["entity_id"] == 1
+    assert logs.audit_items[0]["after_json"]["deleted"] is True
+
+
+def test_delete_admin_page_requires_csrf_and_records_audit() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    logs = FakeLogService()
+    manager = FakeEncryptionSessionManager()
+    app.dependency_overrides[get_current_admin_user] = lambda: AuthenticatedUser(
+        id=1,
+        username="admin",
+        display_name="管理员",
+        roles=["super_admin"],
+        permissions=["*"],
+    )
+    app.dependency_overrides[get_content_service] = lambda: FakeContentService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.delete(
+            "/api/admin/pages/1",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "content-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload is not None
+    assert manager.payload["slug"] == "about"
+    assert logs.audit_items[0]["action"] == "page.delete"
+    assert logs.audit_items[0]["entity_type"] == "page"
+    assert logs.audit_items[0]["entity_id"] == 1
+    assert logs.audit_items[0]["after_json"]["deleted"] is True
 
 
 def test_preview_admin_post_renders_current_markdown() -> None:

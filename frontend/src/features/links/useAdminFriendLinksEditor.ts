@@ -5,6 +5,7 @@ import { invalidateFriendLinkCaches } from '../../app/queryInvalidation.ts'
 import { usePagedItems } from '../../hooks/usePagedItems.ts'
 import {
   createAdminFriendLink,
+  deleteAdminFriendLink,
   listAdminFriendLinkGroups,
   listAdminFriendLinks,
   reviewAdminFriendLink,
@@ -127,6 +128,28 @@ export function useAdminFriendLinksEditor(session: AuthSession | null) {
     },
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!session || !selectedLink || isCreating) {
+        throw new Error('当前友链无法删除')
+      }
+      return deleteAdminFriendLink(selectedLink.id, session.csrfToken)
+    },
+    onSuccess: (link) => {
+      queryClient.setQueryData<AdminFriendLinkListResponse>(
+        ['admin-friend-links'],
+        (current) => removeFriendLinkListItem(current, link.id),
+      )
+      setSelectedLinkId(null)
+      setDraftForm(null)
+      void invalidateFriendLinkCaches(queryClient)
+      setNotice('友链已删除')
+    },
+    onError: (error) => {
+      setNotice(error instanceof Error ? error.message : '删除失败')
+    },
+  })
+
   function startCreating() {
     setSelectedLinkId(null)
     setDraftForm(emptyFriendLinkForm)
@@ -159,6 +182,7 @@ export function useAdminFriendLinksEditor(session: AuthSession | null) {
     linksQuery,
     listPageSize: LIST_PAGE_SIZE,
     notice,
+    deleteMutation,
     reviewAndSaveMutation,
     safeListPage,
     saveMutation,
@@ -189,5 +213,18 @@ function upsertFriendLinkListItem(
   return {
     ...current,
     items: current.items.map((item) => (item.id === link.id ? link : item)),
+  }
+}
+
+function removeFriendLinkListItem(
+  current: AdminFriendLinkListResponse | undefined,
+  linkId: number,
+): AdminFriendLinkListResponse {
+  if (!current) {
+    return { items: [] }
+  }
+  return {
+    ...current,
+    items: current.items.filter((item) => item.id !== linkId),
   }
 }

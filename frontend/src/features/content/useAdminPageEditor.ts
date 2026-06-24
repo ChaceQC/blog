@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { invalidatePageCaches } from '../../app/queryInvalidation.ts'
 import {
   createAdminPage,
+  deleteAdminPage,
   listAdminPages,
   updateAdminPage,
 } from './api.ts'
@@ -11,7 +12,11 @@ import { usePagedItems } from '../../hooks/usePagedItems.ts'
 import { nullableText } from '../../utils/formText.ts'
 
 import type { AuthSession } from '../auth/session.ts'
-import type { AdminPageItem, PageFormPayload } from './types.ts'
+import type {
+  AdminPageItem,
+  AdminPageListResponse,
+  PageFormPayload,
+} from './types.ts'
 
 export const emptyPageForm: PageFormPayload = {
   title: '',
@@ -73,6 +78,27 @@ export function useAdminPageEditor(session: AuthSession | null) {
     },
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!session || !selectedPage) {
+        throw new Error('当前页面无法删除')
+      }
+      return deleteAdminPage(selectedPage.id, session.csrfToken)
+    },
+    onSuccess: (page) => {
+      queryClient.setQueryData<AdminPageListResponse>(
+        ['admin-pages'],
+        (current) => removePageListItem(current, page.id),
+      )
+      void invalidatePageCaches(queryClient)
+      startNewPage()
+      setNotice('页面已删除')
+    },
+    onError: (error) => {
+      setNotice(error instanceof Error ? error.message : '删除失败')
+    },
+  })
+
   function selectPage(page: AdminPageItem) {
     setSelectedId(page.id)
     setForm(pageToForm(page))
@@ -103,6 +129,7 @@ export function useAdminPageEditor(session: AuthSession | null) {
     notice,
     pages,
     safeListPage,
+    deleteMutation,
     saveMutation,
     selectedPage,
     setListPage,
@@ -132,5 +159,18 @@ function normalizePageForm(form: PageFormPayload): PageFormPayload {
     ...form,
     seo_title: nullableText(form.seo_title),
     seo_description: nullableText(form.seo_description),
+  }
+}
+
+function removePageListItem(
+  current: AdminPageListResponse | undefined,
+  pageId: number,
+): AdminPageListResponse {
+  if (!current) {
+    return { items: [] }
+  }
+  return {
+    ...current,
+    items: current.items.filter((item) => item.id !== pageId),
   }
 }

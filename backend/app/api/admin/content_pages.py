@@ -172,6 +172,37 @@ async def update_page(
     )
 
 
+@router.delete("/pages/{page_id}", response_model=EncryptedApiResponse)
+async def delete_page(
+    page_id: int,
+    _: AdminCsrfDependency,
+    current_user: PageWriterDependency,
+    request: Request,
+    service: ContentServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
+) -> EncryptedApiResponse:
+    try:
+        page = await service.delete_page(page_id)
+    except ContentNotFoundError as exc:
+        raise not_found("page not found") from exc
+
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="page.delete",
+        entity_type="page",
+        entity_id=page.id,
+        after_json={**page_audit_payload(page), "deleted": True},
+    )
+    return await content_response(
+        AdminPageItem.model_validate(service.admin_page_response(page)),
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+
+
 def update_page_command(payload: PageUpdateRequest) -> UpdatePageCommand:
     fields = payload.model_fields_set
     return UpdatePageCommand(

@@ -26,6 +26,14 @@
   background: var(--color-neutral-8);
 }
 
+.text-button--danger {
+  background: var(--color-error);
+}
+
+.text-button--danger:hover {
+  box-shadow: 0 8px 24px rgba(166, 73, 83, 0.16);
+}
+
 .text-button:disabled {
   cursor: not-allowed;
   opacity: 0.58;

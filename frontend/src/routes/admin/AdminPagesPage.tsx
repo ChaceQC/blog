@@ -1,4 +1,4 @@
-import { Eye, FilePlus2, Save } from 'lucide-react'
+import { Eye, FilePlus2, Save, Trash2 } from 'lucide-react'
 
 import { ListPager } from '../../components/ListPager.tsx'
 import { AdminModal } from '../../components/AdminModal.tsx'
@@ -21,6 +21,7 @@ export function AdminPagesPage() {
     notice,
     pages,
     safeListPage,
+    deleteMutation,
     saveMutation,
     selectedPage,
     setListPage,
@@ -199,6 +200,19 @@ export function AdminPagesPage() {
               >
                 <Save size={17} strokeWidth={1.8} aria-hidden="true" />
                 {saveMutation.isPending ? '保存中' : '保存'}
+              </button>
+              <button
+                className="text-button text-button--danger"
+                disabled={!selectedPage || deleteMutation.isPending}
+                onClick={() => {
+                  if (window.confirm('确定删除这个页面吗？')) {
+                    deleteMutation.mutate()
+                  }
+                }}
+                type="button"
+              >
+                <Trash2 size={17} strokeWidth={1.8} aria-hidden="true" />
+                {deleteMutation.isPending ? '删除中' : '删除'}
               </button>
             </div>
           </form>

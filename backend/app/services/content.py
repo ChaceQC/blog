@@ -241,6 +241,19 @@ class ContentService:
         await self.repository.refresh(post)
         return post
 
+    async def delete_post(self, post_id: int) -> Post:
+        post = await self.get_post(post_id)
+        post.deleted_at = utc_now()
+        post.slug = deleted_slug(post.slug, post.id)
+        await self.repository.replace_file_usages(
+            entity_type="post",
+            entity_id=post.id,
+            usages=[],
+        )
+        await self.repository.commit()
+        await self.repository.refresh(post)
+        return post
+
     async def list_pages(self, *, limit: int, offset: int) -> Sequence[Page]:
         return await self.repository.list_pages(limit=limit, offset=offset)
 
@@ -314,6 +327,14 @@ class ContentService:
         await self.repository.refresh(page)
         return page
 
+    async def delete_page(self, page_id: int) -> Page:
+        page = await self.get_page(page_id)
+        page.deleted_at = utc_now()
+        page.slug = deleted_slug(page.slug, page.id)
+        await self.repository.commit()
+        await self.repository.refresh(page)
+        return page
+
     async def _ensure_post_slug_available(
         self,
         slug: str,
@@ -365,6 +386,11 @@ class ContentService:
         )
         post.category_names = normalized_categories
         post.tag_names = normalized_tags
+
+
+def deleted_slug(slug: str, entity_id: int) -> str:
+    suffix = f"-deleted-{entity_id}"
+    return f"{slug[: 220 - len(suffix)]}{suffix}"
 
 
 __all__ = [

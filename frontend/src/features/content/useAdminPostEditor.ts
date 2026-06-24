@@ -6,6 +6,7 @@ import { usePagedItems } from '../../hooks/usePagedItems.ts'
 import { hasAdminPermission } from '../auth/permissions.ts'
 import {
   createAdminPost,
+  deleteAdminPost,
   listAdminPosts,
   previewAdminPost,
   publishAdminPost,
@@ -166,6 +167,27 @@ export function useAdminPostEditor(session: AuthSession | null) {
     },
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!session || !selectedPost || !canWrite) {
+        throw new Error('当前文章无法删除')
+      }
+      return deleteAdminPost(selectedPost.id, session.csrfToken)
+    },
+    onSuccess: (post) => {
+      queryClient.setQueryData<AdminPostListResponse>(
+        ['admin-posts'],
+        (current) => removePostListItem(current, post.id),
+      )
+      void invalidatePostCaches(queryClient)
+      startNewPost()
+      setNotice('文章已删除')
+    },
+    onError: (error) => {
+      setNotice(error instanceof Error ? error.message : '删除失败')
+    },
+  })
+
   function selectPost(post: AdminPostItem) {
     setSelectedId(post.id)
     setForm(postToForm(post))
@@ -237,6 +259,7 @@ export function useAdminPostEditor(session: AuthSession | null) {
     posts,
     previewHtml,
     previewQuery,
+    deleteMutation,
     publishMutation,
     safeListPage,
     saveAsDraft,
@@ -274,5 +297,18 @@ function upsertPostListItem(
   return {
     ...current,
     items: current.items.map((item) => (item.id === post.id ? post : item)),
+  }
+}
+
+function removePostListItem(
+  current: AdminPostListResponse | undefined,
+  postId: number,
+): AdminPostListResponse {
+  if (!current) {
+    return { items: [] }
+  }
+  return {
+    ...current,
+    items: current.items.filter((item) => item.id !== postId),
   }
 }

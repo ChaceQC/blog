@@ -1,4 +1,12 @@
-import { Brackets, Eye, FilePlus2, Link2, Rocket, Save } from 'lucide-react'
+import {
+  Brackets,
+  Eye,
+  FilePlus2,
+  Link2,
+  Rocket,
+  Save,
+  Trash2,
+} from 'lucide-react'
 import { useRef } from 'react'
 
 import { ListPager } from '../../components/ListPager.tsx'
@@ -37,6 +45,7 @@ export function AdminPostsPage() {
     posts,
     previewHtml,
     previewQuery,
+    deleteMutation,
     publishMutation,
     safeListPage,
     saveAsDraft,
@@ -284,6 +293,19 @@ export function AdminPostsPage() {
               >
                 <Save size={17} strokeWidth={1.8} aria-hidden="true" />
                 {saveMutation.isPending ? '保存中' : '保存'}
+              </button>
+              <button
+                className="text-button text-button--danger"
+                disabled={!selectedPost || !canWrite || deleteMutation.isPending}
+                onClick={() => {
+                  if (window.confirm('确定删除这篇文章吗？')) {
+                    deleteMutation.mutate()
+                  }
+                }}
+                type="button"
+              >
+                <Trash2 size={17} strokeWidth={1.8} aria-hidden="true" />
+                {deleteMutation.isPending ? '删除中' : '删除'}
               </button>
               <button
                 className="text-button text-button--muted"

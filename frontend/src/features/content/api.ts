@@ -1,4 +1,5 @@
 import {
+  apiDeleteEncrypted,
   apiGetEncrypted,
   apiPatchEncrypted,
   apiPostEncrypted,
@@ -59,6 +60,17 @@ export function publishAdminPost(
   )
 }
 
+export function deleteAdminPost(
+  postId: number,
+  csrfToken: string,
+): Promise<AdminPostItem> {
+  return apiDeleteEncrypted<AdminPostItem>(
+    `/admin/posts/${postId}`,
+    'content-v1',
+    { csrfToken },
+  )
+}
+
 export function previewAdminPost(
   payload: PostPreviewPayload,
   csrfToken: string,
@@ -100,5 +112,16 @@ export function updateAdminPage(
     payload,
     'content-v1',
     { csrfToken, encryptRequest: true },
+  )
+}
+
+export function deleteAdminPage(
+  pageId: number,
+  csrfToken: string,
+): Promise<AdminPageItem> {
+  return apiDeleteEncrypted<AdminPageItem>(
+    `/admin/pages/${pageId}`,
+    'content-v1',
+    { csrfToken },
   )
 }

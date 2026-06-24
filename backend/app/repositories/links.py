@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.link import FriendLink, FriendLinkGroup
@@ -118,6 +118,9 @@ class LinkRepository:
         await self.session.flush()
         return link
 
+    async def delete_friend_link(self, link_id: int) -> None:
+        await self.session.execute(delete(FriendLink).where(FriendLink.id == link_id))
+
     async def list_site_nav_items(
         self,
         *,
@@ -212,6 +215,9 @@ class LinkRepository:
         self.session.add(item)
         await self.session.flush()
         return item
+
+    async def delete_site_nav_item(self, item_id: int) -> None:
+        await self.session.execute(delete(SiteNavItem).where(SiteNavItem.id == item_id))
 
     async def commit(self) -> None:
         await self.session.commit()

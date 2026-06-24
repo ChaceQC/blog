@@ -208,6 +208,37 @@ async def review_friend_link(
     )
 
 
+@router.delete("/friend-links/{link_id}", response_model=EncryptedApiResponse)
+async def delete_friend_link(
+    link_id: int,
+    _: AdminCsrfDependency,
+    current_user: FriendLinkReviewerDependency,
+    request: Request,
+    service: LinkServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
+) -> EncryptedApiResponse:
+    try:
+        link = await service.delete_friend_link(link_id)
+    except LinkNotFoundError as exc:
+        raise link_not_found() from exc
+
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="friend_link.delete",
+        entity_type="friend_link",
+        entity_id=link.id,
+        after_json={**friend_link_audit_payload(link), "deleted": True},
+    )
+    return await links_response(
+        AdminFriendLinkItem.model_validate(link),
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+
+
 def _update_friend_link_command(
     payload: FriendLinkUpdateRequest,
 ) -> UpdateFriendLinkCommand:

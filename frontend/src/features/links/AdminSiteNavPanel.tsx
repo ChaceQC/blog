@@ -1,4 +1,4 @@
-import { ExternalLink, Navigation, Save } from 'lucide-react'
+import { ExternalLink, Navigation, Save, Trash2 } from 'lucide-react'
 
 import { ListPager } from '../../components/ListPager.tsx'
 import { parseOptionalId } from '../../utils/formText.ts'
@@ -22,6 +22,7 @@ export function AdminSiteNavPanel() {
     isCreatingSite,
     listPageSize,
     safeListPage,
+    deleteSiteMutation,
     saveSiteMutation,
     selectSite,
     selectedSite,
@@ -231,6 +232,23 @@ export function AdminSiteNavPanel() {
                 >
                   <Save size={17} strokeWidth={1.8} aria-hidden="true" />
                   {saveSiteMutation.isPending ? '保存中' : '保存导航'}
+                </button>
+                <button
+                  className="text-button text-button--danger"
+                  disabled={
+                    !selectedSite ||
+                    isCreatingSite ||
+                    deleteSiteMutation.isPending
+                  }
+                  onClick={() => {
+                    if (window.confirm('确定删除这个导航吗？')) {
+                      deleteSiteMutation.mutate()
+                    }
+                  }}
+                  type="button"
+                >
+                  <Trash2 size={17} strokeWidth={1.8} aria-hidden="true" />
+                  {deleteSiteMutation.isPending ? '删除中' : '删除'}
                 </button>
               </div>
             </form>

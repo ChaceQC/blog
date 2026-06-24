@@ -158,3 +158,34 @@ def test_update_admin_friend_link_decrypts_content_request() -> None:
     assert manager.payload is not None
     assert manager.payload["name"] == "更新后的友链"
     assert logs.audit_items[0]["action"] == "friend_link.update"
+
+def test_delete_admin_friend_link_requires_csrf_and_records_audit() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    logs = FakeLogService()
+    manager = FakeEncryptionSessionManager()
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_link_service] = lambda: FakeLinkService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.delete(
+            "/api/admin/friend-links/1",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "content-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload is not None
+    assert manager.payload["name"] == "静默书房"
+    assert logs.audit_items[0]["action"] == "friend_link.delete"
+    assert logs.audit_items[0]["entity_type"] == "friend_link"
+    assert logs.audit_items[0]["entity_id"] == 1
+    assert logs.audit_items[0]["after_json"]["deleted"] is True

@@ -185,6 +185,16 @@ class LinkService:
         await self.repository.refresh(link)
         return self._friend_link_record(link=link, group_name=None)
 
+    async def delete_friend_link(self, link_id: int) -> AdminFriendLinkRecord:
+        link = await self.repository.get_friend_link(link_id)
+        if link is None:
+            raise LinkNotFoundError("friend link not found")
+
+        record = self._friend_link_record(link=link, group_name=None)
+        await self.repository.delete_friend_link(link_id)
+        await self.repository.commit()
+        return record
+
     async def list_site_nav_items(
         self,
         *,
@@ -307,6 +317,20 @@ class LinkService:
         await self.repository.commit()
         await self.repository.refresh(item)
         return self._site_nav_item_record(item=item, group_name=None, group_slug=None)
+
+    async def delete_site_nav_item(self, item_id: int) -> AdminSiteNavItemRecord:
+        item = await self.repository.get_site_nav_item(item_id)
+        if item is None:
+            raise SiteNavItemNotFoundError("site nav item not found")
+
+        record = self._site_nav_item_record(
+            item=item,
+            group_name=None,
+            group_slug=None,
+        )
+        await self.repository.delete_site_nav_item(item_id)
+        await self.repository.commit()
+        return record
 
     def _friend_link_record(
         self,

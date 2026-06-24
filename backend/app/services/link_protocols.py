@@ -46,6 +46,8 @@ class LinkRepositoryProtocol(Protocol):
         sort_order: int,
     ) -> FriendLink: ...
 
+    async def delete_friend_link(self, link_id: int) -> None: ...
+
     async def list_site_nav_items(
         self,
         *,
@@ -87,6 +89,8 @@ class LinkRepositoryProtocol(Protocol):
         visibility: str,
         sort_order: int,
     ) -> SiteNavItem: ...
+
+    async def delete_site_nav_item(self, item_id: int) -> None: ...
 
     async def commit(self) -> None: ...
 

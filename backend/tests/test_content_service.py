@@ -38,6 +38,7 @@ class FakePost:
     tag_names: list[str] = field(default_factory=list)
     published_at: object | None = None
     updated_at: object | None = None
+    deleted_at: object | None = None
 
 
 @dataclass
@@ -52,6 +53,7 @@ class FakePage:
     sort_order: int
     seo_title: str | None
     seo_description: str | None
+    deleted_at: object | None = None
 
 
 class FakeContentRepository:
@@ -65,7 +67,8 @@ class FakeContentRepository:
         self.commit_count = 0
 
     async def list_posts(self, *, limit: int, offset: int) -> list[FakePost]:
-        return self.posts[offset : offset + limit]
+        posts = [post for post in self.posts if post.deleted_at is None]
+        return posts[offset : offset + limit]
 
     async def list_public_posts(
         self,
@@ -84,10 +87,24 @@ class FakeContentRepository:
         ][offset : offset + limit]
 
     async def get_post(self, post_id: int) -> FakePost | None:
-        return next((post for post in self.posts if post.id == post_id), None)
+        return next(
+            (
+                post
+                for post in self.posts
+                if post.id == post_id and post.deleted_at is None
+            ),
+            None,
+        )
 
     async def get_post_by_slug(self, slug: str) -> FakePost | None:
-        return next((post for post in self.posts if post.slug == slug), None)
+        return next(
+            (
+                post
+                for post in self.posts
+                if post.slug == slug and post.deleted_at is None
+            ),
+            None,
+        )
 
     async def get_public_post_by_slug(self, slug: str) -> FakePost | None:
         return next(
@@ -141,13 +158,28 @@ class FakeContentRepository:
             post.tag_names = list(tag_names)
 
     async def list_pages(self, *, limit: int, offset: int) -> list[FakePage]:
-        return self.pages[offset : offset + limit]
+        pages = [page for page in self.pages if page.deleted_at is None]
+        return pages[offset : offset + limit]
 
     async def get_page(self, page_id: int) -> FakePage | None:
-        return next((page for page in self.pages if page.id == page_id), None)
+        return next(
+            (
+                page
+                for page in self.pages
+                if page.id == page_id and page.deleted_at is None
+            ),
+            None,
+        )
 
     async def get_page_by_slug(self, slug: str) -> FakePage | None:
-        return next((page for page in self.pages if page.slug == slug), None)
+        return next(
+            (
+                page
+                for page in self.pages
+                if page.slug == slug and page.deleted_at is None
+            ),
+            None,
+        )
 
     async def create_page(self, **payload: object) -> FakePage:
         page = FakePage(id=len(self.pages) + 1, **payload)
@@ -363,3 +395,83 @@ async def test_update_post_replaces_file_usages() -> None:
     )
 
     assert repository.file_usages[("post", post.id)] == [(8, "post_body")]
+
+
+@pytest.mark.anyio
+async def test_delete_post_soft_deletes_and_releases_slug() -> None:
+    repository = FakeContentRepository()
+    repository.file_ids.update({1, 2})
+    service = ContentService(repository=repository)
+    post = await service.create_post(
+        CreatePostCommand(
+            title="待删文章",
+            slug="old-post",
+            summary=None,
+            content_md="![旧图](/api/public/posts/old-post/files/1/render)",
+            author_id=1,
+            status="draft",
+            visibility="public",
+            cover_file_id=2,
+            seo_title=None,
+            seo_description=None,
+        ),
+    )
+
+    deleted = await service.delete_post(post.id)
+    recreated = await service.create_post(
+        CreatePostCommand(
+            title="新文章",
+            slug="old-post",
+            summary=None,
+            content_md="正文",
+            author_id=1,
+            status="draft",
+            visibility="public",
+            cover_file_id=None,
+            seo_title=None,
+            seo_description=None,
+        ),
+    )
+
+    assert deleted.deleted_at is not None
+    assert deleted.slug == f"old-post-deleted-{post.id}"
+    assert repository.file_usages[("post", post.id)] == []
+    assert recreated.id != post.id
+    assert recreated.slug == "old-post"
+
+
+@pytest.mark.anyio
+async def test_delete_page_soft_deletes_and_releases_slug() -> None:
+    repository = FakeContentRepository()
+    service = ContentService(repository=repository)
+    page = await service.create_page(
+        CreatePageCommand(
+            title="关于",
+            slug="about",
+            content_md="旧内容",
+            status="published",
+            show_in_nav=True,
+            sort_order=0,
+            seo_title=None,
+            seo_description=None,
+        ),
+    )
+
+    deleted = await service.delete_page(page.id)
+    recreated = await service.create_page(
+        CreatePageCommand(
+            title="新的关于",
+            slug="about",
+            content_md="新内容",
+            status="draft",
+            show_in_nav=False,
+            sort_order=0,
+            seo_title=None,
+            seo_description=None,
+        ),
+    )
+
+    assert deleted.deleted_at is not None
+    assert deleted.slug == f"about-deleted-{page.id}"
+    assert recreated.id != page.id
+    assert recreated.slug == "about"

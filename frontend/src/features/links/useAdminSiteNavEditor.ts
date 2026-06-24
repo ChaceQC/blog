@@ -5,6 +5,7 @@ import { invalidateSiteNavCaches } from '../../app/queryInvalidation.ts'
 import { usePagedItems } from '../../hooks/usePagedItems.ts'
 import {
   createAdminSiteNavItem,
+  deleteAdminSiteNavItem,
   listAdminSiteNavGroups,
   listAdminSiteNavItems,
   updateAdminSiteNavItem,
@@ -16,7 +17,7 @@ import {
 } from './siteNavForm.ts'
 
 import type { AuthSession } from '../auth/session.ts'
-import type { AdminSiteNavItem } from './types.ts'
+import type { AdminSiteNavItem, AdminSiteNavItemListResponse } from './types.ts'
 import type { SiteNavForm } from './siteNavForm.ts'
 
 const LIST_PAGE_SIZE = 6
@@ -75,6 +76,28 @@ export function useAdminSiteNavEditor(session: AuthSession | null) {
     },
   })
 
+  const deleteSiteMutation = useMutation({
+    mutationFn: async () => {
+      if (!session || !selectedSite || isCreatingSite) {
+        throw new Error('当前导航无法删除')
+      }
+      return deleteAdminSiteNavItem(selectedSite.id, session.csrfToken)
+    },
+    onSuccess: (site) => {
+      queryClient.setQueryData<AdminSiteNavItemListResponse>(
+        ['admin-site-nav-items'],
+        (current) => removeSiteNavListItem(current, site.id),
+      )
+      setSelectedSiteId(null)
+      setSiteDraftForm(null)
+      void invalidateSiteNavCaches(queryClient)
+      setSiteNotice('导航已删除')
+    },
+    onError: (error) => {
+      setSiteNotice(error instanceof Error ? error.message : '删除失败')
+    },
+  })
+
   function startCreatingSite() {
     setSelectedSiteId(null)
     setSiteDraftForm(emptySiteForm)
@@ -100,6 +123,7 @@ export function useAdminSiteNavEditor(session: AuthSession | null) {
     isCreatingSite,
     listPageSize: LIST_PAGE_SIZE,
     safeListPage,
+    deleteSiteMutation,
     saveSiteMutation,
     selectSite,
     selectedSite,
@@ -111,5 +135,18 @@ export function useAdminSiteNavEditor(session: AuthSession | null) {
     startCreatingSite,
     updateSiteForm,
     visibleSites,
+  }
+}
+
+function removeSiteNavListItem(
+  current: AdminSiteNavItemListResponse | undefined,
+  siteId: number,
+): AdminSiteNavItemListResponse {
+  if (!current) {
+    return { items: [] }
+  }
+  return {
+    ...current,
+    items: current.items.filter((item) => item.id !== siteId),
   }
 }

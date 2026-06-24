@@ -1,4 +1,5 @@
 import {
+  apiDeleteEncrypted,
   apiGetEncrypted,
   apiPatchEncrypted,
   apiPostEncrypted,
@@ -97,6 +98,17 @@ export function updateAdminFriendLink(
   )
 }
 
+export function deleteAdminFriendLink(
+  linkId: number,
+  csrfToken: string,
+): Promise<AdminFriendLink> {
+  return apiDeleteEncrypted<AdminFriendLink>(
+    `/admin/friend-links/${linkId}`,
+    'content-v1',
+    { csrfToken },
+  )
+}
+
 export function listAdminSiteNavItems(): Promise<AdminSiteNavItemListResponse> {
   return apiGetEncrypted<AdminSiteNavItemListResponse>(
     '/admin/site-items?limit=50',
@@ -158,5 +170,16 @@ export function updateAdminSiteNavItem(
     payload,
     'content-v1',
     { csrfToken, encryptRequest: true },
+  )
+}
+
+export function deleteAdminSiteNavItem(
+  itemId: number,
+  csrfToken: string,
+): Promise<AdminSiteNavItem> {
+  return apiDeleteEncrypted<AdminSiteNavItem>(
+    `/admin/site-items/${itemId}`,
+    'content-v1',
+    { csrfToken },
   )
 }

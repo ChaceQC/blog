@@ -124,6 +124,25 @@ class FakeLinkService:
             updated_at=datetime(2026, 6, 16, tzinfo=UTC),
         )
 
+    async def delete_friend_link(self, link_id: int) -> object:
+        assert link_id == 1
+        return SimpleNamespace(
+            id=1,
+            group_id=1,
+            group_name=None,
+            name="静默书房",
+            url="https://blog.example.test",
+            avatar_url=None,
+            description="长期写作入口",
+            rss_url=None,
+            status="pending",
+            sort_order=0,
+            last_checked_at=None,
+            last_status_code=None,
+            created_at=datetime(2026, 6, 16, tzinfo=UTC),
+            updated_at=datetime(2026, 6, 16, tzinfo=UTC),
+        )
+
     async def list_site_nav_items(self, *, limit: int, offset: int) -> list[object]:
         assert limit == 1
         assert offset == 0
@@ -202,6 +221,26 @@ class FakeLinkService:
             visibility=(
                 command.visibility if isinstance(command.visibility, str) else "public"
             ),
+            click_count=0,
+            sort_order=0,
+            created_at=datetime(2026, 6, 16, tzinfo=UTC),
+            updated_at=datetime(2026, 6, 16, tzinfo=UTC),
+        )
+
+    async def delete_site_nav_item(self, item_id: int) -> object:
+        assert item_id == 1
+        return SimpleNamespace(
+            id=1,
+            group_id=1,
+            group_name=None,
+            group_slug=None,
+            title="博客源码",
+            url="https://github.com/ChaceQC/blog",
+            icon_url=None,
+            description="源码和提交记录",
+            tags_json={"items": ["blog"]},
+            open_target="blank",
+            visibility="public",
             click_count=0,
             sort_order=0,
             created_at=datetime(2026, 6, 16, tzinfo=UTC),

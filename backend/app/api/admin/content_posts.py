@@ -252,6 +252,37 @@ async def publish_post(
     )
 
 
+@router.delete("/posts/{post_id}", response_model=EncryptedApiResponse)
+async def delete_post(
+    post_id: int,
+    _: AdminCsrfDependency,
+    current_user: PostWriterDependency,
+    request: Request,
+    service: ContentServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
+) -> EncryptedApiResponse:
+    try:
+        post = await service.delete_post(post_id)
+    except ContentNotFoundError as exc:
+        raise not_found("post not found") from exc
+
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="post.delete",
+        entity_type="post",
+        entity_id=post.id,
+        after_json={**post_audit_payload(post), "deleted": True},
+    )
+    return await content_response(
+        AdminPostItem.model_validate(service.admin_post_response(post)),
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+
+
 def update_post_command(payload: PostUpdateRequest) -> UpdatePostCommand:
     fields = payload.model_fields_set
     return UpdatePostCommand(

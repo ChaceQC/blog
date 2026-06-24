@@ -4,6 +4,39 @@
 
 ### 本轮计划
 
+- 为后台页面、文章、友链和导航补齐删除功能，包含后端删除接口、权限校验、审计日志、前端按钮与删除后列表刷新。
+- 优先沿用现有软删除模型：文章和页面使用 `deleted_at` 隐藏；友链和导航若无软删除字段，则按现有数据模型安全删除记录。
+- 补充对应后端 API 测试与前端类型/构建验证，确保公开列表不会继续展示已删除内容。
+
+### 本轮进度
+
+- 已完成后台文章、页面、友链和导航条目的删除链路：新增后端 `DELETE` 接口、CSRF 与既有权限校验、加密响应、审计日志和前端删除按钮。
+- 文章和页面沿用软删除模型，删除时写入 `deleted_at` 并将 slug 改为 `*-deleted-{id}`，避免后续重新创建同 slug 时撞数据库唯一索引；文章删除会同步清空 `file_usages` 引用。
+- 友链和导航条目当前数据模型没有软删除字段，本轮按现有模型执行物理删除记录；公开友链和导航列表会随记录删除自然消失。
+- 前端已补齐 `apiDeleteEncrypted` 业务封装，删除成功后会从后台列表缓存移除当前项，并失效对应公开页面缓存。
+- 审计日志清洗白名单已允许 `deleted` 字段，删除动作会保留明确的审计标记。
+
+### 阻塞与风险
+
+- 友链和导航本轮为物理删除；如果后续需要可恢复、回收站或历史追踪，需要新增软删除字段和迁移。
+- 前端删除确认暂使用浏览器原生 `confirm`，后续若统一后台交互风格，可改为现有后台模态确认框。
+
+### 下一步
+
+- 在真实后端数据环境下登录后台，逐项复查文章、页面、友链和导航删除后的列表刷新、公开页缓存刷新和审计日志展示。
+
+### 验证
+
+- 已运行 `uv run ruff check .`，通过。
+- 已运行 `uv run pytest tests/test_admin_content_api.py tests/test_admin_links_api.py tests/test_admin_site_nav_api.py tests/test_content_service.py -q`，25 个测试通过；仍存在 FastAPI/Starlette TestClient 与 HTTP 状态常量的上游弃用警告。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；生产构建仍提示混淆插件耗时较高。
+- 已运行 `git diff --check`，未发现空白或行尾问题。
+
+## 2026-06-24
+
+### 本轮计划
+
 - 收敛前端核心 crypto path 中可静态抠出的可读协议上下文字符串：`blog-cms:*`、`blog-login-v2:*`、JSON AAD/profile 拼接和 esid HMAC stream label 不再直接作为 WebCrypto HKDF `info` / AES-GCM `additionalData` 输入。
 - 保留 WebCrypto primitive 名称的现实边界：`HKDF`、`AES-GCM`、`HMAC`、`SHA-256`、`AES-CTR` 这类算法名浏览器运行时必须可见，本轮只降低静态协议语义识别成本，不把隐藏 primitive 当作密码学安全边界。
 - 新增加密会话级随机 `context_seed`，由后端在 `/api/{scope}/encryption/sessions` 下发并保存到 `encryption_sessions`，后续请求由后端查表复用同一 seed。

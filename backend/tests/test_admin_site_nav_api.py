@@ -134,6 +134,37 @@ def test_update_admin_site_item_decrypts_content_request() -> None:
     assert logs.audit_items[0]["action"] == "site_nav.update"
     assert "tags_json" in logs.audit_items[0]["after_json"]["changed_fields"]
 
+def test_delete_admin_site_item_requires_csrf_and_records_audit() -> None:
+    client = TestClient(app)
+    client.cookies.set("blog_admin_csrf", "csrf-token")
+    logs = FakeLogService()
+    manager = FakeEncryptionSessionManager()
+    app.dependency_overrides[get_current_admin_user] = override_admin_user
+    app.dependency_overrides[get_link_service] = lambda: FakeLinkService()
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.delete(
+            "/api/admin/site-items/1",
+            headers={
+                "X-CSRF-Token": "csrf-token",
+                "X-Encryption-Session": "content-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "content-v1"
+    assert manager.payload is not None
+    assert manager.payload["title"] == "博客源码"
+    assert logs.audit_items[0]["action"] == "site_nav.delete"
+    assert logs.audit_items[0]["entity_type"] == "site_nav_item"
+    assert logs.audit_items[0]["entity_id"] == 1
+    assert logs.audit_items[0]["after_json"]["deleted"] is True
+
 def test_create_admin_site_item_rejects_invalid_tags() -> None:
     client = TestClient(app)
     client.cookies.set("blog_admin_csrf", "csrf-token")

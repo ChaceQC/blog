@@ -159,6 +159,37 @@ async def update_site_nav_item(
     )
 
 
+@router.delete("/site-items/{item_id}", response_model=EncryptedApiResponse)
+async def delete_site_nav_item(
+    item_id: int,
+    _: AdminCsrfDependency,
+    current_user: SiteNavWriterDependency,
+    request: Request,
+    service: LinkServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    logs: LogServiceDependency,
+) -> EncryptedApiResponse:
+    try:
+        item = await service.delete_site_nav_item(item_id)
+    except SiteNavItemNotFoundError as exc:
+        raise site_item_not_found() from exc
+
+    await record_admin_audit(
+        logs=logs,
+        request=request,
+        actor=current_user,
+        action="site_nav.delete",
+        entity_type="site_nav_item",
+        entity_id=item.id,
+        after_json={**site_item_audit_payload(item), "deleted": True},
+    )
+    return await links_response(
+        AdminSiteNavItem.model_validate(item),
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+
+
 def _update_site_nav_item_command(
     payload: SiteNavItemUpdateRequest,
 ) -> UpdateSiteNavItemCommand:
