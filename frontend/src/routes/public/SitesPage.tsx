@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
+import { publicErrorMessage } from '../../api/client.ts'
 import { ListPager } from '../../components/ListPager.tsx'
 import { usePageSeo } from '../../features/seo/usePageSeo.ts'
 import { SiteGrid } from '../../features/sites/SiteGrid.tsx'
@@ -15,6 +16,7 @@ export function SitesPage() {
   const { page, setPage } = useQueryPage()
   const {
     data: sitesData,
+    error: sitesError,
     isError,
     isLoading,
   } = useQuery({
@@ -24,6 +26,10 @@ export function SitesPage() {
   })
   const sites = sitesData?.items ?? emptySites
   const totalSites = sitesData?.total ?? 0
+  const sitesErrorMessage = publicErrorMessage(
+    sitesError,
+    '站点目录暂时不可用。',
+  )
   usePageSeo({
     title: '站点目录',
     description: pageDescription,
@@ -44,7 +50,7 @@ export function SitesPage() {
           <span>入口</span>
           <small>{isLoading ? '加载中' : `第 ${page + 1} 页`}</small>
         </div>
-        {isError ? <p className="empty-state">站点目录暂时不可用。</p> : null}
+        {isError ? <p className="empty-state">{sitesErrorMessage}</p> : null}
         {!isLoading && !isError && totalSites === 0 ? (
           <p className="empty-state">还没有公开入口。</p>
         ) : null}

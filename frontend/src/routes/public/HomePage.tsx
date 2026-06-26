@@ -10,6 +10,7 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
+import { publicErrorMessage } from '../../api/client.ts'
 import { listPublicPosts } from '../../features/posts/api.ts'
 import {
   formatPostDate,
@@ -27,6 +28,7 @@ import {
 export function HomePage() {
   const {
     data: postsData,
+    error: postsError,
     isError: isPostsError,
     isLoading: isPostsLoading,
   } = useQuery({
@@ -35,6 +37,7 @@ export function HomePage() {
   })
   const {
     data: sitesData,
+    error: sitesError,
     isError: isSitesError,
     isLoading: isSitesLoading,
   } = useQuery({
@@ -63,6 +66,14 @@ export function HomePage() {
   const featuredPosts = postsData?.items ?? []
   const featuredSites = sitesData?.items ?? []
   const latestPost = featuredPosts[0] ?? null
+  const postsErrorMessage = publicErrorMessage(
+    postsError,
+    '文章服务暂时不可用。',
+  )
+  const sitesErrorMessage = publicErrorMessage(
+    sitesError,
+    '站点目录暂时不可用。',
+  )
   const heroStats = [
     `${postsData?.total ?? featuredPosts.length} 篇文章`,
     `${sitesData?.total ?? featuredSites.length} 个入口`,
@@ -142,7 +153,7 @@ export function HomePage() {
               <p className="empty-state">正在整理近期文章。</p>
             ) : null}
             {isPostsError ? (
-              <p className="empty-state">文章服务暂时不可用。</p>
+              <p className="empty-state">{postsErrorMessage}</p>
             ) : null}
             {!isPostsLoading && !isPostsError && featuredPosts.length === 0 ? (
               <p className="empty-state">还没有公开发布的文章。</p>
@@ -233,7 +244,7 @@ export function HomePage() {
             <p className="empty-state">正在整理常用入口。</p>
           ) : null}
           {isSitesError ? (
-            <p className="empty-state">站点目录暂时不可用。</p>
+            <p className="empty-state">{sitesErrorMessage}</p>
           ) : null}
           {!isSitesLoading && !isSitesError && featuredSites.length === 0 ? (
             <p className="empty-state">还没有公开入口。</p>

@@ -172,7 +172,14 @@ async function createEncryptionSession(scope: EncryptionScope): Promise<Encrypti
   })
 
   if (!response.ok) {
-    throw new Error('加密会话协商失败')
+    const error = new Error(
+      response.status === 429 ? 'encryption session rate limited' : '加密会话协商失败',
+    )
+    error.name =
+      response.status === 429
+        ? 'EncryptionSessionRateLimitError'
+        : 'EncryptionSessionError'
+    throw error
   }
 
   const sessionResponse = (await response.json()) as EncryptionSessionResponse

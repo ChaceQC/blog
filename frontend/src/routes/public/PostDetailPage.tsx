@@ -4,6 +4,10 @@ import { ArrowLeft, Clock3, Eye, Heart } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 
+import {
+  ApiError,
+  publicErrorMessage,
+} from '../../api/client.ts'
 import { MathHtml } from '../../components/MathHtml.tsx'
 import {
   getPublicPost,
@@ -35,7 +39,7 @@ export function PostDetailPage() {
   const [interactionState, setInteractionState] =
     useState<SlugInteractionState | null>(null)
   const recordedViewSlugRef = useRef<string | null>(null)
-  const { data: post, isError, isLoading } = useQuery({
+  const { data: post, error: postError, isError, isLoading } = useQuery({
     queryKey: ['public-post', slug],
     queryFn: ({ signal }) => getPublicPost(slug, { signal }),
     enabled: slug.length > 0,
@@ -64,6 +68,19 @@ export function PostDetailPage() {
     () => interactionState?.slug === slug ? interactionState.state : null,
     [interactionState, slug],
   )
+  const isPostNotFound = postError instanceof ApiError && postError.status === 404
+  const postErrorTitle = isPostNotFound ? '没有找到这篇文章' : '文章暂时无法打开'
+  const postErrorDescription = isPostNotFound
+    ? '它可能还未发布，或者已经被设为隐藏。'
+    : publicErrorMessage(
+        postError,
+        '网络或加密会话暂时不可用，请返回列表稍后再试。',
+      )
+  const interactionError =
+    viewMutation.error ?? likeMutation.error
+  const interactionErrorMessage = interactionError
+    ? publicErrorMessage(interactionError, '互动状态暂时无法同步。')
+    : null
 
   useEffect(() => {
     if (
@@ -102,8 +119,8 @@ export function PostDetailPage() {
       <div className="page-flow page-flow--narrow">
         <section className="page-heading">
           <small>POST</small>
-          <h1>没有找到这篇文章</h1>
-          <p>它可能还未发布，或者已经被设为隐藏。</p>
+          <h1>{postErrorTitle}</h1>
+          <p>{postErrorDescription}</p>
         </section>
         <Link className="timeline-link" to="/posts">
           <ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" />
@@ -157,6 +174,11 @@ export function PostDetailPage() {
         />
       </article>
       <div className="post-detail-actions" aria-label="文章互动">
+        {interactionErrorMessage ? (
+          <span className="post-detail-actions__notice">
+            {interactionErrorMessage}
+          </span>
+        ) : null}
         <span className="post-detail-actions__views" aria-label={`浏览 ${viewCount}`}>
           <Eye size={16} strokeWidth={1.8} aria-hidden="true" />
           {viewCount}

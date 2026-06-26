@@ -78,11 +78,21 @@ const SALT_SOCKET_MAX_MISSED_PONGS = 2
 const SALT_SOCKET_RECONNECT_BASE_MS = 1_000
 const SALT_SOCKET_RECONNECT_MAX_MS = 30_000
 const SALT_SOCKET_POLICY_CLOSE_CODE = 1008
+const SALT_SOCKET_POLICY_WINDOW_MS = 60_000
+const SALT_SOCKET_POLICY_WINDOW_MAX_MESSAGES = 30
+const SALT_SOCKET_POLICY_COOLDOWN_FLOOR_MS = 1_000
+const SALT_SOCKET_POLICY_COOLDOWN_BUFFER_MS = 250
 
 class SaltSocketPolicyError extends Error {
-  constructor(message = 'salt lease socket closed by policy') {
+  readonly retryAfterMs: number
+
+  constructor(
+    message = 'salt lease socket closed by policy',
+    retryAfterMs = SALT_SOCKET_POLICY_COOLDOWN_FLOOR_MS,
+  ) {
     super(message)
     this.name = 'SaltSocketPolicyError'
+    this.retryAfterMs = retryAfterMs
   }
 }
 
@@ -102,6 +112,8 @@ export class SaltLeaseSocket {
   private reconnectId: number | null = null
   private reconnectAttempts = 0
   private manualClose = false
+  private policyCooldownUntil = 0
+  private sentMessageTimestamps: number[] = []
   private pendingPongSeq: number | null = null
   private missedPongs = 0
   private heartbeatSeq = 0
@@ -144,6 +156,7 @@ export class SaltLeaseSocket {
   private async performRequest(
     items: Required<SaltLeaseRequestItem>[],
   ): Promise<EncryptionSaltLease[]> {
+    this.rejectDuringPolicyCooldown()
     let lastError: Error | null = null
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
@@ -189,6 +202,7 @@ export class SaltLeaseSocket {
       this.pending = { resolve, reject, timeoutId }
       try {
         socket.send(JSON.stringify(frame))
+        this.recordSentMessage()
       } catch (error) {
         window.clearTimeout(timeoutId)
         this.pending = null
@@ -200,6 +214,11 @@ export class SaltLeaseSocket {
   private ensureSocket(): Promise<WebSocket> {
     this.manualClose = false
     this.clearReconnectTimer()
+    try {
+      this.rejectDuringPolicyCooldown()
+    } catch (error) {
+      return Promise.reject(error)
+    }
     if (Date.now() > this.session.expiresAt - 1_000) {
       return Promise.reject(new Error('加密会话已过期'))
     }
@@ -397,6 +416,7 @@ export class SaltLeaseSocket {
       })
       if (this.socket === socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify(frame))
+        this.recordSentMessage()
       }
     } catch (error) {
       this.closeSocketForReconnect(toError(error, 'salt lease heartbeat failed'))
@@ -423,6 +443,7 @@ export class SaltLeaseSocket {
     this.clearHeartbeat()
     this.rejectPending(error)
     if (error instanceof SaltSocketPolicyError) {
+      this.startPolicyCooldown()
       this.clearReconnectTimer()
       return
     }
@@ -484,6 +505,60 @@ export class SaltLeaseSocket {
     )
     const jitter = Math.floor(Math.random() * Math.min(1_000, baseDelay / 4))
     return Math.min(SALT_SOCKET_RECONNECT_MAX_MS, baseDelay + jitter)
+  }
+
+  private startPolicyCooldown(): void {
+    const durationMs = this.nextPolicyCooldownMs(Date.now())
+    this.policyCooldownUntil = Math.max(
+      this.policyCooldownUntil,
+      Date.now() + durationMs,
+    )
+  }
+
+  private rejectDuringPolicyCooldown(): void {
+    if (Date.now() >= this.policyCooldownUntil) {
+      return
+    }
+    throw new SaltSocketPolicyError(
+      'salt lease socket temporarily blocked by policy',
+      this.policyCooldownUntil - Date.now(),
+    )
+  }
+
+  private recordSentMessage(now = Date.now()): void {
+    this.sentMessageTimestamps = [
+      ...this.sentMessageTimestamps.filter(
+        (timestamp) => now - timestamp < SALT_SOCKET_POLICY_WINDOW_MS,
+      ),
+      now,
+    ].slice(-(SALT_SOCKET_POLICY_WINDOW_MAX_MESSAGES + 1))
+  }
+
+  private nextPolicyCooldownMs(now: number): number {
+    const recentMessages = this.sentMessageTimestamps.filter(
+      (timestamp) => now - timestamp < SALT_SOCKET_POLICY_WINDOW_MS,
+    )
+    this.sentMessageTimestamps = recentMessages.slice(
+      -(SALT_SOCKET_POLICY_WINDOW_MAX_MESSAGES + 1),
+    )
+    if (this.sentMessageTimestamps.length < SALT_SOCKET_POLICY_WINDOW_MAX_MESSAGES) {
+      return SALT_SOCKET_POLICY_COOLDOWN_FLOOR_MS
+    }
+    const oldestCountedIndex = Math.max(
+      0,
+      this.sentMessageTimestamps.length -
+        1 -
+        SALT_SOCKET_POLICY_WINDOW_MAX_MESSAGES,
+    )
+    const oldestCountedTimestamp = this.sentMessageTimestamps[oldestCountedIndex]
+    const oldestTimestamp = oldestCountedTimestamp ?? this.sentMessageTimestamps[0]
+    if (oldestTimestamp === undefined) {
+      return SALT_SOCKET_POLICY_COOLDOWN_FLOOR_MS
+    }
+    const remainingMs =
+      SALT_SOCKET_POLICY_WINDOW_MS - (now - oldestTimestamp) +
+      SALT_SOCKET_POLICY_COOLDOWN_BUFFER_MS
+    return Math.max(SALT_SOCKET_POLICY_COOLDOWN_FLOOR_MS, remainingMs)
   }
 
   private async wrapPayload(

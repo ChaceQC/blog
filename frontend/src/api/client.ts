@@ -6,6 +6,8 @@ import {
   getEncryptionSession,
 } from './encryption.ts'
 
+export const RATE_LIMIT_MESSAGE = '您的访问太频繁，请稍后重试'
+
 import type {
   EncryptionScope,
   EncryptionProfile,
@@ -39,6 +41,14 @@ export class ApiError extends Error {
   }
 }
 
+export function isRateLimitError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 429
+}
+
+export function publicErrorMessage(error: unknown, fallback: string): string {
+  return isRateLimitError(error) ? RATE_LIMIT_MESSAGE : fallback
+}
+
 export async function apiGet<T>(
   path: string,
   options: ApiRequestOptions = {},
@@ -69,23 +79,27 @@ export async function apiGetEncrypted<T>(
   profile: EncryptionProfile,
   options: ApiRequestOptions = {},
 ): Promise<T> {
-  const session = await getEncryptionSession(
-    profile,
-    options.encryptionScope ?? 'admin',
-    options.signal,
-  )
-  const encryptionHeaders = await createEncryptionRequestHeaders(session, profile)
-  return requestJson<T>(path, {
-    headers: jsonHeaders(options, { encryptionHeaders }),
-    encryption: { profile, session },
-    retryInit: async () => ({
-      headers: jsonHeaders(options, {
-        encryptionHeaders: await createEncryptionRequestHeaders(session, profile),
+  try {
+    const session = await getEncryptionSession(
+      profile,
+      options.encryptionScope ?? 'admin',
+      options.signal,
+    )
+    const encryptionHeaders = await createEncryptionRequestHeaders(session, profile)
+    return await requestJson<T>(path, {
+      headers: jsonHeaders(options, { encryptionHeaders }),
+      encryption: { profile, session },
+      retryInit: async () => ({
+        headers: jsonHeaders(options, {
+          encryptionHeaders: await createEncryptionRequestHeaders(session, profile),
+        }),
       }),
-    }),
-    signal: options.signal,
-    skipAuthRefresh: options.skipAuthRefresh,
-  })
+      signal: options.signal,
+      skipAuthRefresh: options.skipAuthRefresh,
+    })
+  } catch (error) {
+    throw normalizeApiError(error)
+  }
 }
 
 export async function apiPostEncrypted<TBody, TResponse>(
@@ -94,39 +108,43 @@ export async function apiPostEncrypted<TBody, TResponse>(
   profile: EncryptionProfile,
   options: ApiRequestOptions = {},
 ): Promise<TResponse> {
-  const session = await getEncryptionSession(
-    profile,
-    options.encryptionScope ?? 'admin',
-    options.signal,
-  )
-  const requestBody = options.encryptRequest
-    ? await encryptRequestPayload(body, profile, session)
-    : body
-  const encryptionHeaders = await createEncryptionRequestHeaders(session, profile)
-  const encryptedRetryInit: RetryInitFactory = async () => {
-    const retryBody = options.encryptRequest
+  try {
+    const session = await getEncryptionSession(
+      profile,
+      options.encryptionScope ?? 'admin',
+      options.signal,
+    )
+    const requestBody = options.encryptRequest
       ? await encryptRequestPayload(body, profile, session)
       : body
-    return {
+    const encryptionHeaders = await createEncryptionRequestHeaders(session, profile)
+    const encryptedRetryInit: RetryInitFactory = async () => {
+      const retryBody = options.encryptRequest
+        ? await encryptRequestPayload(body, profile, session)
+        : body
+      return {
+        headers: jsonHeaders(options, {
+          includeContentType: true,
+          encryptionHeaders: await createEncryptionRequestHeaders(session, profile),
+        }),
+        body: JSON.stringify(retryBody),
+      }
+    }
+    return await requestJson<TResponse>(path, {
+      method: 'POST',
       headers: jsonHeaders(options, {
         includeContentType: true,
-        encryptionHeaders: await createEncryptionRequestHeaders(session, profile),
+        encryptionHeaders,
       }),
-      body: JSON.stringify(retryBody),
-    }
+      body: JSON.stringify(requestBody),
+      encryption: { profile, session },
+      retryInit: encryptedRetryInit,
+      signal: options.signal,
+      skipAuthRefresh: options.skipAuthRefresh,
+    })
+  } catch (error) {
+    throw normalizeApiError(error)
   }
-  return requestJson<TResponse>(path, {
-    method: 'POST',
-    headers: jsonHeaders(options, {
-      includeContentType: true,
-      encryptionHeaders,
-    }),
-    body: JSON.stringify(requestBody),
-    encryption: { profile, session },
-    retryInit: encryptedRetryInit,
-    signal: options.signal,
-    skipAuthRefresh: options.skipAuthRefresh,
-  })
 }
 
 export async function apiPostFormEncrypted<TResponse>(
@@ -135,28 +153,32 @@ export async function apiPostFormEncrypted<TResponse>(
   profile: EncryptionProfile,
   options: ApiRequestOptions = {},
 ): Promise<TResponse> {
-  const session = await getEncryptionSession(
-    profile,
-    options.encryptionScope ?? 'admin',
-    options.signal,
-  )
-  const encryptionHeaders = await createEncryptionRequestHeaders(session, profile)
-  return requestJson<TResponse>(path, {
-    method: 'POST',
-    headers: jsonHeaders(options, {
-      encryptionHeaders,
-    }),
-    body,
-    encryption: { profile, session },
-    retryInit: async () => ({
+  try {
+    const session = await getEncryptionSession(
+      profile,
+      options.encryptionScope ?? 'admin',
+      options.signal,
+    )
+    const encryptionHeaders = await createEncryptionRequestHeaders(session, profile)
+    return await requestJson<TResponse>(path, {
+      method: 'POST',
       headers: jsonHeaders(options, {
-        encryptionHeaders: await createEncryptionRequestHeaders(session, profile),
+        encryptionHeaders,
       }),
       body,
-    }),
-    signal: options.signal,
-    skipAuthRefresh: options.skipAuthRefresh,
-  })
+      encryption: { profile, session },
+      retryInit: async () => ({
+        headers: jsonHeaders(options, {
+          encryptionHeaders: await createEncryptionRequestHeaders(session, profile),
+        }),
+        body,
+      }),
+      signal: options.signal,
+      skipAuthRefresh: options.skipAuthRefresh,
+    })
+  } catch (error) {
+    throw normalizeApiError(error)
+  }
 }
 
 export async function apiPatchEncrypted<TBody, TResponse>(
@@ -165,39 +187,43 @@ export async function apiPatchEncrypted<TBody, TResponse>(
   profile: EncryptionProfile,
   options: ApiRequestOptions = {},
 ): Promise<TResponse> {
-  const session = await getEncryptionSession(
-    profile,
-    options.encryptionScope ?? 'admin',
-    options.signal,
-  )
-  const requestBody = options.encryptRequest
-    ? await encryptRequestPayload(body, profile, session)
-    : body
-  const encryptionHeaders = await createEncryptionRequestHeaders(session, profile)
-  const encryptedRetryInit: RetryInitFactory = async () => {
-    const retryBody = options.encryptRequest
+  try {
+    const session = await getEncryptionSession(
+      profile,
+      options.encryptionScope ?? 'admin',
+      options.signal,
+    )
+    const requestBody = options.encryptRequest
       ? await encryptRequestPayload(body, profile, session)
       : body
-    return {
+    const encryptionHeaders = await createEncryptionRequestHeaders(session, profile)
+    const encryptedRetryInit: RetryInitFactory = async () => {
+      const retryBody = options.encryptRequest
+        ? await encryptRequestPayload(body, profile, session)
+        : body
+      return {
+        headers: jsonHeaders(options, {
+          includeContentType: true,
+          encryptionHeaders: await createEncryptionRequestHeaders(session, profile),
+        }),
+        body: JSON.stringify(retryBody),
+      }
+    }
+    return await requestJson<TResponse>(path, {
+      method: 'PATCH',
       headers: jsonHeaders(options, {
         includeContentType: true,
-        encryptionHeaders: await createEncryptionRequestHeaders(session, profile),
+        encryptionHeaders,
       }),
-      body: JSON.stringify(retryBody),
-    }
+      body: JSON.stringify(requestBody),
+      encryption: { profile, session },
+      retryInit: encryptedRetryInit,
+      signal: options.signal,
+      skipAuthRefresh: options.skipAuthRefresh,
+    })
+  } catch (error) {
+    throw normalizeApiError(error)
   }
-  return requestJson<TResponse>(path, {
-    method: 'PATCH',
-    headers: jsonHeaders(options, {
-      includeContentType: true,
-      encryptionHeaders,
-    }),
-    body: JSON.stringify(requestBody),
-    encryption: { profile, session },
-    retryInit: encryptedRetryInit,
-    signal: options.signal,
-    skipAuthRefresh: options.skipAuthRefresh,
-  })
 }
 
 export async function apiDeleteEncrypted<TResponse>(
@@ -205,26 +231,30 @@ export async function apiDeleteEncrypted<TResponse>(
   profile: EncryptionProfile,
   options: ApiRequestOptions = {},
 ): Promise<TResponse> {
-  const session = await getEncryptionSession(
-    profile,
-    options.encryptionScope ?? 'admin',
-    options.signal,
-  )
-  const encryptionHeaders = await createEncryptionRequestHeaders(session, profile)
-  return requestJson<TResponse>(path, {
-    method: 'DELETE',
-    headers: jsonHeaders(options, {
-      encryptionHeaders,
-    }),
-    encryption: { profile, session },
-    retryInit: async () => ({
+  try {
+    const session = await getEncryptionSession(
+      profile,
+      options.encryptionScope ?? 'admin',
+      options.signal,
+    )
+    const encryptionHeaders = await createEncryptionRequestHeaders(session, profile)
+    return await requestJson<TResponse>(path, {
+      method: 'DELETE',
       headers: jsonHeaders(options, {
-        encryptionHeaders: await createEncryptionRequestHeaders(session, profile),
+        encryptionHeaders,
       }),
-    }),
-    signal: options.signal,
-    skipAuthRefresh: options.skipAuthRefresh,
-  })
+      encryption: { profile, session },
+      retryInit: async () => ({
+        headers: jsonHeaders(options, {
+          encryptionHeaders: await createEncryptionRequestHeaders(session, profile),
+        }),
+      }),
+      signal: options.signal,
+      skipAuthRefresh: options.skipAuthRefresh,
+    })
+  } catch (error) {
+    throw normalizeApiError(error)
+  }
 }
 
 async function requestJson<T>(
@@ -333,5 +363,28 @@ function isEncryptedApiResponse(value: unknown): value is EncryptedApiResponse {
     'salt_id' in value &&
     'nonce' in value &&
     'ciphertext' in value
+  )
+}
+
+function normalizeApiError(error: unknown): unknown {
+  if (error instanceof ApiError) {
+    return error
+  }
+  if (isSaltPolicyError(error)) {
+    return new ApiError(RATE_LIMIT_MESSAGE, 429)
+  }
+  return error
+}
+
+function isSaltPolicyError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false
+  }
+  return (
+    error.name === 'EncryptionSessionRateLimitError' ||
+    error.name === 'SaltSocketPolicyError' ||
+    error.message.includes('encryption session rate limited') ||
+    error.message.includes('salt lease socket closed by policy') ||
+    error.message.includes('salt lease socket temporarily blocked by policy')
   )
 }

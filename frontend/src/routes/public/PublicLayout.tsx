@@ -6,18 +6,71 @@ import {
   Link as LinkIcon,
   Settings,
 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { NavLink, Outlet } from 'react-router-dom'
 
+import {
+  isRateLimitError,
+  RATE_LIMIT_MESSAGE,
+} from '../../api/client.ts'
 import { getPublicSiteProfile } from '../../features/settings/api.ts'
 import { siteSettings } from '../../features/settings/siteSettings.ts'
 
+const RATE_LIMIT_NOTICE_VISIBLE_MS = 8_000
+
 export function PublicLayout() {
-  const { data: siteProfile } = useQuery({
+  const queryClient = useQueryClient()
+  const [rateLimitNoticeUntil, setRateLimitNoticeUntil] = useState(0)
+  const { data: siteProfile, error: siteProfileError } = useQuery({
     queryKey: ['public-site-profile'],
     queryFn: ({ signal }) => getPublicSiteProfile({ signal }),
   })
   const title = siteProfile?.title ?? siteSettings.title
+  const showRateLimitNotice =
+    isRateLimitError(siteProfileError) || rateLimitNoticeUntil > 0
+
+  useEffect(() => {
+    const showRecentRateLimitNotice = () => {
+      setRateLimitNoticeUntil(Date.now() + RATE_LIMIT_NOTICE_VISIBLE_MS)
+    }
+    const unsubscribeQueries = queryClient.getQueryCache().subscribe((event) => {
+      if (
+        event.type === 'updated' &&
+        isPublicQueryKey(event.query.queryKey) &&
+        isRateLimitError(event.query.state.error)
+      ) {
+        showRecentRateLimitNotice()
+      }
+    })
+    const unsubscribeMutations = queryClient
+      .getMutationCache()
+      .subscribe((event) => {
+        if (
+          event.type === 'updated' &&
+          isRateLimitError(event.mutation.state.error)
+        ) {
+          showRecentRateLimitNotice()
+        }
+      })
+
+    return () => {
+      unsubscribeQueries()
+      unsubscribeMutations()
+    }
+  }, [queryClient])
+
+  useEffect(() => {
+    if (rateLimitNoticeUntil <= Date.now()) {
+      return
+    }
+    const timeoutId = window.setTimeout(
+      () => setRateLimitNoticeUntil(0),
+      rateLimitNoticeUntil - Date.now(),
+    )
+    return () => window.clearTimeout(timeoutId)
+  }, [rateLimitNoticeUntil])
 
   return (
     <div className="public-shell">
@@ -52,9 +105,19 @@ export function PublicLayout() {
           </NavLink>
         </nav>
       </header>
+      {showRateLimitNotice ? (
+        <p className="public-shell__notice" role="alert">
+          {RATE_LIMIT_MESSAGE}
+        </p>
+      ) : null}
       <main>
         <Outlet />
       </main>
     </div>
   )
+}
+
+function isPublicQueryKey(queryKey: readonly unknown[]): boolean {
+  const [scope] = queryKey
+  return typeof scope === 'string' && scope.startsWith('public-')
 }

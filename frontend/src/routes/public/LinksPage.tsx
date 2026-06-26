@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { type FormEvent, useState } from 'react'
 
+import { publicErrorMessage } from '../../api/client.ts'
 import { ListPager } from '../../components/ListPager.tsx'
 import { FriendLinkList } from '../../features/links/FriendLinkList.tsx'
 import {
@@ -29,6 +30,7 @@ export function LinksPage() {
   const [applicationNotice, setApplicationNotice] = useState<string | null>(null)
   const {
     data: linksData,
+    error: linksError,
     isError,
     isLoading,
   } = useQuery({
@@ -45,9 +47,13 @@ export function LinksPage() {
       setApplicationNotice('申请已提交，审核通过后会显示在这里。')
     },
     onError: (error) => {
-      setApplicationNotice(error instanceof Error ? error.message : '申请提交失败')
+      setApplicationNotice(publicErrorMessage(error, '申请提交失败'))
     },
   })
+  const linksErrorMessage = publicErrorMessage(
+    linksError,
+    '友链暂时不可用。',
+  )
   usePageSeo({
     title: '友链',
     description: pageDescription,
@@ -68,7 +74,7 @@ export function LinksPage() {
           <span>朋友们</span>
           <small>{isLoading ? '加载中' : `第 ${page + 1} 页`}</small>
         </div>
-        {isError ? <p className="empty-state">友链暂时不可用。</p> : null}
+        {isError ? <p className="empty-state">{linksErrorMessage}</p> : null}
         {!isLoading && !isError && totalLinks === 0 ? (
           <p className="empty-state">还没有公开友链。</p>
         ) : null}

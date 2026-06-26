@@ -1,5 +1,29 @@
 # 项目进度
 
+## 2026-06-26
+
+### 本轮计划
+
+- 修复线上 `BLOG_ENCRYPTION_SESSION_RATE_LIMIT_MAX_ATTEMPTS=30` 时，salt WSS 命中 `1008` 策略关闭后，返回文章列表会由多个公开加密请求逐个新建 `/encryption/salts` 连接的问题。
+- 只调整前端 salt socket 的限流后冷却与排队请求熔断，不修改文章 UI、后端限流规则或一次性 salt 协议。
+
+### 已完成
+
+- 已确认线上 30/min 配置会让 salt WSS 在短时间多次请求后断开；本轮为同一加密 session 的 salt socket 增加基于最近消息窗口的动态冷却，冷却期内不再批量重建 WSS。
+- 已将 salt WSS `1008` 策略关闭与公开加密 session 协商 `429` 统一映射为公开端限流错误，前台页面展示“您的访问太频繁，请稍后重试”。
+- 已在公开布局订阅公开端查询与操作错误，除各页面局部错误态外，命中限流时还会显示全局提示，避免整个公开站点不可访问时只有泛化失败文案。
+
+### 下一步
+
+- 部署后用线上真实配置复测 `/api/public/encryption/salts` 在 30/min 命中后不会出现多条并发 WSS 重建，并确认公开首页、文章列表、详情、友链、文件和导航页都显示限流提示。
+
+### 验证
+
+- 已运行 `npm.cmd run test -- src/api/encryption.test.ts`，12 个测试通过。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；Vite/Rolldown 仍提示混淆插件耗时较高和既有大 chunk 输出。
+- 已运行 `git diff --check`，未发现空白或行尾问题。
+
 ## 2026-06-24
 
 ### 本轮计划

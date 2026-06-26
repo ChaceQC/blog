@@ -14,6 +14,8 @@ const saltSessionScopes = new Map<string, 'admin' | 'public'>()
 let saltWebSocketInstances: MockSaltSocketInstance[] = []
 let saltWebSocketRespondToPing = true
 let saltWebSocketCloseCodeOnSaltRequest: number | null = null
+let saltWebSocketCloseAfterSaltRequests: number | null = null
+let saltWebSocketSaltRequestCount = 0
 
 describe('getEncryptionSession', () => {
   beforeEach(() => {
@@ -22,6 +24,8 @@ describe('getEncryptionSession', () => {
     saltWebSocketInstances = []
     saltWebSocketRespondToPing = true
     saltWebSocketCloseCodeOnSaltRequest = null
+    saltWebSocketCloseAfterSaltRequests = null
+    saltWebSocketSaltRequestCount = 0
     vi.useFakeTimers()
     stubBrowserCrypto()
     stubSaltWebSocket()
@@ -299,6 +303,143 @@ describe('getEncryptionSession', () => {
 
     expect(saltWebSocketInstances).toHaveLength(1)
   })
+
+  it('maps salt policy closes to a public rate-limit api error', async () => {
+    vi.setSystemTime(new Date('2026-06-23T00:00:00Z'))
+    window.history.replaceState({}, '', '/')
+    captureCookieWrites()
+    saltWebSocketCloseCodeOnSaltRequest = 1008
+    vi.stubGlobal('fetch', sessionFetchMock('public-session', 'public'))
+
+    const { apiGetEncrypted } = await import('./client.ts')
+
+    await expect(
+      apiGetEncrypted('/public/posts?limit=1&offset=0', 'content-v1', {
+        encryptionScope: 'public',
+      }),
+    ).rejects.toMatchObject({
+      message: '您的访问太频繁，请稍后重试',
+      status: 429,
+    })
+  })
+
+  it('maps public encryption session rate limits to a public rate-limit api error', async () => {
+    vi.setSystemTime(new Date('2026-06-23T00:00:00Z'))
+    window.history.replaceState({}, '', '/')
+    captureCookieWrites()
+    const fetchMock = vi.fn<typeof fetch>(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ detail: 'Too many attempts' }), {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }),
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { apiGetEncrypted } = await import('./client.ts')
+
+    await expect(
+      apiGetEncrypted('/public/posts?limit=1&offset=0', 'content-v1', {
+        encryptionScope: 'public',
+      }),
+    ).rejects.toMatchObject({
+      message: '您的访问太频繁，请稍后重试',
+      status: 429,
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(saltWebSocketInstances).toHaveLength(0)
+  })
+
+  it('blocks queued salt requests during policy cooldown without opening more websockets', async () => {
+    vi.setSystemTime(new Date('2026-06-23T00:00:00Z'))
+    window.history.replaceState({}, '', '/')
+    captureCookieWrites()
+    saltWebSocketCloseCodeOnSaltRequest = 1008
+    vi.stubGlobal('fetch', sessionFetchMock('public-session', 'public'))
+
+    const { createEncryptionRequestHeaders, getEncryptionSession } = await import(
+      './encryption.ts'
+    )
+
+    const session = await getEncryptionSession('content-v1', 'public')
+    const results = await Promise.allSettled([
+      createEncryptionRequestHeaders(session, 'content-v1'),
+      createEncryptionRequestHeaders(session, 'content-v1'),
+      createEncryptionRequestHeaders(session, 'content-v1'),
+    ])
+
+    expect(results).toHaveLength(3)
+    expect(results.every((result) => result.status === 'rejected')).toBe(true)
+    expect(
+      results.map((result) =>
+        result.status === 'rejected' ? String(result.reason) : '',
+      ),
+    ).toEqual([
+      expect.stringContaining('policy'),
+      expect.stringContaining('policy'),
+      expect.stringContaining('policy'),
+    ])
+    expect(saltWebSocketInstances).toHaveLength(1)
+
+    await vi.advanceTimersByTimeAsync(999)
+    await expect(
+      createEncryptionRequestHeaders(session, 'content-v1'),
+    ).rejects.toThrow('temporarily blocked by policy')
+    expect(saltWebSocketInstances).toHaveLength(1)
+
+    saltWebSocketCloseCodeOnSaltRequest = null
+    await vi.advanceTimersByTimeAsync(2)
+    await expect(
+      createEncryptionRequestHeaders(session, 'content-v1'),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        'X-Encryption-Session': 'public-session',
+      }),
+    )
+    expect(saltWebSocketInstances).toHaveLength(2)
+  })
+
+  it('uses the remaining local salt message window for policy cooldown', async () => {
+    vi.setSystemTime(new Date('2026-06-23T00:00:00Z'))
+    window.history.replaceState({}, '', '/')
+    captureCookieWrites()
+    saltWebSocketCloseAfterSaltRequests = 31
+    vi.stubGlobal('fetch', sessionFetchMock('public-session', 'public'))
+
+    const { createEncryptionRequestHeaders, getEncryptionSession } = await import(
+      './encryption.ts'
+    )
+
+    const session = await getEncryptionSession('content-v1', 'public')
+    for (let index = 0; index < 30; index += 1) {
+      await createEncryptionRequestHeaders(session, 'content-v1')
+      await vi.advanceTimersByTimeAsync(1_000)
+    }
+    await expect(
+      createEncryptionRequestHeaders(session, 'content-v1'),
+    ).rejects.toThrow('salt lease socket closed by policy')
+    expect(saltWebSocketInstances).toHaveLength(1)
+
+    saltWebSocketCloseAfterSaltRequests = null
+    await vi.advanceTimersByTimeAsync(29_000)
+    await expect(
+      createEncryptionRequestHeaders(session, 'content-v1'),
+    ).rejects.toThrow('temporarily blocked by policy')
+    expect(saltWebSocketInstances).toHaveLength(1)
+
+    await vi.advanceTimersByTimeAsync(1_251)
+    await expect(
+      createEncryptionRequestHeaders(session, 'content-v1'),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        'X-Encryption-Session': 'public-session',
+      }),
+    )
+    expect(saltWebSocketInstances).toHaveLength(2)
+  })
 })
 
 function captureCookieWrites(): string[] {
@@ -413,6 +554,14 @@ function stubSaltWebSocket(): void {
             }),
           )
         })
+        return
+      }
+      saltWebSocketSaltRequestCount += 1
+      if (
+        saltWebSocketCloseAfterSaltRequests !== null &&
+        saltWebSocketSaltRequestCount >= saltWebSocketCloseAfterSaltRequests
+      ) {
+        this.closeWithCode(1008)
         return
       }
       if (saltWebSocketCloseCodeOnSaltRequest !== null) {

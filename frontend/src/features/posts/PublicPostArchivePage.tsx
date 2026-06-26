@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
+import { publicErrorMessage } from '../../api/client.ts'
 import { ListPager } from '../../components/ListPager.tsx'
 import { useQueryPage } from '../../hooks/useQueryPage.ts'
 import { usePageSeo } from '../seo/usePageSeo.ts'
@@ -83,6 +84,18 @@ export function PublicPostArchivePage({ taxonomy }: PublicPostArchivePageProps) 
   const seoPath = archiveSeoPath(taxonomy, searchParams)
   const taxonomyMissing =
     categoryDetailQuery.isError || tagDetailQuery.isError
+  const taxonomyErrorMessage = publicErrorMessage(
+    categoriesQuery.error ?? tagsQuery.error,
+    '分类或标签暂时不可用。',
+  )
+  const taxonomyDetailErrorMessage = publicErrorMessage(
+    categoryDetailQuery.error ?? tagDetailQuery.error,
+    '这个归档入口暂时不存在。',
+  )
+  const postsErrorMessage = publicErrorMessage(
+    postsQuery.error,
+    '文章服务暂时不可用。',
+  )
 
   usePageSeo({
     title: heading.title,
@@ -122,7 +135,7 @@ export function PublicPostArchivePage({ taxonomy }: PublicPostArchivePageProps) 
             linkPrefix="/tags"
           />
           {categoriesQuery.isError || tagsQuery.isError ? (
-            <p className="empty-state">分类或标签暂时不可用。</p>
+            <p className="empty-state">{taxonomyErrorMessage}</p>
           ) : null}
         </div>
         <div className="section-heading section-heading--stacked">
@@ -130,8 +143,8 @@ export function PublicPostArchivePage({ taxonomy }: PublicPostArchivePageProps) 
           <span>文稿</span>
           <small>{postsQuery.isLoading ? '加载中' : `第 ${page + 1} 页`}</small>
         </div>
-        {taxonomyMissing ? <p className="empty-state">这个归档入口暂时不存在。</p> : null}
-        {postsQuery.isError ? <p className="empty-state">文章服务暂时不可用。</p> : null}
+        {taxonomyMissing ? <p className="empty-state">{taxonomyDetailErrorMessage}</p> : null}
+        {postsQuery.isError ? <p className="empty-state">{postsErrorMessage}</p> : null}
         {!postsQuery.isLoading && !postsQuery.isError && posts.length === 0 ? (
           <p className="empty-state">
             {activeFilterLabel === '全部文章'

@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Download } from 'lucide-react'
 import { useState } from 'react'
 
+import { publicErrorMessage } from '../../api/client.ts'
 import { ListPager } from '../../components/ListPager.tsx'
 import {
   getPublicFileTemporaryUrl,
@@ -26,10 +27,15 @@ export function FilesPage() {
   })
   const temporaryUrlMutation = useMutation({
     mutationFn: (fileId: number) => getPublicFileTemporaryUrl(fileId),
-    onError: () => setNotice('下载链接暂时无法生成。'),
+    onError: (error) =>
+      setNotice(publicErrorMessage(error, '下载链接暂时无法生成。')),
   })
   const files = filesQuery.data?.items ?? emptyFiles
   const totalFiles = filesQuery.data?.total ?? 0
+  const filesErrorMessage = publicErrorMessage(
+    filesQuery.error,
+    '文件列表暂时不可用。',
+  )
   usePageSeo({
     title: '文件',
     description: pageDescription,
@@ -42,8 +48,8 @@ export function FilesPage() {
       const link = await temporaryUrlMutation.mutateAsync(file.id)
       window.open(link.url, '_blank', 'noopener,noreferrer')
       setNotice(`链接有效至 ${formatChinaDateTime(link.expires_at, '未知时间')}`)
-    } catch {
-      setNotice('下载链接暂时无法生成。')
+    } catch (error) {
+      setNotice(publicErrorMessage(error, '下载链接暂时无法生成。'))
     }
   }
 
@@ -62,7 +68,7 @@ export function FilesPage() {
           <small>{filesQuery.isLoading ? '加载中' : `第 ${page + 1} 页`}</small>
         </div>
         {notice ? <p className="empty-state">{notice}</p> : null}
-        {filesQuery.isError ? <p className="empty-state">文件列表暂时不可用。</p> : null}
+        {filesQuery.isError ? <p className="empty-state">{filesErrorMessage}</p> : null}
         {!filesQuery.isLoading && !filesQuery.isError && totalFiles === 0 ? (
           <p className="empty-state">还没有公开文件。</p>
         ) : null}

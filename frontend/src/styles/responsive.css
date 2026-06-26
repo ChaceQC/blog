@@ -121,6 +121,12 @@
     padding: 8px;
   }
 
+  .public-shell__notice {
+    top: 118px;
+    width: min(calc(100% - 48px), 520px);
+    text-align: center;
+  }
+
   .admin-shell {
     width: min(100%, 520px);
     padding-inline: 20px;
