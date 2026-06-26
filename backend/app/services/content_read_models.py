@@ -53,6 +53,8 @@ class PublicPostRead:
     summary: str | None
     cover_file_id: int | None
     word_count: int
+    view_count: int
+    like_count: int
     seo_title: str | None
     seo_description: str | None
     seo_keywords: str | None
@@ -95,6 +97,8 @@ def public_post_read(post: Post) -> PublicPostRead:
         summary=post.summary,
         cover_file_id=post.cover_file_id,
         word_count=max(post.word_count, count_words(post.content_md)),
+        view_count=post.view_count,
+        like_count=post.like_count,
         seo_title=post.seo_title,
         seo_description=post.seo_description,
         seo_keywords=post.seo_keywords,
@@ -142,6 +146,8 @@ def public_post_detail_read(post: Post) -> PublicPostDetailRead:
         summary=item.summary,
         cover_file_id=item.cover_file_id,
         word_count=item.word_count,
+        view_count=item.view_count,
+        like_count=item.like_count,
         seo_title=item.seo_title,
         seo_description=item.seo_description,
         seo_keywords=item.seo_keywords,

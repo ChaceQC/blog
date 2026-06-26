@@ -9,11 +9,13 @@ from app.api.dependencies import (
     get_encryption_session_manager,
     get_link_service,
     get_log_service,
+    get_post_interaction_service,
     get_rate_limit_service,
     get_setting_service,
 )
 from app.core.encryption import EncryptionProfile
 from app.main import app
+from app.schemas.content import PublicPostInteractionState
 from app.schemas.encryption import (
     BrowserPublicKey,
     CreateEncryptionSessionResponse,
@@ -201,6 +203,8 @@ class FakePublicContentService:
                 summary="摘要",
                 cover_file_id=1,
                 word_count=8,
+                view_count=649,
+                like_count=11,
                 seo_title=None,
                 seo_description="SEO 摘要",
                 seo_keywords="博客,验证",
@@ -222,6 +226,8 @@ class FakePublicContentService:
                 cover_file_id=1,
                 content_md="中文阅读时长 test-article 2026",
                 word_count=1,
+                view_count=649,
+                like_count=11,
                 seo_title="SEO 标题",
                 seo_description="SEO <摘要>",
                 seo_keywords="博客,验证",
@@ -294,6 +300,8 @@ class FakePublicContentService:
             ),
             content_md="中文阅读时长 test-article 2026",
             word_count=8,
+            view_count=649,
+            like_count=11,
             seo_title=None,
             seo_description="SEO 摘要",
             seo_keywords="博客,验证",
@@ -323,6 +331,43 @@ class ExplodingPublicContentService:
 
     async def count_public_posts(self, **_: object) -> int:
         raise AssertionError("public content service should not be called")
+
+
+class FakePostInteractionService:
+    def __init__(
+        self,
+        *,
+        risk_limited: bool = False,
+        missing: bool = False,
+    ) -> None:
+        self.risk_limited = risk_limited
+        self.missing = missing
+        self.views: list[dict[str, object]] = []
+        self.likes: list[dict[str, object]] = []
+
+    async def record_view(self, **kwargs: object) -> PublicPostInteractionState:
+        if self.missing:
+            raise ContentNotFoundError("post not found")
+        self.views.append(dict(kwargs))
+        return PublicPostInteractionState(
+            view_count=650,
+            like_count=11,
+            liked=False,
+        )
+
+    async def set_like(self, **kwargs: object) -> PublicPostInteractionState:
+        from app.services.post_interactions import PostInteractionRiskLimited
+
+        if self.missing:
+            raise ContentNotFoundError("post not found")
+        if self.risk_limited:
+            raise PostInteractionRiskLimited("risk limited")
+        self.likes.append(dict(kwargs))
+        return PublicPostInteractionState(
+            view_count=650,
+            like_count=12 if kwargs.get("liked") else 11,
+            liked=bool(kwargs.get("liked")),
+        )
 
 
 class ExplodingFeedContentService:
@@ -484,12 +529,14 @@ __all__ = (
     "ExplodingPublicContentService",
     "FakeEncryptionSessionManager",
     "FakeLogService",
+    "FakePostInteractionService",
     "FakePublicContentService",
     "FakePublicLinkService",
     "FakeSettingService",
     "FriendLinkApplicationLimitExceededError",
     "InMemoryAccessLogDedupeBackend",
     "PublicPageDetailRead",
+    "PublicPostInteractionState",
     "PublicPostDetailRead",
     "PublicPostRead",
     "PublicTaxonomyRead",
@@ -510,6 +557,7 @@ __all__ = (
     "get_encryption_session_manager",
     "get_link_service",
     "get_log_service",
+    "get_post_interaction_service",
     "get_rate_limit_service",
     "get_setting_service",
 )

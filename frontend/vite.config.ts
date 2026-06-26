@@ -126,6 +126,7 @@ export default defineConfig(({ command }) => ({
       '/api': {
         target: developmentApiTarget,
         changeOrigin: true,
+        ws: true,
         rewrite: (path) =>
           developmentApiPath === '/api'
             ? path

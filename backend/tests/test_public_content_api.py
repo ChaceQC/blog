@@ -2,13 +2,32 @@ from tests.public_content_api_helpers import (
     ExplodingPublicContentService,
     FakeEncryptionSessionManager,
     FakeLogService,
+    FakePostInteractionService,
     FakePublicContentService,
     TestClient,
     app,
     get_content_service,
     get_encryption_session_manager,
     get_log_service,
+    get_post_interaction_service,
 )
+
+
+def fingerprint_payload() -> dict[str, object]:
+    return {
+        "fingerprint": {
+            "version": "web-v1",
+            "visitor_id": "local-visitor-id-0123456789",
+            "browser_hash": "a" * 64,
+            "device_hash": "b" * 64,
+            "composite_hash": "c" * 64,
+            "timezone": "Asia/Shanghai",
+            "language": "zh-CN",
+            "platform": "Win32",
+            "screen": "1536x864x24",
+            "created_at_ms": 1782460800000,
+        },
+    }
 
 
 def test_public_posts_returns_published_post_list() -> None:
@@ -39,6 +58,8 @@ def test_public_posts_returns_published_post_list() -> None:
     assert manager.payload["items"][0]["slug"] == "public-post"
     assert "content_html" not in manager.payload["items"][0]
     assert manager.payload["items"][0]["word_count"] == 8
+    assert manager.payload["items"][0]["view_count"] == 649
+    assert manager.payload["items"][0]["like_count"] == 11
     assert manager.payload["items"][0]["seo_keywords"] == "博客,验证"
     assert manager.payload["items"][0]["category_names"] == ["技术"]
     assert manager.payload["items"][0]["tag_names"] == ["FastAPI", "React"]
@@ -318,6 +339,8 @@ def test_public_post_detail_returns_html_content() -> None:
         in str(manager.payload["content_html"])
     )
     assert manager.payload["word_count"] == 8
+    assert manager.payload["view_count"] == 649
+    assert manager.payload["like_count"] == 11
     assert (
         "/api/public/posts/public-post/files/1/thumbnail?expires="
         in str(manager.payload["cover_image_url"])
@@ -328,6 +351,141 @@ def test_public_post_detail_returns_html_content() -> None:
     assert "token=" in str(manager.payload["content_html"])
     assert logs.items[0]["access_type"] == "public_post_detail"
     assert logs.items[0]["path"] == "/api/public/posts/public-post"
+
+def test_public_post_view_records_with_fingerprint() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager(fingerprint_payload())
+    interactions = FakePostInteractionService()
+    logs = FakeLogService()
+    app.dependency_overrides[get_post_interaction_service] = lambda: interactions
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: logs
+
+    try:
+        response = client.post(
+            "/api/public/posts/public-post/view",
+            json={
+                "session_id": "public-session",
+                "profile": "content-v1",
+                "salt_id": "request-salt",
+                "nonce": "nonce",
+                "ciphertext": "ciphertext",
+            },
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert manager.payload == {
+        "view_count": 650,
+        "like_count": 11,
+        "liked": False,
+    }
+    assert interactions.views[0]["slug"] == "public-post"
+    assert interactions.views[0]["fingerprint"].version == "web-v1"
+    assert logs.items[0]["access_type"] == "public_post_view"
+
+def test_public_post_like_sets_target_state() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager(
+        {**fingerprint_payload(), "liked": True},
+    )
+    interactions = FakePostInteractionService()
+    app.dependency_overrides[get_post_interaction_service] = lambda: interactions
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+
+    try:
+        response = client.post(
+            "/api/public/posts/public-post/like",
+            json={
+                "session_id": "public-session",
+                "profile": "content-v1",
+                "salt_id": "request-salt",
+                "nonce": "nonce",
+                "ciphertext": "ciphertext",
+            },
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert manager.payload == {
+        "view_count": 650,
+        "like_count": 12,
+        "liked": True,
+    }
+    assert interactions.likes[0]["liked"] is True
+
+def test_public_post_like_rejects_delta_payload() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager(
+        {**fingerprint_payload(), "liked": True, "delta": 99},
+    )
+    interactions = FakePostInteractionService()
+    app.dependency_overrides[get_post_interaction_service] = lambda: interactions
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+
+    try:
+        response = client.post(
+            "/api/public/posts/public-post/like",
+            json={
+                "session_id": "public-session",
+                "profile": "content-v1",
+                "salt_id": "request-salt",
+                "nonce": "nonce",
+                "ciphertext": "ciphertext",
+            },
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert interactions.likes == []
+
+def test_public_post_like_risk_limit_returns_429() -> None:
+    client = TestClient(app)
+    manager = FakeEncryptionSessionManager(
+        {**fingerprint_payload(), "liked": True},
+    )
+    interactions = FakePostInteractionService(risk_limited=True)
+    app.dependency_overrides[get_post_interaction_service] = lambda: interactions
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+
+    try:
+        response = client.post(
+            "/api/public/posts/public-post/like",
+            json={
+                "session_id": "public-session",
+                "profile": "content-v1",
+                "salt_id": "request-salt",
+                "nonce": "nonce",
+                "ciphertext": "ciphertext",
+            },
+            headers={
+                "X-Encryption-Session": "public-session",
+                "X-Encryption-Response-Salt": "test-response-salt",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "post interaction risk limited"
 
 def test_public_post_detail_returns_404_for_missing_post() -> None:
     client = TestClient(app)

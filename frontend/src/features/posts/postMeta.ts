@@ -12,6 +12,13 @@ export function getReadingMinutes(wordCount: number): number {
   return Math.max(1, Math.ceil(wordCount / 400))
 }
 
+export function formatPostWordCount(wordCount: number): string {
+  if (wordCount >= 10000) {
+    return `${(wordCount / 10000).toFixed(1).replace(/\.0$/, '')} 万字`
+  }
+  return `${wordCount} 字`
+}
+
 export function formatRelativePostDate(value: string | null): string {
   if (!value) {
     return '刚刚'

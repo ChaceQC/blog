@@ -1,9 +1,10 @@
-import { Clock3 } from 'lucide-react'
+import { Clock3, Eye, Heart } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { StatusBadge } from '../../components/StatusBadge.tsx'
 import {
   formatPostDate,
+  formatPostWordCount,
   getReadingMinutes,
   postCoverUrl,
 } from './postMeta.ts'
@@ -58,10 +59,23 @@ export function PostList({ posts, startIndex = 0 }: PostListProps) {
                 </div>
               ) : null}
               <div className="post-row__footer">
-                <span>{formatPostDate(post.published_at)}</span>
-                <span>
-                  <Clock3 size={16} strokeWidth={1.8} aria-hidden="true" />
-                  {getReadingMinutes(post.word_count)} 分钟
+                <span className="post-row__date">
+                  {formatPostDate(post.published_at)}
+                </span>
+                <span className="post-row__stats">
+                  <span>
+                    <Clock3 size={16} strokeWidth={1.8} aria-hidden="true" />
+                    {getReadingMinutes(post.word_count)} 分钟
+                  </span>
+                  <span>{formatPostWordCount(post.word_count)}</span>
+                  <span className="post-stat" aria-label={`浏览 ${post.view_count}`}>
+                    <Eye size={15} strokeWidth={1.8} aria-hidden="true" />
+                    {post.view_count}
+                  </span>
+                  <span className="post-stat" aria-label={`点赞 ${post.like_count}`}>
+                    <Heart size={15} strokeWidth={1.8} aria-hidden="true" />
+                    {post.like_count}
+                  </span>
                 </span>
               </div>
             </div>

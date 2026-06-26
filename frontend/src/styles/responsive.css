@@ -245,10 +245,32 @@
     line-height: 1.4;
   }
 
-  .compact-row,
-  .post-row__footer {
+  .compact-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .post-row__footer {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    justify-content: stretch;
+    gap: 8px 10px;
+    font-size: 0.8rem;
+  }
+
+  .post-row__footer span {
+    gap: 4px;
+  }
+
+  .post-row__date {
+    align-self: end;
+    margin-right: 0;
+  }
+
+  .post-row__stats {
+    justify-self: end;
+    margin-left: 0;
   }
 
   .friend-link-row {

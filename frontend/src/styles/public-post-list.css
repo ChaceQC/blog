@@ -26,13 +26,37 @@
 
 .post-row__footer {
   align-self: end;
+  justify-self: stretch;
+  width: 100%;
   justify-content: space-between;
+  gap: 10px 14px;
 }
 
-.post-row__footer span {
+.post-row__footer > span,
+.post-row__stats > span {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
+}
+
+.post-row__date {
+  margin-right: auto;
+}
+
+.post-row__stats {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px 14px;
+  margin-left: auto;
+}
+
+.post-row__footer .post-stat {
+  color: var(--color-neutral-6);
 }
 
 .post-taxonomy {
@@ -238,4 +262,3 @@
   color: var(--color-neutral-10);
   transform: translateX(3px);
 }
-

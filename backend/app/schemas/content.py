@@ -107,6 +107,8 @@ class PublicPostItem(BaseModel):
     cover_file_id: int | None
     cover_image_url: str | None = None
     word_count: int
+    view_count: int = Field(ge=0)
+    like_count: int = Field(ge=0)
     seo_title: str | None
     seo_description: str | None
     seo_keywords: str | None = None
@@ -120,6 +122,39 @@ class PublicPostItem(BaseModel):
 
 class PublicPostDetail(PublicPostItem):
     content_html: str
+
+
+class VisitorFingerprint(BaseModel):
+    version: str = Field(min_length=1, max_length=32)
+    visitor_id: str = Field(min_length=16, max_length=128)
+    browser_hash: str = Field(min_length=32, max_length=128)
+    device_hash: str = Field(min_length=32, max_length=128)
+    composite_hash: str = Field(min_length=32, max_length=128)
+    timezone: str | None = Field(default=None, max_length=64)
+    language: str | None = Field(default=None, max_length=32)
+    platform: str | None = Field(default=None, max_length=64)
+    screen: str | None = Field(default=None, max_length=64)
+    created_at_ms: int = Field(ge=0)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PublicPostInteractionRequest(BaseModel):
+    fingerprint: VisitorFingerprint
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PublicPostLikeRequest(PublicPostInteractionRequest):
+    liked: bool
+
+
+class PublicPostInteractionState(BaseModel):
+    view_count: int = Field(ge=0)
+    like_count: int = Field(ge=0)
+    liked: bool
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class PublicPageDetail(BaseModel):

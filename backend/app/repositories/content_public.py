@@ -112,6 +112,21 @@ class ContentPublicQueryMixin:
         await self._attach_post_taxonomy([post] if post is not None else [])
         return post
 
+    async def get_public_post_counts_by_slug(
+        self,
+        slug: str,
+    ) -> tuple[int, int, int] | None:
+        result = await self.session.execute(
+            select(Post.id, Post.view_count, Post.like_count).where(
+                Post.slug == slug,
+                *public_post_filters(utc_now()),
+            ),
+        )
+        row = result.one_or_none()
+        if row is None:
+            return None
+        return int(row.id), int(row.view_count), int(row.like_count)
+
     async def get_public_page_by_slug(self, slug: str) -> Page | None:
         result = await self.session.execute(
             select(Page).where(

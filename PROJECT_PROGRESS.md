@@ -1551,3 +1551,44 @@
 - 已使用 Playwright CLI + Microsoft Edge 模拟逐步扩大标题选区，确认同一行笔刷 stroke 在拖选过程中保持同一个 DOM 节点，截图保存到已忽略的 `output/playwright/selection-brush-stable.png`。
 - 已使用 Playwright CLI + Microsoft Edge 检查标题、统计、列表标题可显示笔刷，社交图标按钮不生成笔刷矩形，截图保存到已忽略的 `output/playwright/selection-icon-buttons-skipped.png`。
 - 已使用 Playwright CLI + Microsoft Edge 复查首页和文章归档页标题字号与字体，截图保存到已忽略的 `output/playwright/title-home-smaller.png` 与 `output/playwright/title-posts-smaller.png`。
+
+## 2026-06-26
+
+### 已完成
+
+- 已根据文章点赞和浏览统计需求更新计划书：明确匿名访客企业级分层指纹、服务端 HMAC 派生、Redis/内存短时去重、幂等点赞状态机和防重放边界。
+- 已确定公开文章列表 UI：左下角保留日期原位置，右下角只展示阅读时长、字数、浏览数和点赞数，不提供列表点赞操作；浏览数与点赞数使用低对比眼睛/爱心图标样式。
+- 已确定文章详情 UI：桌面端在文章内容右侧边界附近竖向悬浮显示浏览数和点赞按钮，移动端回落到右下角安全区域内的横向悬浮控件。
+- 新增 `posts.like_count` 和 `post_likes`，点赞记录按文章与匿名访客哈希唯一约束保存，物理删除文章时外键级联清理。
+- 新增公开文章互动服务：浏览统计按匿名设备与风险指纹短时去重，点赞接口只接受目标布尔状态并由服务端固定步长更新计数，防止客户端传 `+n` / `-n`。
+- 文章软删除流程已清理对应匿名点赞记录并重置浏览数、点赞数，避免旧公开互动数据随未来恢复流程带回。
+- 前端新增版本化匿名设备指纹摘要，结合本地匿名设备 ID、浏览器/设备能力摘要、Canvas/WebGL/Audio 摘要、语言、时区、屏幕和平台信息生成 SHA-256 摘要后提交。
+- 文章列表 footer 已拆成左侧日期与右侧统计组：日期保持左下角，阅读时长、字数、浏览数和点赞数在同一行右下角对齐，移动端可自然换行。
+- 文章详情已接入浏览登记和悬浮点赞按钮；桌面端竖向排列在文章内容右侧边界附近，移动端使用安全区域偏移。
+- 已修复本地 Vite `/api` 代理的 WebSocket 转发配置，方便浏览统计、点赞和加密 salt WSS 在本地联调时保持同源代理路径一致。
+
+### 进行中
+
+- 文章点赞与浏览统计功能已完成，等待确认是否提交。
+
+### 阻塞与风险
+
+- 匿名指纹不能等同于登录身份，用户清理数据、更换浏览器、切换设备或刻意伪造环境时仍可能绕过；本次目标是提高刷量成本、保证计数状态机正确、避免重放和客户端传增减量。
+- 生产多进程/多容器环境的浏览去重和互动风控必须使用 Redis；内存后端仅用于本地开发和单进程测试。
+
+### 下一步
+
+- 生产部署时验证 Redis 配置下多进程浏览去重与点赞风控一致性。
+
+### 验证
+
+- 已运行 `uv run ruff check .`，通过。
+- 已运行 `uv run pytest`，258 个测试通过、2 个 Redis 集成测试因环境跳过；保留 FastAPI/Starlette 上游弃用警告。
+- 已运行 `uv run alembic upgrade head --sql`，新增 `post_likes` 与 `posts.like_count` 的升级 SQL 可生成。
+- 已运行 `uv run alembic downgrade 20260626_0012:20260624_0011 --sql`，回滚 SQL 可生成。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；Vite 仍提示部分 chunk 较大。
+- 最新列表布局调整后已重新运行 `npm.cmd run lint`，通过。
+- 最新列表布局调整后已重新运行 `npm.cmd run build`，通过；Vite/Rolldown 仍提示混淆插件耗时较高，且存在既有大 chunk 提醒。
+- 最新列表布局调整后已使用 Playwright + Microsoft Edge 实测 `/posts`：桌面端日期位于 footer 左侧、阅读时长/字数/浏览/点赞统计组右对齐；390px 移动端日期保持左列，统计组在右列内右对齐换行。
+- 已运行 `git diff --check`，未发现空白或行尾问题。

@@ -56,6 +56,30 @@ class ContentRepositoryProtocol(Protocol):
 
     async def get_public_post_by_slug(self, slug: str) -> Post | None: ...
 
+    async def get_public_post_counts_by_slug(
+        self,
+        slug: str,
+    ) -> tuple[int, int, int] | None: ...
+
+    async def get_post_like_active(
+        self,
+        *,
+        post_id: int,
+        visitor_hash: str,
+    ) -> bool: ...
+
+    async def increment_post_view_count(self, *, post_id: int) -> None: ...
+
+    async def set_post_like_state(
+        self,
+        *,
+        post_id: int,
+        visitor_hash: str,
+        fingerprint_hash: str,
+        risk_hash: str,
+        liked: bool,
+    ) -> bool: ...
+
     async def create_post(
         self,
         *,
@@ -98,6 +122,8 @@ class ContentRepositoryProtocol(Protocol):
         entity_id: int,
         usages: Sequence[tuple[int, str]],
     ) -> None: ...
+
+    async def clear_post_interactions(self, *, post_id: int) -> None: ...
 
     async def list_pages(self, *, limit: int, offset: int) -> Sequence[Page]: ...
 

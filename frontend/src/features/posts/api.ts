@@ -1,9 +1,12 @@
-import { apiGetEncrypted } from '../../api/client.ts'
+import { apiGetEncrypted, apiPostEncrypted } from '../../api/client.ts'
 
 import type {
   PublicPageDetail,
+  PublicPostInteractionPayload,
+  PublicPostInteractionState,
   PublicPostDetail,
   PublicPostListResponse,
+  PublicPostLikePayload,
   PublicTaxonomyItem,
   PublicTaxonomyListResponse,
 } from './types.ts'
@@ -42,6 +45,35 @@ export function getPublicPost(
     `/public/posts/${encodeURIComponent(slug)}`,
     'content-v1',
     { encryptionScope: 'public', signal: options.signal },
+  )
+}
+
+export function recordPublicPostView(
+  slug: string,
+  payload: PublicPostInteractionPayload,
+  options: { signal?: AbortSignal } = {},
+): Promise<PublicPostInteractionState> {
+  return apiPostEncrypted<
+    PublicPostInteractionPayload,
+    PublicPostInteractionState
+  >(
+    `/public/posts/${encodeURIComponent(slug)}/view`,
+    payload,
+    'content-v1',
+    { encryptionScope: 'public', encryptRequest: true, signal: options.signal },
+  )
+}
+
+export function setPublicPostLike(
+  slug: string,
+  payload: PublicPostLikePayload,
+  options: { signal?: AbortSignal } = {},
+): Promise<PublicPostInteractionState> {
+  return apiPostEncrypted<PublicPostLikePayload, PublicPostInteractionState>(
+    `/public/posts/${encodeURIComponent(slug)}/like`,
+    payload,
+    'content-v1',
+    { encryptionScope: 'public', encryptRequest: true, signal: options.signal },
   )
 }
 

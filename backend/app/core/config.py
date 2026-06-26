@@ -47,6 +47,18 @@ class Settings(BaseSettings):
         ge=10,
         le=3600,
     )
+    post_interaction_rate_limit_max_attempts: int = Field(
+        default=30,
+        ge=1,
+        le=300,
+    )
+    post_interaction_rate_limit_window_seconds: int = Field(
+        default=60,
+        ge=10,
+        le=3600,
+    )
+    post_view_dedupe_seconds: int = Field(default=600, ge=0, le=86400)
+    post_like_risk_window_seconds: int = Field(default=86400, ge=60, le=604800)
     rate_limit_backend: Literal["memory", "redis"] = "memory"
     redis_url: str | None = None
     redis_key_prefix: str = "blog:rate-limit"
@@ -118,6 +130,11 @@ class Settings(BaseSettings):
         ):
             raise ValueError(
                 "BLOG_PUBLIC_BASE_URL must be an absolute https URL "
+                "in production",
+            )
+        if self.rate_limit_backend != "redis" or not self.redis_url:
+            raise ValueError(
+                "BLOG_RATE_LIMIT_BACKEND=redis and BLOG_REDIS_URL are required "
                 "in production",
             )
 

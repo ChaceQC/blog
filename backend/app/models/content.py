@@ -1,6 +1,14 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, func
+from sqlalchemy import (
+    Boolean,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import (
@@ -46,6 +54,7 @@ class Post(TimestampMixin, SoftDeleteMixin, Base):
     allow_comment: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     view_count: Mapped[int] = mapped_column(BIGINT_UNSIGNED, default=0, nullable=False)
+    like_count: Mapped[int] = mapped_column(BIGINT_UNSIGNED, default=0, nullable=False)
     word_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     seo_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     seo_description: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -75,6 +84,29 @@ class PostRevision(Base):
         server_default=func.now(),
         nullable=False,
     )
+
+
+class PostLike(TimestampMixin, Base):
+    __tablename__ = "post_likes"
+    __table_args__ = (
+        UniqueConstraint(
+            "post_id",
+            "visitor_hash",
+            name="uq_post_likes_post_visitor",
+        ),
+        Index("idx_post_likes_post_active", "post_id", "active"),
+    )
+
+    id: Mapped[int] = pk_column()
+    post_id: Mapped[int] = mapped_column(
+        BIGINT_UNSIGNED,
+        ForeignKey("posts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    visitor_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    fingerprint_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    risk_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 
 class Category(Base):

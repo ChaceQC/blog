@@ -5,26 +5,37 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request, status
 from app.api.dependencies import (
     EncryptionSessionManagerDependency,
     LogServiceDependency,
+    PostInteractionServiceDependency,
+    RateLimitServiceDependency,
     SettingsDependency,
 )
-from app.api.encrypted_response import encrypted_response
+from app.api.encrypted_response import decrypt_encrypted_request, encrypted_response
+from app.api.limits import enforce_rate_limit
 from app.api.public.common import (
     PublicContentServiceDependency,
     record_public_access,
+    validate_decrypted_payload,
     validate_public_content_session,
 )
 from app.core.encryption import EncryptionProfile
+from app.core.request import client_ip
 from app.schemas.content import (
     SLUG_PATTERN,
     PublicPageDetail,
     PublicPostDetail,
+    PublicPostInteractionRequest,
+    PublicPostInteractionState,
     PublicPostItem,
+    PublicPostLikeRequest,
     PublicPostListResponse,
 )
+from app.schemas.encryption import EncryptedApiRequest, EncryptedApiResponse
 from app.schemas.pagination import PAGE_OFFSET_MAX
 from app.services.content import ContentNotFoundError
 from app.services.content_read_models import PublicPostDetailRead, PublicPostRead
 from app.services.files import create_article_render_token, sign_article_render_urls
+from app.services.post_interactions import PostInteractionRiskLimited
+from app.services.rate_limit import RateLimitRule
 
 router = APIRouter(tags=["public-posts"])
 
@@ -89,6 +100,127 @@ async def list_public_posts(
         entity_type="post",
     )
     return response
+
+
+@router.post("/posts/{slug}/view", response_model=EncryptedApiResponse)
+async def record_public_post_view(
+    slug: Annotated[
+        str,
+        Path(min_length=1, max_length=220, pattern=SLUG_PATTERN),
+    ],
+    payload: EncryptedApiRequest,
+    request: Request,
+    interactions: PostInteractionServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    settings: SettingsDependency,
+    logs: LogServiceDependency,
+    rate_limiter: RateLimitServiceDependency,
+) -> EncryptedApiResponse:
+    await _enforce_post_interaction_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        logs=logs,
+        settings=settings,
+        action="view",
+    )
+    decrypted_payload = await decrypt_encrypted_request(
+        payload,
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+        scope="public",
+    )
+    interaction = validate_decrypted_payload(
+        PublicPostInteractionRequest,
+        decrypted_payload,
+    )
+    try:
+        state = await interactions.record_view(
+            slug=slug,
+            fingerprint=interaction.fingerprint,
+            client_ip=client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+            accept_language=request.headers.get("accept-language"),
+        )
+    except ContentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="post not found",
+        ) from exc
+    await record_public_access(
+        logs,
+        request=request,
+        access_type="public_post_view",
+        status_code=status.HTTP_200_OK,
+        entity_type="post",
+    )
+    return await _post_interaction_response(
+        state,
+        request=request,
+        encryption_manager=encryption_manager,
+    )
+
+
+@router.post("/posts/{slug}/like", response_model=EncryptedApiResponse)
+async def set_public_post_like(
+    slug: Annotated[
+        str,
+        Path(min_length=1, max_length=220, pattern=SLUG_PATTERN),
+    ],
+    payload: EncryptedApiRequest,
+    request: Request,
+    interactions: PostInteractionServiceDependency,
+    encryption_manager: EncryptionSessionManagerDependency,
+    settings: SettingsDependency,
+    logs: LogServiceDependency,
+    rate_limiter: RateLimitServiceDependency,
+) -> EncryptedApiResponse:
+    await _enforce_post_interaction_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        logs=logs,
+        settings=settings,
+        action="like",
+    )
+    decrypted_payload = await decrypt_encrypted_request(
+        payload,
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+        scope="public",
+    )
+    interaction = validate_decrypted_payload(PublicPostLikeRequest, decrypted_payload)
+    try:
+        state = await interactions.set_like(
+            slug=slug,
+            fingerprint=interaction.fingerprint,
+            liked=interaction.liked,
+            client_ip=client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+            accept_language=request.headers.get("accept-language"),
+        )
+    except ContentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="post not found",
+        ) from exc
+    except PostInteractionRiskLimited as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="post interaction risk limited",
+        ) from exc
+    await record_public_access(
+        logs,
+        request=request,
+        access_type="public_post_like",
+        status_code=status.HTTP_200_OK,
+        entity_type="post",
+    )
+    return await _post_interaction_response(
+        state,
+        request=request,
+        encryption_manager=encryption_manager,
+    )
 
 
 @router.get("/posts/{slug}")
@@ -251,4 +383,41 @@ def _signed_cover_url(
     return (
         f"/api/public/posts/{post.slug}/files/{post.cover_file_id}/thumbnail"
         f"?expires={access.expires}&token={access.token}"
+    )
+
+
+async def _enforce_post_interaction_rate_limit(
+    *,
+    request: Request,
+    rate_limiter: RateLimitServiceDependency,
+    logs: LogServiceDependency,
+    settings: SettingsDependency,
+    action: str,
+) -> None:
+    await enforce_rate_limit(
+        request=request,
+        limiter=rate_limiter,
+        logs=logs,
+        key=f"post-interaction:{client_ip(request) or 'unknown'}:{action}",
+        rule=RateLimitRule(
+            max_attempts=settings.post_interaction_rate_limit_max_attempts,
+            window_seconds=settings.post_interaction_rate_limit_window_seconds,
+        ),
+        event_type="rate_limit.post_interaction",
+        detail_json={"scope": "public", "action": action},
+    )
+
+
+async def _post_interaction_response(
+    state: PublicPostInteractionState,
+    *,
+    request: Request,
+    encryption_manager: EncryptionSessionManagerDependency,
+) -> EncryptedApiResponse:
+    return await encrypted_response(
+        state,
+        request=request,
+        manager=encryption_manager,
+        profile=EncryptionProfile.CONTENT,
+        scope="public",
     )

@@ -1,9 +1,17 @@
 from collections.abc import Sequence
 
-from sqlalchemy import delete, select
+from sqlalchemy import case, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.content import Category, Page, Post, PostCategory, PostTag, Tag
+from app.models.content import (
+    Category,
+    Page,
+    Post,
+    PostCategory,
+    PostLike,
+    PostTag,
+    Tag,
+)
 from app.models.file import BlogFile, FileUsage
 from app.repositories.content_helpers import (
     normalize_labels,
@@ -147,6 +155,86 @@ class ContentRepository(ContentPublicQueryMixin):
             )
         await self.session.flush()
 
+    async def get_post_like_active(
+        self,
+        *,
+        post_id: int,
+        visitor_hash: str,
+    ) -> bool | None:
+        result = await self.session.execute(
+            select(PostLike.active).where(
+                PostLike.post_id == post_id,
+                PostLike.visitor_hash == visitor_hash,
+            ),
+        )
+        return result.scalar_one_or_none()
+
+    async def increment_post_view_count(self, *, post_id: int) -> None:
+        await self.session.execute(
+            update(Post)
+            .where(Post.id == post_id)
+            .values(view_count=Post.view_count + 1),
+        )
+        await self.session.flush()
+
+    async def set_post_like_state(
+        self,
+        *,
+        post_id: int,
+        visitor_hash: str,
+        fingerprint_hash: str,
+        risk_hash: str,
+        liked: bool,
+    ) -> bool:
+        result = await self.session.execute(
+            select(PostLike)
+            .where(
+                PostLike.post_id == post_id,
+                PostLike.visitor_hash == visitor_hash,
+            )
+            .with_for_update(),
+        )
+        post_like = result.scalar_one_or_none()
+        if post_like is None:
+            if not liked:
+                return False
+            self.session.add(
+                PostLike(
+                    post_id=post_id,
+                    visitor_hash=visitor_hash,
+                    fingerprint_hash=fingerprint_hash,
+                    risk_hash=risk_hash,
+                    active=liked,
+                ),
+            )
+            if liked:
+                await self._increment_post_like_count(post_id)
+            await self.session.flush()
+            return liked
+
+        previous = post_like.active
+        post_like.fingerprint_hash = fingerprint_hash
+        post_like.risk_hash = risk_hash
+        post_like.active = liked
+        if previous != liked:
+            if liked:
+                await self._increment_post_like_count(post_id)
+            else:
+                await self._decrement_post_like_count(post_id)
+        await self.session.flush()
+        return liked
+
+    async def clear_post_interactions(self, *, post_id: int) -> None:
+        await self.session.execute(
+            delete(PostLike).where(PostLike.post_id == post_id),
+        )
+        await self.session.execute(
+            update(Post)
+            .where(Post.id == post_id)
+            .values(view_count=0, like_count=0),
+        )
+        await self.session.flush()
+
     async def list_pages(self, *, limit: int, offset: int) -> Sequence[Page]:
         result = await self.session.execute(
             select(Page)
@@ -226,6 +314,25 @@ class ContentRepository(ContentPublicQueryMixin):
         self.session.add(tag)
         await self.session.flush()
         return tag
+
+    async def _increment_post_like_count(self, post_id: int) -> None:
+        await self.session.execute(
+            update(Post)
+            .where(Post.id == post_id)
+            .values(like_count=Post.like_count + 1),
+        )
+
+    async def _decrement_post_like_count(self, post_id: int) -> None:
+        await self.session.execute(
+            update(Post)
+            .where(Post.id == post_id)
+            .values(
+                like_count=case(
+                    (Post.like_count > 0, Post.like_count - 1),
+                    else_=0,
+                ),
+            ),
+        )
 
     async def _attach_post_taxonomy(self, posts: Sequence[Post]) -> None:
         post_ids = [post.id for post in posts]

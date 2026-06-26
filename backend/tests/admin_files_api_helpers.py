@@ -290,6 +290,8 @@ class FakePublicFileContentService:
             summary="摘要",
             cover_file_id=1,
             word_count=8,
+            view_count=0,
+            like_count=0,
             seo_title=None,
             seo_description="SEO 摘要",
             seo_keywords=None,

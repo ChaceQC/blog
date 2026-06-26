@@ -33,6 +33,8 @@ class FakePost:
     word_count: int
     seo_title: str | None
     seo_description: str | None
+    view_count: int = 0
+    like_count: int = 0
     seo_keywords: str | None = None
     category_names: list[str] = field(default_factory=list)
     tag_names: list[str] = field(default_factory=list)
@@ -64,6 +66,7 @@ class FakeContentRepository:
         self.file_usages: dict[tuple[str, int], list[tuple[int, str]]] = {}
         self.post_categories: dict[int, list[str]] = {}
         self.post_tags: dict[int, list[str]] = {}
+        self.cleared_post_interaction_ids: list[int] = []
         self.commit_count = 0
 
     async def list_posts(self, *, limit: int, offset: int) -> list[FakePost]:
@@ -134,6 +137,15 @@ class FakeContentRepository:
         usages: list[tuple[int, str]],
     ) -> None:
         self.file_usages[(entity_type, entity_id)] = list(usages)
+
+    async def clear_post_interactions(self, *, post_id: int) -> None:
+        self.cleared_post_interaction_ids.append(post_id)
+        for post in self.posts:
+            if post.id != post_id:
+                continue
+            post.view_count = 0
+            post.like_count = 0
+            break
 
     async def replace_post_categories(
         self,
@@ -416,6 +428,8 @@ async def test_delete_post_soft_deletes_and_releases_slug() -> None:
             seo_description=None,
         ),
     )
+    post.view_count = 12
+    post.like_count = 4
 
     deleted = await service.delete_post(post.id)
     recreated = await service.create_post(
@@ -435,7 +449,10 @@ async def test_delete_post_soft_deletes_and_releases_slug() -> None:
 
     assert deleted.deleted_at is not None
     assert deleted.slug == f"old-post-deleted-{post.id}"
+    assert deleted.view_count == 0
+    assert deleted.like_count == 0
     assert repository.file_usages[("post", post.id)] == []
+    assert repository.cleared_post_interaction_ids == [post.id]
     assert recreated.id != post.id
     assert recreated.slug == "old-post"
 

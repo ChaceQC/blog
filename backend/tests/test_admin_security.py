@@ -197,3 +197,24 @@ def test_production_rejects_invalid_public_base_url() -> None:
 
     with pytest.raises(ValueError, match="BLOG_PUBLIC_BASE_URL"):
         Settings(**settings_data)
+
+
+def test_production_requires_redis_shared_backend() -> None:
+    settings_data = get_settings().model_dump()
+    settings_data.update(
+        {
+            "environment": "production",
+            "debug": False,
+            "docs_enabled": False,
+            "secret_key": "production-secret-key-with-at-least-32-chars",
+            "admin_cookie_secure": True,
+            "public_base_url": "https://example.com",
+            "allowed_hosts": ["example.com"],
+            "cors_origins": ["https://example.com"],
+            "rate_limit_backend": "memory",
+            "redis_url": None,
+        },
+    )
+
+    with pytest.raises(ValueError, match="BLOG_RATE_LIMIT_BACKEND=redis"):
+        Settings(**settings_data)

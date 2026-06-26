@@ -250,6 +250,7 @@ class ContentService:
             entity_id=post.id,
             usages=[],
         )
+        await self.repository.clear_post_interactions(post_id=post.id)
         await self.repository.commit()
         await self.repository.refresh(post)
         return post

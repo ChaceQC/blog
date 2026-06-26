@@ -28,6 +28,7 @@ from app.services.logs import (
     AccessLogDedupeBackend,
     LogService,
 )
+from app.services.post_interactions import PostInteractionService
 from app.services.rate_limit import RateLimitService
 from app.services.settings import SettingService
 
@@ -114,6 +115,26 @@ def get_log_service(
 
 
 LogServiceDependency = Annotated[LogService, Depends(get_log_service)]
+
+
+def get_post_interaction_service(
+    session: SessionDependency,
+    dedupe_backend: AccessLogDedupeDependency,
+    settings: SettingsDependency,
+) -> PostInteractionService:
+    return PostInteractionService(
+        repository=ContentRepository(session),
+        dedupe_backend=dedupe_backend,
+        secret_key=settings.secret_key,
+        view_dedupe_seconds=settings.post_view_dedupe_seconds,
+        like_risk_window_seconds=settings.post_like_risk_window_seconds,
+    )
+
+
+PostInteractionServiceDependency = Annotated[
+    PostInteractionService,
+    Depends(get_post_interaction_service),
+]
 
 
 def get_setting_service(session: SessionDependency) -> SettingService:
