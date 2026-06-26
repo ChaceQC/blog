@@ -21,12 +21,20 @@
 }
 
 .post-detail-actions {
+  --post-actions-gap: 24px;
+  --post-actions-width: 66px;
+  --post-detail-width: min(860px, calc(100vw - 48px));
+
   position: fixed;
   z-index: 60;
   top: 56svh;
   right: max(
     22px,
-    calc((100vw - min(860px, calc(100vw - 48px))) / 2)
+    calc(
+      (100vw - var(--post-detail-width)) / 2 -
+        var(--post-actions-width) -
+        var(--post-actions-gap)
+    )
   );
   display: inline-flex;
   flex-direction: column;
