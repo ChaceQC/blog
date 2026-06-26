@@ -4,6 +4,29 @@
 
 ### 本轮计划
 
+- 基于当前线上 Nginx 配置，先完成重要请求、媒体图片和大文件下载的路径分类，为后续宿主机 TC QoS 打标做准备。
+- 同步更新仓库 Nginx 模板，但不在本轮直接下发或执行 TC 动态带宽抢占规则。
+
+### 已完成
+
+- 已按线上 `blog.chacewebsite.cn.conf` 和 `blog_limit_zones.conf` 给出完整修改版配置：保留现有域名、证书、CSP、bad UA、页面/API/WSS/login 限流，新增 `high`、`media`、`bulk` 三类 `X-Blog-Traffic-Class` 上游标记。
+- 已将公开/后台文件下载归入 `bulk`，文章图片渲染、文章缩略图、后台预览/缩略图和公开头像缓存归入 `media`，其余页面、API、RSS/sitemap/robots、登录和 salt WSS 归入 `high`。
+- 已给 `media` 和 `bulk` 增加独立 `limit_req_zone` 与 `limit_conn_zone`，作为 Nginx 层请求速率和并发兜底；真正“重要请求抢占下载带宽”仍需要后续宿主机 TC/HTB/CAKE 根据分类打标实现。
+- 已同步 `deploy/nginx/templates/blog.conf.template` 和 `PROJECT_PLAN.md`。
+
+### 下一步
+
+- 在服务器上使用 `nginx -t` 验证修改后的线上配置；确认 reload 后资源路径命中 `media/bulk` 分类，再设计并人工执行 TC QoS 脚本。
+
+### 验证
+
+- 已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
+- 已运行 `git diff --check`，未发现空白或行尾问题。
+
+## 2026-06-26
+
+### 本轮计划
+
 - 修复线上 `BLOG_ENCRYPTION_SESSION_RATE_LIMIT_MAX_ATTEMPTS=30` 时，salt WSS 命中 `1008` 策略关闭后，返回文章列表会由多个公开加密请求逐个新建 `/encryption/salts` 连接的问题。
 - 只调整前端 salt socket 的限流后冷却与排队请求熔断，不修改文章 UI、后端限流规则或一次性 salt 协议。
 
