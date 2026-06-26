@@ -209,22 +209,41 @@
   }
 
   .post-row {
-    grid-template-columns: 32px minmax(88px, 104px) minmax(0, 1fr);
-    gap: 10px;
-    min-height: 104px;
-    padding: 18px 0;
+    grid-template-columns: 30px minmax(0, 1fr);
+    grid-template-areas:
+      "index cover"
+      "index body";
+    column-gap: 14px;
+    row-gap: 10px;
+    min-height: 0;
+    padding: 20px 0;
   }
 
   .post-row__index {
+    grid-area: index;
     font-size: 1rem;
+    line-height: 1.2;
   }
 
   .post-row__cover {
+    grid-area: cover;
     align-self: start;
+    width: min(100%, 280px);
+    aspect-ratio: 16 / 9;
+  }
+
+  .post-row__body {
+    grid-area: body;
+    gap: 8px;
+  }
+
+  .post-row__meta {
+    gap: 8px;
   }
 
   .post-row h2 {
-    font-size: 1.05rem;
+    font-size: 1.18rem;
+    line-height: 1.28;
   }
 
   .post-row p {
@@ -232,7 +251,8 @@
     overflow: hidden;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
+    line-height: 1.55;
   }
 
   .archive-filter-group {
@@ -251,11 +271,11 @@
   }
 
   .post-row__footer {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    display: flex;
     align-items: center;
-    justify-content: stretch;
-    gap: 8px 10px;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px 14px;
     font-size: 0.8rem;
   }
 
@@ -265,12 +285,14 @@
 
   .post-row__date {
     align-self: end;
-    margin-right: 0;
+    margin-right: auto;
   }
 
   .post-row__stats {
-    justify-self: end;
-    margin-left: 0;
+    flex: 1 1 176px;
+    justify-content: flex-end;
+    gap: 8px 10px;
+    margin-left: auto;
   }
 
   .friend-link-row {
