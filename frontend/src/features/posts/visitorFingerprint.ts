@@ -41,10 +41,10 @@ async function createVisitorFingerprint(): Promise<VisitorFingerprint> {
 
   const browserHash = await sha256Hex(browserSignals.join('|'))
   const deviceHash = await sha256Hex(deviceSignals.join('|'))
+  // Keep this aligned with the backend stable risk identity; visitor_id is local only.
   const compositeHash = await sha256Hex(
     [
       FINGERPRINT_VERSION,
-      visitorId,
       browserHash,
       deviceHash,
       timezone,

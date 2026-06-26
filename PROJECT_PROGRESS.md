@@ -4,6 +4,27 @@
 
 ### 本轮计划
 
+- 修复公开文章互动指纹中前端核心身份与后端稳定风险身份不一致的问题。
+- 只调整前端指纹计算，不修改后端身份、风控和点赞状态机逻辑。
+
+### 已完成
+
+- 已将前端 `composite_hash` 调整为由版本号、浏览器摘要、设备摘要、时区、语言、平台和屏幕信息生成，不再混入本地随机 `visitor_id`。
+- 本地 `visitor_id` 仍会随请求上送，但只作为本地辅助标识；核心设备身份与后端稳定风险身份保持同一套语义，避免本地 ID 漂移后触发“同风险新点赞”的异常路径。
+- 已新增 `visitorFingerprint.test.ts`，覆盖同一设备信号下本地 `visitor_id` 变化时 `composite_hash` 保持稳定。
+
+### 验证
+
+- 已运行 `npm.cmd run test -- src/features/posts/visitorFingerprint.test.ts`，通过。
+- 已运行 `npm.cmd run test`，25 个前端测试通过。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；Vite/Rolldown 仍提示既有混淆插件耗时较高。
+- 已运行 `git diff --check`，未发现空白或行尾问题。
+
+## 2026-06-26
+
+### 本轮计划
+
 - 调整文章详情页右侧悬浮浏览/点赞操作区，让桌面端位置落在文章右边一点，不遮挡正文阅读区域。
 - 保持移动端现有展示方式不变。
 
