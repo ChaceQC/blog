@@ -1,6 +1,8 @@
 import type { VisitorFingerprint } from './types.ts'
 
 const VISITOR_ID_KEY = 'blog.public.visitor.id.v1'
+const VISITOR_ID_COOKIE = 'blog_public_visitor_id_v1'
+const VISITOR_ID_MAX_AGE_SECONDS = 60 * 60 * 24 * 365 * 2
 const FINGERPRINT_VERSION = 'web-v1'
 
 let cachedFingerprint: Promise<VisitorFingerprint> | null = null
@@ -8,6 +10,23 @@ let cachedFingerprint: Promise<VisitorFingerprint> | null = null
 export function getVisitorFingerprint(): Promise<VisitorFingerprint> {
   cachedFingerprint ??= createVisitorFingerprint()
   return cachedFingerprint
+}
+
+export async function getStableVisitorFingerprintFallback(): Promise<VisitorFingerprint> {
+  const fingerprint = await getVisitorFingerprint()
+  return {
+    ...fingerprint,
+    composite_hash: await createCompositeHash({
+      browserHash: fingerprint.browser_hash,
+      deviceHash: fingerprint.device_hash,
+      language: fingerprint.language,
+      platform: fingerprint.platform,
+      screenValue: fingerprint.screen,
+      timezone: fingerprint.timezone,
+      visitorId: null,
+    }),
+    created_at_ms: Date.now(),
+  }
 }
 
 async function createVisitorFingerprint(): Promise<VisitorFingerprint> {
@@ -41,18 +60,15 @@ async function createVisitorFingerprint(): Promise<VisitorFingerprint> {
 
   const browserHash = await sha256Hex(browserSignals.join('|'))
   const deviceHash = await sha256Hex(deviceSignals.join('|'))
-  // Keep this aligned with the backend stable risk identity; visitor_id is local only.
-  const compositeHash = await sha256Hex(
-    [
-      FINGERPRINT_VERSION,
-      browserHash,
-      deviceHash,
-      timezone,
-      language,
-      platform,
-      screenValue,
-    ].join('|'),
-  )
+  const compositeHash = await createCompositeHash({
+    visitorId,
+    browserHash,
+    deviceHash,
+    timezone,
+    language,
+    platform,
+    screenValue,
+  })
 
   return {
     version: FINGERPRINT_VERSION,
@@ -68,18 +84,113 @@ async function createVisitorFingerprint(): Promise<VisitorFingerprint> {
   }
 }
 
+async function createCompositeHash({
+  visitorId,
+  browserHash,
+  deviceHash,
+  timezone,
+  language,
+  platform,
+  screenValue,
+}: {
+  visitorId: string | null
+  browserHash: string
+  deviceHash: string
+  timezone: string | null
+  language: string | null
+  platform: string | null
+  screenValue: string | null
+}): Promise<string> {
+  const parts =
+    visitorId === null
+      ? [
+          FINGERPRINT_VERSION,
+          browserHash,
+          deviceHash,
+          timezone,
+          language,
+          platform,
+          screenValue,
+        ]
+      : [
+          FINGERPRINT_VERSION,
+          visitorId,
+          browserHash,
+          deviceHash,
+          timezone,
+          language,
+          platform,
+          screenValue,
+        ]
+  return sha256Hex(parts.join('|'))
+}
+
 function getOrCreateVisitorId(): string {
+  const localVisitorId = readLocalVisitorId()
+  const cookieVisitorId = readVisitorIdCookie()
+  if (cookieVisitorId) {
+    writeVisitorId(cookieVisitorId)
+    return cookieVisitorId
+  }
+  if (localVisitorId) {
+    writeVisitorId(localVisitorId)
+    return localVisitorId
+  }
+  const next = randomId()
+  writeVisitorId(next)
+  return next
+}
+
+function readLocalVisitorId(): string | null {
   try {
     const existing = window.localStorage.getItem(VISITOR_ID_KEY)
-    if (existing && existing.length >= 16) {
+    if (isVisitorId(existing)) {
       return existing
     }
-    const next = randomId()
-    window.localStorage.setItem(VISITOR_ID_KEY, next)
-    return next
   } catch {
-    return randomId()
+    return null
   }
+  return null
+}
+
+function writeVisitorId(value: string) {
+  try {
+    window.localStorage.setItem(VISITOR_ID_KEY, value)
+  } catch {
+    // Ignore storage failures; the cookie fallback can still carry the identity.
+  }
+  writeVisitorIdCookie(value)
+}
+
+function readVisitorIdCookie(): string | null {
+  const prefix = `${VISITOR_ID_COOKIE}=`
+  const value = document.cookie
+    .split(';')
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(prefix))
+    ?.slice(prefix.length)
+  return isVisitorId(value) ? value : null
+}
+
+function isVisitorId(value: string | null | undefined): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length >= 16 &&
+    value.length <= 128 &&
+    /^[a-f0-9]+$/i.test(value)
+  )
+}
+
+function writeVisitorIdCookie(value: string) {
+  document.cookie = [
+    `${VISITOR_ID_COOKIE}=${value}`,
+    'Path=/',
+    `Max-Age=${VISITOR_ID_MAX_AGE_SECONDS}`,
+    'SameSite=Lax',
+    location.protocol === 'https:' ? 'Secure' : '',
+  ]
+    .filter(Boolean)
+    .join('; ')
 }
 
 function randomId(): string {

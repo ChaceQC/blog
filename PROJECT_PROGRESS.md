@@ -4,14 +4,15 @@
 
 ### 本轮计划
 
-- 修复公开文章互动指纹中前端核心身份与后端稳定风险身份不一致的问题。
+- 修复公开文章互动指纹在前端本地身份漂移或上一版前端身份算法变化后，点赞持续返回 429 的问题。
 - 只调整前端指纹计算，不修改后端身份、风控和点赞状态机逻辑。
 
 ### 已完成
 
-- 已将前端 `composite_hash` 调整为由版本号、浏览器摘要、设备摘要、时区、语言、平台和屏幕信息生成，不再混入本地随机 `visitor_id`。
-- 本地 `visitor_id` 仍会随请求上送，但只作为本地辅助标识；核心设备身份与后端稳定风险身份保持同一套语义，避免本地 ID 漂移后触发“同风险新点赞”的异常路径。
-- 已新增 `visitorFingerprint.test.ts`，覆盖同一设备信号下本地 `visitor_id` 变化时 `composite_hash` 保持稳定。
+- 已恢复 `composite_hash` 与后端当前点赞身份派生逻辑兼容，避免已有 `post_likes.visitor_hash` 存量记录被前端算法变化断开。
+- 已为本地匿名 `visitor_id` 增加 localStorage 与同站 Cookie 双写恢复；Cookie 优先作为身份锚点，localStorage 丢失或漂移时会自动恢复旧 ID，减少同一浏览器被算成新点赞身份的概率。
+- 已在点赞 `liked=true` 命中明确的 `post interaction risk limited` 429 时，使用上一版稳定设备身份算法做一次迁移兜底重试；普通访问限流和加密会话限流不会触发额外重试。
+- 已新增 `visitorFingerprint.test.ts`，覆盖 Cookie 恢复、localStorage 漂移恢复和上一版稳定身份 fallback。
 
 ### 验证
 

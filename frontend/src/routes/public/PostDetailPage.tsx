@@ -6,6 +6,7 @@ import { Link, useParams } from 'react-router-dom'
 
 import {
   ApiError,
+  isRateLimitError,
   publicErrorMessage,
 } from '../../api/client.ts'
 import { MathHtml } from '../../components/MathHtml.tsx'
@@ -20,7 +21,10 @@ import {
   getReadingMinutes,
   postCoverUrl,
 } from '../../features/posts/postMeta.ts'
-import { getVisitorFingerprint } from '../../features/posts/visitorFingerprint.ts'
+import {
+  getStableVisitorFingerprintFallback,
+  getVisitorFingerprint,
+} from '../../features/posts/visitorFingerprint.ts'
 import { usePageSeo } from '../../features/seo/usePageSeo.ts'
 import { siteSettings } from '../../features/settings/siteSettings.ts'
 import type {
@@ -57,7 +61,18 @@ export function PostDetailPage() {
   const likeMutation = useMutation({
     mutationFn: async (liked: boolean) => {
       const fingerprint = await getVisitorFingerprint()
-      return setPublicPostLike(slug, { fingerprint, liked })
+      try {
+        return await setPublicPostLike(slug, { fingerprint, liked })
+      } catch (error) {
+        if (!liked || !isPostInteractionRiskLimit(error)) {
+          throw error
+        }
+        const fallbackFingerprint = await getStableVisitorFingerprintFallback()
+        return setPublicPostLike(slug, {
+          fingerprint: fallbackFingerprint,
+          liked,
+        })
+      }
     },
     onSuccess: (state) => {
       setInteractionState({ slug, state })
@@ -196,6 +211,14 @@ export function PostDetailPage() {
         </button>
       </div>
     </>
+  )
+}
+
+function isPostInteractionRiskLimit(error: unknown): boolean {
+  return (
+    isRateLimitError(error) &&
+    error instanceof Error &&
+    error.message === 'post interaction risk limited'
   )
 }
 

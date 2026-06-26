@@ -1,16 +1,36 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const VISITOR_ID_KEY = 'blog.public.visitor.id.v1'
+const VISITOR_ID_COOKIE = 'blog_public_visitor_id_v1'
 
 describe('getVisitorFingerprint', () => {
   afterEach(() => {
     window.localStorage.clear()
+    document.cookie = `${VISITOR_ID_COOKIE}=; Path=/; Max-Age=0`
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
     vi.resetModules()
   })
 
-  it('keeps the composite hash stable when the local visitor id changes', async () => {
+  it('restores the visitor id from cookie when local storage is unavailable', async () => {
+    stubStableBrowserSignals()
+    window.localStorage.setItem(VISITOR_ID_KEY, 'a'.repeat(48))
+    const firstModule = await import('./visitorFingerprint.ts')
+    const first = await firstModule.getVisitorFingerprint()
+
+    vi.resetModules()
+    window.localStorage.clear()
+    const secondModule = await import('./visitorFingerprint.ts')
+    const second = await secondModule.getVisitorFingerprint()
+
+    expect(first.visitor_id).toBe(second.visitor_id)
+    expect(first.browser_hash).toBe(second.browser_hash)
+    expect(first.device_hash).toBe(second.device_hash)
+    expect(first.composite_hash).toBe(second.composite_hash)
+    expect(window.localStorage.getItem(VISITOR_ID_KEY)).toBe(first.visitor_id)
+  })
+
+  it('prefers the cookie visitor id when local storage has drifted', async () => {
     stubStableBrowserSignals()
     window.localStorage.setItem(VISITOR_ID_KEY, 'a'.repeat(48))
     const firstModule = await import('./visitorFingerprint.ts')
@@ -21,10 +41,23 @@ describe('getVisitorFingerprint', () => {
     const secondModule = await import('./visitorFingerprint.ts')
     const second = await secondModule.getVisitorFingerprint()
 
-    expect(first.visitor_id).not.toBe(second.visitor_id)
-    expect(first.browser_hash).toBe(second.browser_hash)
-    expect(first.device_hash).toBe(second.device_hash)
-    expect(first.composite_hash).toBe(second.composite_hash)
+    expect(second.visitor_id).toBe(first.visitor_id)
+    expect(second.composite_hash).toBe(first.composite_hash)
+    expect(window.localStorage.getItem(VISITOR_ID_KEY)).toBe(first.visitor_id)
+  })
+
+  it('provides a stable fallback fingerprint for the previous frontend identity', async () => {
+    stubStableBrowserSignals()
+    window.localStorage.setItem(VISITOR_ID_KEY, 'a'.repeat(48))
+    const module = await import('./visitorFingerprint.ts')
+
+    const primary = await module.getVisitorFingerprint()
+    const fallback = await module.getStableVisitorFingerprintFallback()
+
+    expect(fallback.visitor_id).toBe(primary.visitor_id)
+    expect(fallback.browser_hash).toBe(primary.browser_hash)
+    expect(fallback.device_hash).toBe(primary.device_hash)
+    expect(fallback.composite_hash).not.toBe(primary.composite_hash)
   })
 })
 
