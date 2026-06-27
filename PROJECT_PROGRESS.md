@@ -1,5 +1,27 @@
 # 项目进度
 
+## 2026-06-27
+
+### 本轮计划
+
+- 根据遥测摄入 API 说明，为本博客项目设计合适的服务端遥测上报数据。
+- 结合当前后端路由、日志、限流、加密会话、文件、公开文章互动和维护任务代码，明确具体上报指标、事件、日志和 trace，而不是套用通用模板。
+
+### 已完成
+
+- 新增 `docs/telemetry-reporting-design.md`，明确遥测摄入使用 Project API Key，不使用后台登录 token，不由第三方应用传 `project_id`。
+- 设计了通用低基数 tags、metrics、events、logs、trace spans 和采样策略，覆盖 HTTP 耗时/错误、限流、加密会话、salt WSS、后台审计、公开文章浏览/点赞、文件上传/访问、友链申请、站点跳转和 CLI 维护任务。
+- 明确遥测安全边界：第一阶段只允许后端、维护任务和部署脚本持有 Project API Key；浏览器前端不得内置 API Key；不上报正文、slug、完整 URL/query、签名 token、Cookie、加密材料、原始 IP、完整 UA、文件名、MIME、外部 URL 或完整设置值。
+- 已在 `README.md`、`PROJECT_PLAN.md` 和 `backend/README.md` 中补充遥测设计入口与接入边界。
+
+### 下一步
+
+- 实现 `TelemetryClient` adapter，读取 `BLOG_TELEMETRY_ENDPOINT`、`BLOG_TELEMETRY_API_KEY` 和 `BLOG_TELEMETRY_ENABLED`，并先接入 HTTP middleware、`record_admin_audit()` 与 `enforce_rate_limit()` 三个低侵入挂载点。
+
+### 验证
+
+- 本轮为设计文档和项目说明更新，未修改运行代码，未运行后端或前端测试。
+
 ## 2026-06-26
 
 ### 本轮计划

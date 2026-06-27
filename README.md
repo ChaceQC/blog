@@ -74,6 +74,7 @@ Internet
 - 站点设置：站点标题、描述、头像、首页碎念、社交入口等基础资料维护。
 - 后台管理：管理员登录、HttpOnly Cookie 会话、CSRF、权限控制、操作日志、访问日志、登录日志和安全事件。
 - 公开订阅与 SEO：RSS、sitemap、robots.txt、canonical、Open Graph、公开文章元信息和分类/标签稳定 URL。
+- 遥测设计：基于 Project API Key 的服务端 metrics、events、logs 和 traces 上报契约，详见 `docs/telemetry-reporting-design.md`。
 - 运维任务：过期加密会话清理、软删除文件物理清理、孤儿文件 dry-run 扫描和友链状态检查。
 
 ## 技术栈
@@ -113,6 +114,8 @@ deploy/               生产部署配置
   env/
   scripts/
   systemd/
+
+docs/                 架构、安全、遥测等专题设计文档
 
 AGENT.md              开发协作规则
 PROJECT_PLAN.md       项目计划书和架构设计
@@ -204,6 +207,8 @@ npm.cmd run build
 - `BLOG_ACCESS_LOG_DEDUPE_SECONDS`：成功 `GET/HEAD` 访问日志短时去重窗口，默认 `60`；同一 IP 在窗口内重复访问同一 path 只写入第一条，错误和写操作仍逐条记录。
 
 访问日志只保留类型、方法、path、状态码、实体类型/id、IP、UA 和时间，不保存 query、临时 token、签名参数、slug、文件名或 MIME 摘要；后台审计日志只保留动作、实体 id、操作者和最小状态/字段名摘要，不保存标题、URL、文件名、正文或完整设置值。应用层加密会话除 `X-Encryption-Session` 外还要求同源 `esid` Cookie：前端用 ECDH shared secret、`session_id`、scope 和过期时间生成可逆 sid，后端用数据库 `key_material` 逆运算并校验 HMAC、session、scope 和过期时间；每个 HTTP 请求还必须携带并消费一次性 `X-Encryption-Esid-Salt`，登录 capsule、加密请求和加密响应的 HKDF salt 也来自 WSS 加密下发的一次性 lease。生产后端容器通过项目启动入口把 `BLOG_TRUSTED_PROXY_HOSTS` 同步传给 Uvicorn，因此 `docker compose logs backend` 中的运行访问日志也会按可信代理头显示真实访客 IP，并带有时间戳；时间戳使用容器内 `TZ`/`tzdata` 配置，模板默认 `Asia/Shanghai`。后端镜像默认启用 UTF-8 环境变量，并使用腾讯云 Debian/PyPI/uv 镜像源，避免终端和 Python IO 出现中文编码漂移并加快国内构建。后端所有响应都会设置 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 和 `Permissions-Policy`；生产环境额外设置 HSTS 与 Content Security Policy，Nginx 仍保留同等安全响应头作为公网入口兜底。
+
+遥测上报设计见 `docs/telemetry-reporting-design.md`。遥测摄入使用 Project API Key，不使用后台登录 token，也不由本项目传 `project_id`；第一阶段只允许后端、维护任务和部署脚本持有 API Key。上报数据围绕 HTTP 耗时/错误、限流、加密会话、公开文章互动、文件访问、后台审计、友链申请、导航跳转和维护任务汇总，不上报正文、slug、完整 URL/query、签名 token、Cookie、加密材料、文件名、MIME、外部 URL 或完整设置值。
 
 文章浏览和点赞使用版本化匿名设备指纹摘要，后端再结合可信代理 IP、UA 和语言头做 HMAC 派生，不保存原始高维指纹；点赞接口只接受目标布尔状态，不接受计数增减。文章软删除时会清理对应匿名点赞记录并重置展示计数，物理删除由外键级联兜底。
 
