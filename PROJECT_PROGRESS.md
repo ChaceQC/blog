@@ -1,5 +1,36 @@
 # 项目进度
 
+## 2026-06-29
+
+### 本轮计划
+
+- 修复继续审计发现的生产 Nginx access log 记录完整请求行导致临时 token 进入入口日志的问题。
+- 同步安全文档和项目进度。
+
+### 已完成
+
+- 将 `deploy/nginx/nginx.conf` 的 `log_format main` 从完整 `$request` 调整为 `$request_method $uri $server_protocol`，入口日志不再记录 query 中的 `token`、`expires` 等签名参数。
+- 将 Nginx access log 中的 referrer 字段固定为 `-`，避免带签名参数的来源 URL 被间接写入 `/var/log/nginx/access.log`。
+- 同步更新 `README.md` 和 `PROJECT_PLAN.md`，明确生产 Nginx 入口日志不记录 query/referrer。
+
+### 进行中
+
+- 继续进行上线前安全审计和部署配置复核。
+
+### 阻塞与风险
+
+- 如果生产环境使用宿主机自维护 Nginx 配置，需要把同样的 log_format 调整同步到服务器真实站点配置；仓库内模板变更不会自动覆盖宿主机现有配置。
+
+### 下一步
+
+- 在服务器执行 Nginx 配置测试并 reload，随后用带 `?token=` 的公开文件下载或文章图片地址确认 access log 只出现路径、不出现查询串。
+
+### 验证
+
+- 已运行 `rg "\$request|\$request_uri|http_referer|token" deploy/nginx/nginx.conf deploy/nginx/templates/blog.conf.template README.md PROJECT_PLAN.md PROJECT_PROGRESS.md`，确认生产 Nginx 配置不再使用完整 `$request`、`$request_uri` 或 referrer 记录入口日志。
+- 已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
+- 已运行 `git diff --check`，未发现空白或行尾问题。
+
 ## 2026-06-28
 
 ### 本轮计划
