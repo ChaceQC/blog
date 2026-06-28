@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 import app.tasks.telemetry as task_telemetry_module
 from app.api.state import telemetry_signature
-from app.api.telemetry import record_admin_audit_telemetry
+from app.api.telemetry import record_admin_audit_telemetry, record_task_completed
 from app.core.config import get_settings
 from app.main import create_app
 from app.providers import telemetry as telemetry_module
@@ -416,6 +416,34 @@ def test_admin_audit_telemetry_ignores_invalid_changed_fields() -> None:
     )
     assert "changed_fields" not in payload
     assert write_metric["payload"]["changed_fields_count"] == 0
+
+
+def test_task_completed_event_uses_stable_summary_fields() -> None:
+    fake = FakeTelemetry()
+
+    record_task_completed(
+        fake,
+        task_name="cleanup-logs",
+        outcome="ok",
+        duration_ms=12.5,
+        deleted_rows={"access": 2, "audit": 0},
+        friend_link_counts={"healthy": 3, "unhealthy": 1, "skipped": 0},
+    )
+
+    event = next(
+        item for item in fake.events if item["type"] == "blog.task.completed"
+    )
+    payload = event["payload"]
+    assert payload["deleted_count"] == 2
+    assert payload["healthy_count"] == 3
+    assert payload["unhealthy_count"] == 1
+    assert payload["skipped_count"] == 0
+    assert payload["deleted_rows"] == {"access": 2, "audit": 0}
+    assert payload["friend_link_counts"] == {
+        "healthy": 3,
+        "unhealthy": 1,
+        "skipped": 0,
+    }
 
 
 def test_deployment_finished_event_uses_backend_settings(monkeypatch) -> None:

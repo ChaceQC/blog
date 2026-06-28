@@ -109,6 +109,24 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_safety(self) -> "Settings":
+        if self.telemetry_enabled:
+            if not self.telemetry_endpoint:
+                raise ValueError(
+                    "BLOG_TELEMETRY_ENDPOINT is required when telemetry is enabled",
+                )
+            if not self.telemetry_api_key:
+                raise ValueError(
+                    "BLOG_TELEMETRY_API_KEY is required when telemetry is enabled",
+                )
+            parsed_telemetry_endpoint = urlparse(self.telemetry_endpoint)
+            if (
+                parsed_telemetry_endpoint.scheme not in {"http", "https"}
+                or not parsed_telemetry_endpoint.netloc
+            ):
+                raise ValueError(
+                    "BLOG_TELEMETRY_ENDPOINT must be an absolute http(s) URL",
+                )
+
         if self.environment != "production":
             return self
 
@@ -140,6 +158,13 @@ class Settings(BaseSettings):
                 "BLOG_RATE_LIMIT_BACKEND=redis and BLOG_REDIS_URL are required "
                 "in production",
             )
+        if self.telemetry_enabled:
+            parsed_telemetry_endpoint = urlparse(self.telemetry_endpoint or "")
+            if parsed_telemetry_endpoint.scheme != "https":
+                raise ValueError(
+                    "BLOG_TELEMETRY_ENDPOINT must be an absolute https URL "
+                    "in production",
+                )
 
         return self
 

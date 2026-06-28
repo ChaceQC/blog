@@ -149,10 +149,27 @@ async def salt_websocket(
                     continue
 
                 lease_requests = _parse_lease_requests(request_payload)
-                if sum(request.count for request in lease_requests) > 8:
-                    raise ValueError("too many salt leases requested")
-                for lease_request in lease_requests:
-                    _validate_purpose(scope=scope, request=lease_request)
+                try:
+                    if sum(request.count for request in lease_requests) > 8:
+                        raise ValueError("too many salt leases requested")
+                    for lease_request in lease_requests:
+                        _validate_purpose(scope=scope, request=lease_request)
+                except ValueError:
+                    if telemetry is not None:
+                        for lease_request in lease_requests:
+                            record_salt_lease_telemetry(
+                                telemetry,
+                                scope=scope,
+                                purpose=lease_request.purpose,
+                                profile=(
+                                    lease_request.profile.value
+                                    if lease_request.profile is not None
+                                    else None
+                                ),
+                                stage="rejected",
+                                count=lease_request.count,
+                            )
+                    raise
                 frames = [
                     salt_leases.wrap(
                         lease=salt_leases.issue(

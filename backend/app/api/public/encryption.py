@@ -34,18 +34,28 @@ async def create_public_encryption_session(
     logs: LogServiceDependency,
 ) -> CreateEncryptionSessionResponse:
     ip = client_ip(request)
-    await enforce_rate_limit(
-        request=request,
-        limiter=rate_limiter,
-        logs=logs,
-        key=f"public-encryption-session:{ip or 'unknown'}",
-        rule=RateLimitRule(
-            max_attempts=settings.encryption_session_rate_limit_max_attempts,
-            window_seconds=settings.encryption_session_rate_limit_window_seconds,
-        ),
-        event_type="rate_limit.public_encryption_session",
-        detail_json={"scope": "public", "profile": "content-v1"},
-    )
+    try:
+        await enforce_rate_limit(
+            request=request,
+            limiter=rate_limiter,
+            logs=logs,
+            key=f"public-encryption-session:{ip or 'unknown'}",
+            rule=RateLimitRule(
+                max_attempts=settings.encryption_session_rate_limit_max_attempts,
+                window_seconds=settings.encryption_session_rate_limit_window_seconds,
+            ),
+            event_type="rate_limit.public_encryption_session",
+            detail_json={"scope": "public", "profile": "content-v1"},
+        )
+    except HTTPException as exc:
+        if exc.status_code != status.HTTP_429_TOO_MANY_REQUESTS:
+            raise
+        _record_rejected_session(
+            request=request,
+            settings=settings,
+            reason="rate_limited",
+        )
+        raise
     try:
         session = await manager.create_session(
             client_public_key=payload.client_public_key,
@@ -62,7 +72,7 @@ async def create_public_encryption_session(
             ip=ip,
             user_agent=request.headers.get("user-agent"),
             path=str(request.url.path),
-            detail_json={"scope": "public"},
+            detail_json={"scope": "public", "profile": "content-v1"},
         )
         telemetry = getattr(request.app.state, "telemetry_service", None)
         if telemetry is not None:
@@ -115,4 +125,23 @@ async def public_encryption_salts(
         scope="public",
         manager=manager,
         salt_leases=salt_leases,
+    )
+
+
+def _record_rejected_session(
+    *,
+    request: Request,
+    settings: SettingsDependency,
+    reason: str,
+) -> None:
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    if telemetry is None:
+        return
+    record_encryption_session_telemetry(
+        telemetry,
+        scope="public",
+        profile="content-v1",
+        outcome="rejected",
+        active_limit=settings.public_encryption_session_active_limit_per_ip,
+        reason=reason,
     )

@@ -8,7 +8,7 @@
 - 前端如需上报 Web Vitals 或 JS 错误，必须先走后端受控转发接口，后端负责脱敏、限流和补充项目 API Key。
 - 业务主流程不能同步阻塞在遥测发送上；后端应本地内存队列或后台任务异步发送，失败只影响观测数据。
 - 所有上报都使用 UTF-8 JSON，单批不超过 100 条和 256 KB；高频事件优先聚合成指标。
-- 当前实现通过后端环境变量控制是否上传：`BLOG_TELEMETRY_ENABLED=false` 默认关闭，启用时还必须提供 `BLOG_TELEMETRY_ENDPOINT` 和 `BLOG_TELEMETRY_API_KEY`。Project API Key 只放在 `backend/.env` 或 `deploy/env/backend.env`，不进入前端配置、浏览器包或请求参数。
+- 当前实现通过后端环境变量控制是否上传：`BLOG_TELEMETRY_ENABLED=false` 默认关闭，启用时还必须提供绝对 `BLOG_TELEMETRY_ENDPOINT` 和 `BLOG_TELEMETRY_API_KEY`。生产环境启用遥测时 endpoint 必须使用 HTTPS，Project API Key 只放在 `backend/.env` 或 `deploy/env/backend.env`，不进入前端配置、浏览器包或请求参数。
 
 ## 通用标签
 
@@ -176,7 +176,7 @@ trace 用于定位慢请求和依赖瓶颈。建议采样规则：
 - `app.api.admin.audit.record_admin_audit()`：上报 `blog.admin.audit` 事件和后台内容写入指标。
 - `LogService.record_access_log()`：只在访问日志实际落库后上报公开文件访问和站点跳转指标；短时去重命中时不重复上报。
 - `app.api.limits.enforce_rate_limit()`：上报限流指标、`blog.security.rate_limit.hit` 事件和 warn log。
-- `app.api.admin.encryption`、`app.api.public.encryption`、`app.api.encryption_salts.salt_websocket()` 和 salt lease 服务：上报加密会话、salt WSS 关闭和 lease 签发/消费/拒绝指标。
+- `app.api.admin.encryption`、`app.api.public.encryption`、`app.api.encryption_salts.salt_websocket()` 和 salt lease 服务：上报加密会话、salt WSS 关闭和 lease 签发/消费/拒绝指标；加密会话被通用限流拒绝时也会记录 `blog.encryption.session.rejected.count`，已解密但业务校验失败的 salt lease 请求会记录 `stage=rejected`。
 - `PostInteractionService.record_view()`、`PostInteractionService.set_like()`：上报 `recorded/deduped/changed/noop/risk_limited` 互动指标。
 - 后台/公开文件路由与文件管理路由：上报上传成功/失败、上传体积、删除事件和短时链接创建事件；文件下载/文章图片访问通过访问日志服务统一上报。
 - 公开友链申请、后台友链审核和站点跳转路由：上报申请结果、审核事件、跳转首访和去重结果。
@@ -185,8 +185,9 @@ trace 用于定位慢请求和依赖瓶颈。建议采样规则：
 
 ## 落地状态
 
-1. 已新增 `TelemetryService` adapter，读取 `BLOG_TELEMETRY_ENDPOINT`、`BLOG_TELEMETRY_API_KEY`、`BLOG_TELEMETRY_ENABLED`，并实现异步队列、批量发送、429 `Retry-After`、5xx 短重试、100 条/256 KB 切块和超大单项丢弃。
+1. 已新增 `TelemetryService` adapter，读取 `BLOG_TELEMETRY_ENDPOINT`、`BLOG_TELEMETRY_API_KEY`、`BLOG_TELEMETRY_ENABLED`，并实现异步队列、批量发送、429 `Retry-After`、5xx 短重试、100 条/256 KB 切块和超大单项丢弃；配置层会拒绝启用遥测但缺少 endpoint/API Key 的状态，生产环境启用遥测时拒绝非 HTTPS endpoint。
 2. 已接入 HTTP middleware、`enforce_rate_limit()`、`record_admin_audit()` 三个高价值低侵入点。
 3. 已接入文件、公开文章互动、加密 salt WSS、友链/站点跳转和维护任务的业务指标与事件。
 4. 已加入采样 trace，并只对错误、慢请求、后台写操作、维护任务和少量公开 GET 成功请求上报 root span。
 5. 已为遥测失败使用本地 debug/warn 日志记录原因，不记录遥测 API Key。
+6. 已将 `app.api.telemetry` 拆分为 HTTP、内容互动、文件访问、友链导航、安全加密、任务和公共 helper 模块，`app.api.telemetry` 继续作为兼容导出入口。

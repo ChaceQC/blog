@@ -4,6 +4,32 @@
 
 ### 本轮计划
 
+- 修复再次全面审计发现的遥测配置、漏报、事件契约和模块体量问题。
+- 补充回归测试，确认配置错误会 fail fast，且加密限流、salt lease 拒绝和维护任务事件符合设计契约。
+
+### 已完成
+
+- 在 `Settings` 中增加遥测配置校验：启用遥测时必须提供绝对 endpoint 和 Project API Key；生产环境启用遥测时 endpoint 必须为 HTTPS，避免明文发送 `X-API-Key`。
+- 修复加密会话被通用限流拒绝时未记录 `blog.encryption.session.rejected.count` 的漏报；admin/public 加密会话路由均已覆盖。
+- 修复 salt WebSocket 已成功解密但业务校验失败的 lease 请求未记录 `stage=rejected` 的漏报。
+- 调整 `blog.task.completed` 事件 payload，增加 `deleted_count`、`healthy_count`、`unhealthy_count`、`skipped_count` 等稳定汇总字段，并保留明细对象。
+- 将过大的 `app.api.telemetry` 拆分为 `telemetry_common.py`、`telemetry_http.py`、`telemetry_content.py`、`telemetry_files.py`、`telemetry_links.py`、`telemetry_security.py`、`telemetry_business.py` 和 `telemetry_tasks.py`，原 `telemetry.py` 保持兼容导出入口。
+- 补充生产遥测配置校验、加密限流 rejected、salt lease rejected 和任务事件稳定字段测试。
+
+### 下一步
+
+- 在生产启用遥测前，用真实 Project API Key 和 HTTPS 摄入端完成一次部署链路验证，确认 `blog.http.server.*`、`blog.encryption.*`、`blog.task.completed` 和 `blog.deployment.finished` 均被接收。
+
+### 验证
+
+- 已运行 `uv run ruff check app tests`，通过。
+- 已运行 `uv run pytest tests/test_admin_security.py tests/test_public_encryption_api.py tests/test_encryption_salts.py tests/test_telemetry.py -q`，37 个测试通过；仍有 FastAPI/Starlette TestClient 上游弃用警告。
+- 已运行 `uv run pytest tests/test_telemetry.py tests/test_health.py tests/test_rate_limit.py tests/test_log_service.py tests/test_post_interactions.py tests/test_admin_encryption_api.py tests/test_public_encryption_api.py tests/test_admin_files_api.py tests/test_public_files_api.py tests/test_public_links_api.py tests/test_admin_links_api.py tests/test_admin_content_api.py tests/test_encryption_salts.py tests/test_file_cleanup.py tests/test_link_health.py tests/test_admin_security.py -q`，126 个测试通过；仍有 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 413 常量的上游弃用警告。
+
+## 2026-06-28
+
+### 本轮计划
+
 - 根据代码审计结果修复遥测实现中的收尾、安全脱敏和重试边界问题。
 - 补充回归测试，确认遥测失败不影响主流程，且不会因配置错误留下后台 worker。
 

@@ -218,3 +218,41 @@ def test_production_requires_redis_shared_backend() -> None:
 
     with pytest.raises(ValueError, match="BLOG_RATE_LIMIT_BACKEND=redis"):
         Settings(**settings_data)
+
+
+def test_enabled_telemetry_requires_endpoint_and_api_key() -> None:
+    settings_data = get_settings().model_dump()
+    settings_data.update(
+        {
+            "telemetry_enabled": True,
+            "telemetry_endpoint": "",
+            "telemetry_api_key": "",
+        },
+    )
+
+    with pytest.raises(ValueError, match="BLOG_TELEMETRY_ENDPOINT"):
+        Settings(**settings_data)
+
+
+def test_production_telemetry_requires_https_endpoint() -> None:
+    settings_data = get_settings().model_dump()
+    settings_data.update(
+        {
+            "environment": "production",
+            "debug": False,
+            "docs_enabled": False,
+            "secret_key": "production-secret-key-with-at-least-32-chars",
+            "admin_cookie_secure": True,
+            "public_base_url": "https://example.com",
+            "allowed_hosts": ["example.com"],
+            "cors_origins": ["https://example.com"],
+            "rate_limit_backend": "redis",
+            "redis_url": "redis://localhost:6379/15",
+            "telemetry_enabled": True,
+            "telemetry_endpoint": "http://telemetry.example.com",
+            "telemetry_api_key": "tlm_project_key",
+        },
+    )
+
+    with pytest.raises(ValueError, match="BLOG_TELEMETRY_ENDPOINT.*https"):
+        Settings(**settings_data)
