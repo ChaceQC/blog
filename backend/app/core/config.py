@@ -59,6 +59,19 @@ class Settings(BaseSettings):
     )
     post_view_dedupe_seconds: int = Field(default=600, ge=0, le=86400)
     post_like_risk_window_seconds: int = Field(default=86400, ge=60, le=604800)
+    comment_rate_limit_max_attempts: int = Field(default=5, ge=1, le=100)
+    comment_rate_limit_window_seconds: int = Field(default=600, ge=10, le=3600)
+    comment_risk_rate_limit_max_attempts: int = Field(default=3, ge=1, le=100)
+    comment_risk_rate_limit_window_seconds: int = Field(default=600, ge=10, le=3600)
+    comment_author_rate_limit_max_attempts: int = Field(default=10, ge=1, le=200)
+    comment_author_rate_limit_window_seconds: int = Field(
+        default=3600,
+        ge=60,
+        le=86400,
+    )
+    comment_duplicate_window_seconds: int = Field(default=600, ge=0, le=86400)
+    comment_pending_limit: int = Field(default=500, ge=1, le=10000)
+    comment_auto_publish: bool = False
     telemetry_enabled: bool = False
     telemetry_endpoint: str | None = None
     telemetry_api_key: str | None = None

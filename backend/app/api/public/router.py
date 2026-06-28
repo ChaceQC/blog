@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.public.avatar_cache import router as public_avatar_cache_router
+from app.api.public.comments import router as public_comments_router
 from app.api.public.encryption import router as public_encryption_router
 from app.api.public.files import router as public_files_router
 from app.api.public.links import router as public_links_router
@@ -14,6 +15,7 @@ router.include_router(public_encryption_router)
 router.include_router(public_files_router)
 router.include_router(public_taxonomy_router)
 router.include_router(public_posts_router)
+router.include_router(public_comments_router)
 router.include_router(public_settings_router)
 router.include_router(public_links_router)
 

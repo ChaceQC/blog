@@ -4,6 +4,51 @@
 
 ### 本轮计划
 
+- 按 `docs/anonymous-comments-design.md` 实施匿名评论功能。
+- 确保没有公开登录系统时，提交者仍能在当前浏览器看到自己的评论处于“审核中”。
+- 覆盖 XSS、删除凭证、日志/遥测脱敏、后台审核和文档同步。
+
+### 已完成
+
+- 新增 `post_comments` 数据模型和 Alembic 迁移，给 `posts` 增加 `comment_count`，并插入 `comment:review` 权限；评论开关复用既有 `posts.allow_comment`，没有新增重复的 `comments_enabled` 字段。
+- 新增评论 schema、Repository、Service 和匿名身份服务：删除 token 使用 CSPRNG 生成，数据库只保存 HMAC；作者删除后清空正文、昵称和 token hash；审核通过、拒绝、垃圾、作者删除和管理员删除都会维护 `comment_count` / `reply_count`。
+- 新增公开评论 API：公开列表、提交评论、owned receipt 找回、作者删除；所有公开写接口使用 public scope `content-v1` 加密请求体，删除 token 不出现在 URL 或日志字段中。
+- 新增后台评论审核 API 与页面：管理员可按状态分页查看评论，执行通过、拒绝、标记垃圾和删除；写操作需要 `comment:review`、CSRF 和后台内容加密会话，审计日志只记录状态、动作、原因分类和实体 id。
+- 前台文章详情页接入评论区：评论默认待审核；创建成功后保存 localStorage receipt，刷新后通过 `comments/owned` 找回自己的待审核评论并显示“审核中”；只有本地持有 receipt 的评论显示删除按钮。
+- 评论正文和昵称均按纯文本处理；前台评论区和后台审核页使用 React 文本渲染，不使用 `dangerouslySetInnerHTML` 展示评论字段；第一版不支持评论 Markdown、HTML、图片、头像 URL 或自动链接。
+- 评论限流与反垃圾配置写入后端 `.env.example` 和部署环境示例，覆盖 IP、风险桶、匿名作者、重复正文窗口、待审核队列上限和自动发布开关。
+- 评论创建、审核、删除接入遥测计数，payload 只包含低基数字段和实体 id，不上报正文、昵称、slug、fingerprint、删除 token 或 `author_secret_proof`。
+- 同步更新 `README.md`、`PROJECT_PLAN.md` 和 `docs/anonymous-comments-design.md`，记录 API、数据表、安全边界、当前实现取舍和 v1 范围。
+- 代码审计后额外收紧 `author_secret_proof` 与删除 token 格式校验，并让公开评论总数只统计已发布评论，不把有回复的删除占位计入“已发布”数量。
+
+### 进行中
+
+- 匿名评论功能已完成代码、文档和本轮验证，等待提交并推送。
+
+### 阻塞与风险
+
+- 无公开登录系统时无法支持跨设备恢复删除权；用户清理浏览器数据或丢失 receipt 后，只能联系管理员处理。
+- 生产多进程/多容器部署的限流和一次性 salt lease 仍要求使用 Redis；内存后端仅适合本地开发和单进程测试。
+
+### 下一步
+
+- 将本轮匿名评论实现提交并推送到 `origin/dev`，随后按分支规则同步到 `main` 并切回 `dev`。
+
+### 验证
+
+- 已运行 `uv run ruff check app tests`，通过。
+- 已运行 `uv run pytest tests/test_comment_service.py tests/test_public_comments_api.py tests/test_admin_comments_api.py tests/test_public_content_api.py tests/test_post_interactions.py -q`，36 个测试通过；仍有 FastAPI/Starlette TestClient 与 HTTP 422 常量的上游弃用警告。
+- 已运行 `uv run alembic upgrade head --sql`，迁移升级 SQL 可生成。
+- 已运行 `npm.cmd run test -- src/features/posts/commentReceipts.test.ts`，3 个测试通过。
+- 已运行 `npm.cmd run test`，8 个测试文件、30 个测试通过。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；仍有既有混淆插件耗时与大 chunk 提醒。
+- 已运行 `git diff --check`，未发现空白或行尾问题。
+
+## 2026-06-29
+
+### 本轮计划
+
 - 设计无公开登录系统下的匿名评论、展示和删除方案。
 - 将设计文档写入 `docs` 目录，并同步项目进度。
 

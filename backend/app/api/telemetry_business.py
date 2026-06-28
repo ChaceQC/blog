@@ -1,5 +1,8 @@
 from app.api.telemetry_content import (
     record_admin_audit_telemetry,
+    record_comment_create_telemetry,
+    record_comment_delete_telemetry,
+    record_comment_review_telemetry,
     record_post_like_telemetry,
     record_post_view_telemetry,
     sanitize_business_payload,
@@ -27,6 +30,9 @@ __all__ = (
     "record_access_telemetry",
     "record_admin_audit_telemetry",
     "record_auth_login_telemetry",
+    "record_comment_create_telemetry",
+    "record_comment_delete_telemetry",
+    "record_comment_review_telemetry",
     "record_encryption_session_telemetry",
     "record_file_deleted_telemetry",
     "record_file_upload_telemetry",

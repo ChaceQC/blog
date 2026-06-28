@@ -296,7 +296,8 @@
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `comment_count` | INT | 已发布评论数，不含待审核和删除 |
-| `comments_enabled` | BOOL | 单篇文章是否开放评论，默认 true |
+
+实现取舍：项目已有 `posts.allow_comment`，本轮直接复用该字段作为单篇文章评论开关，不再新增语义重复的 `comments_enabled`。
 
 建议索引：
 
@@ -530,7 +531,7 @@
 
 ## 迁移与实现步骤
 
-1. 新增数据模型和 Alembic 迁移：`post_comments`、`posts.comment_count`、`posts.comments_enabled`。
+1. 新增数据模型和 Alembic 迁移：`post_comments`、`posts.comment_count`，并复用既有 `posts.allow_comment` 控制是否允许评论。
 2. 新增 schema、repository、service，先完成纯服务层测试。
 3. 接入公开 API：列表、创建、owned、作者删除。
 4. 接入后台 API：待审核列表、通过、拒绝、删除。
@@ -543,7 +544,7 @@
 后端：
 
 - 未发布、隐藏、私有、归档文章不能提交评论。
-- `comments_enabled=false` 时不能提交。
+- `allow_comment=false` 时不能提交。
 - 评论长度、昵称保留词、控制字符、回复深度校验。
 - 创建评论只返回一次 `delete_token`，数据库不保存明文。
 - 正确 token 可删除，错误 token 不能删除。

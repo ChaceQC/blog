@@ -14,6 +14,8 @@ AUDIT_PAYLOAD_ALLOWED_KEYS = frozenset(
         "published",
         "published_at_set",
         "review_status",
+        "reason_class",
+        "previous_status",
         "deleted",
         "is_public",
     },

@@ -109,6 +109,7 @@ class PublicPostItem(BaseModel):
     word_count: int
     view_count: int = Field(ge=0)
     like_count: int = Field(ge=0)
+    comment_count: int = Field(ge=0)
     seo_title: str | None
     seo_description: str | None
     seo_keywords: str | None = None

@@ -2,6 +2,13 @@ import { apiGetEncrypted, apiPostEncrypted } from '../../api/client.ts'
 
 import type {
   PublicPageDetail,
+  PublicCommentCreatePayload,
+  PublicCommentCreateResponse,
+  PublicCommentDeletePayload,
+  PublicCommentDeleteResponse,
+  PublicCommentListResponse,
+  PublicOwnedCommentsPayload,
+  PublicOwnedCommentsResponse,
   PublicPostInteractionPayload,
   PublicPostInteractionState,
   PublicPostDetail,
@@ -71,6 +78,61 @@ export function setPublicPostLike(
 ): Promise<PublicPostInteractionState> {
   return apiPostEncrypted<PublicPostLikePayload, PublicPostInteractionState>(
     `/public/posts/${encodeURIComponent(slug)}/like`,
+    payload,
+    'content-v1',
+    { encryptionScope: 'public', encryptRequest: true, signal: options.signal },
+  )
+}
+
+export function listPublicComments(
+  slug: string,
+  params: { limit?: number; offset?: number; signal?: AbortSignal } = {},
+): Promise<PublicCommentListResponse> {
+  const query = new URLSearchParams()
+  query.set('limit', String(params.limit ?? 50))
+  query.set('offset', String(params.offset ?? 0))
+
+  return apiGetEncrypted<PublicCommentListResponse>(
+    `/public/posts/${encodeURIComponent(slug)}/comments?${query.toString()}`,
+    'content-v1',
+    { encryptionScope: 'public', signal: params.signal },
+  )
+}
+
+export function createPublicComment(
+  slug: string,
+  payload: PublicCommentCreatePayload,
+  options: { signal?: AbortSignal } = {},
+): Promise<PublicCommentCreateResponse> {
+  return apiPostEncrypted<PublicCommentCreatePayload, PublicCommentCreateResponse>(
+    `/public/posts/${encodeURIComponent(slug)}/comments`,
+    payload,
+    'content-v1',
+    { encryptionScope: 'public', encryptRequest: true, signal: options.signal },
+  )
+}
+
+export function listOwnedPublicComments(
+  slug: string,
+  payload: PublicOwnedCommentsPayload,
+  options: { signal?: AbortSignal } = {},
+): Promise<PublicOwnedCommentsResponse> {
+  return apiPostEncrypted<PublicOwnedCommentsPayload, PublicOwnedCommentsResponse>(
+    `/public/posts/${encodeURIComponent(slug)}/comments/owned`,
+    payload,
+    'content-v1',
+    { encryptionScope: 'public', encryptRequest: true, signal: options.signal },
+  )
+}
+
+export function deletePublicComment(
+  slug: string,
+  commentId: number,
+  payload: PublicCommentDeletePayload,
+  options: { signal?: AbortSignal } = {},
+): Promise<PublicCommentDeleteResponse> {
+  return apiPostEncrypted<PublicCommentDeletePayload, PublicCommentDeleteResponse>(
+    `/public/posts/${encodeURIComponent(slug)}/comments/${commentId}/delete`,
     payload,
     'content-v1',
     { encryptionScope: 'public', encryptRequest: true, signal: options.signal },

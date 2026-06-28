@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { ArrowLeft, Clock3, Eye, Heart } from 'lucide-react'
+import { ArrowLeft, Clock3, Eye, Heart, MessageCircle } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 
@@ -21,6 +21,7 @@ import {
   getReadingMinutes,
   postCoverUrl,
 } from '../../features/posts/postMeta.ts'
+import { PostComments } from '../../features/posts/PostComments.tsx'
 import {
   getStableVisitorFingerprintFallback,
   getVisitorFingerprint,
@@ -174,6 +175,10 @@ export function PostDetailPage() {
               <Eye size={16} strokeWidth={1.8} aria-hidden="true" />
               {viewCount}
             </span>
+            <span>
+              <MessageCircle size={16} strokeWidth={1.8} aria-hidden="true" />
+              {post.comment_count}
+            </span>
           </div>
           {post.tag_names.length > 0 ? (
             <div className="post-taxonomy">
@@ -187,6 +192,7 @@ export function PostDetailPage() {
           className="post-prose"
           html={post.content_html}
         />
+        <PostComments slug={slug} initialCount={post.comment_count} />
       </article>
       <div className="post-detail-actions" aria-label="文章互动">
         {interactionErrorMessage ? (

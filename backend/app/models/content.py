@@ -55,6 +55,11 @@ class Post(TimestampMixin, SoftDeleteMixin, Base):
     pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     view_count: Mapped[int] = mapped_column(BIGINT_UNSIGNED, default=0, nullable=False)
     like_count: Mapped[int] = mapped_column(BIGINT_UNSIGNED, default=0, nullable=False)
+    comment_count: Mapped[int] = mapped_column(
+        BIGINT_UNSIGNED,
+        default=0,
+        nullable=False,
+    )
     word_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     seo_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     seo_description: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -107,6 +112,69 @@ class PostLike(TimestampMixin, Base):
     fingerprint_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     risk_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class PostComment(TimestampMixin, Base):
+    __tablename__ = "post_comments"
+    __table_args__ = (
+        Index(
+            "idx_post_comments_post_status_created",
+            "post_id",
+            "status",
+            "created_at",
+            "id",
+        ),
+        Index(
+            "idx_post_comments_post_parent_status_created",
+            "post_id",
+            "parent_id",
+            "status",
+            "created_at",
+            "id",
+        ),
+        Index(
+            "idx_post_comments_author_created",
+            "author_key_hash",
+            "created_at",
+        ),
+        Index("idx_post_comments_risk_created", "risk_hash", "created_at"),
+        Index(
+            "idx_post_comments_post_body_created",
+            "post_id",
+            "body_hash",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[int] = pk_column()
+    post_id: Mapped[int] = mapped_column(
+        BIGINT_UNSIGNED,
+        ForeignKey("posts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    parent_id: Mapped[int | None] = mapped_column(
+        BIGINT_UNSIGNED,
+        ForeignKey("post_comments.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    author_public_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    author_key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    fingerprint_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    risk_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    delete_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    body_text: Mapped[str] = mapped_column(LONG_TEXT, nullable=False)
+    body_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    reply_count: Mapped[int] = mapped_column(BIGINT_UNSIGNED, default=0, nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DATETIME_6, nullable=True)
+    reviewed_by: Mapped[int | None] = mapped_column(
+        BIGINT_UNSIGNED,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DATETIME_6, nullable=True)
+    deleted_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class Category(Base):

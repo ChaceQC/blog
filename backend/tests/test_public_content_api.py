@@ -60,6 +60,7 @@ def test_public_posts_returns_published_post_list() -> None:
     assert manager.payload["items"][0]["word_count"] == 8
     assert manager.payload["items"][0]["view_count"] == 649
     assert manager.payload["items"][0]["like_count"] == 11
+    assert manager.payload["items"][0]["comment_count"] == 2
     assert manager.payload["items"][0]["seo_keywords"] == "博客,验证"
     assert manager.payload["items"][0]["category_names"] == ["技术"]
     assert manager.payload["items"][0]["tag_names"] == ["FastAPI", "React"]
@@ -341,6 +342,7 @@ def test_public_post_detail_returns_html_content() -> None:
     assert manager.payload["word_count"] == 8
     assert manager.payload["view_count"] == 649
     assert manager.payload["like_count"] == 11
+    assert manager.payload["comment_count"] == 2
     assert (
         "/api/public/posts/public-post/files/1/thumbnail?expires="
         in str(manager.payload["cover_image_url"])

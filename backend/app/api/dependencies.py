@@ -14,6 +14,7 @@ from app.core.config import Settings, get_settings
 from app.core.database import get_session
 from app.core.storage import LocalStorageProvider
 from app.providers.telemetry import TelemetryService
+from app.repositories.comments import CommentRepository
 from app.repositories.content import ContentRepository
 from app.repositories.encryption import EncryptionSessionRepository
 from app.repositories.files import FileRepository
@@ -21,6 +22,8 @@ from app.repositories.links import LinkRepository
 from app.repositories.logs import LogRepository
 from app.repositories.settings import SettingRepository
 from app.services.avatar_cache import AvatarCacheService
+from app.services.comment_identity import CommentIdentityService
+from app.services.comments import CommentService
 from app.services.content import ContentService
 from app.services.encryption import EncryptionSessionManager
 from app.services.encryption_salts import SaltLeaseService
@@ -56,6 +59,28 @@ def get_content_service(session: SessionDependency) -> ContentService:
 
 
 ContentServiceDependency = Annotated[ContentService, Depends(get_content_service)]
+
+
+def get_comment_service(
+    session: SessionDependency,
+    settings: SettingsDependency,
+    telemetry: TelemetryServiceDependency,
+) -> CommentService:
+    return CommentService(
+        repository=CommentRepository(session),
+        identity=CommentIdentityService(secret_key=settings.secret_key),
+        pending_limit=settings.comment_pending_limit,
+        duplicate_window_seconds=settings.comment_duplicate_window_seconds,
+        risk_limit_max_attempts=settings.comment_risk_rate_limit_max_attempts,
+        risk_limit_window_seconds=settings.comment_risk_rate_limit_window_seconds,
+        author_limit_max_attempts=settings.comment_author_rate_limit_max_attempts,
+        author_limit_window_seconds=settings.comment_author_rate_limit_window_seconds,
+        auto_publish=settings.comment_auto_publish,
+        telemetry=telemetry,
+    )
+
+
+CommentServiceDependency = Annotated[CommentService, Depends(get_comment_service)]
 
 
 def get_file_service(

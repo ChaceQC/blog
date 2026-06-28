@@ -1,6 +1,7 @@
 import { useRoutes } from 'react-router-dom'
 
 import { AdminDashboardPage } from './AdminDashboardPage.tsx'
+import { AdminCommentsPage } from './AdminCommentsPage.tsx'
 import { AdminFilesPage } from './AdminFilesPage.tsx'
 import { AdminLayout } from './AdminLayout.tsx'
 import { AdminLinksPage } from './AdminLinksPage.tsx'
@@ -22,6 +23,14 @@ const adminWorkspaceRoutes = [
         element: (
           <RequireAdminPermission permissions={adminAccess.posts}>
             <AdminPostsPage />
+          </RequireAdminPermission>
+        ),
+      },
+      {
+        path: 'comments',
+        element: (
+          <RequireAdminPermission permissions={adminAccess.comments}>
+            <AdminCommentsPage />
           </RequireAdminPermission>
         ),
       },

@@ -8,6 +8,7 @@ from app.models.content import (
     Page,
     Post,
     PostCategory,
+    PostComment,
     PostLike,
     PostTag,
     Tag,
@@ -229,9 +230,12 @@ class ContentRepository(ContentPublicQueryMixin):
             delete(PostLike).where(PostLike.post_id == post_id),
         )
         await self.session.execute(
+            delete(PostComment).where(PostComment.post_id == post_id),
+        )
+        await self.session.execute(
             update(Post)
             .where(Post.id == post_id)
-            .values(view_count=0, like_count=0),
+            .values(view_count=0, like_count=0, comment_count=0),
         )
         await self.session.flush()
 

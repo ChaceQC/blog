@@ -7,6 +7,7 @@ from app.providers.telemetry import TelemetryService
 _WRITE_ACTION_PREFIXES = (
     "post.",
     "page.",
+    "comment.",
     "file.",
     "friend_link.",
     "link_group.",
@@ -108,6 +109,79 @@ def record_post_like_telemetry(
     )
 
 
+def record_comment_create_telemetry(
+    telemetry: TelemetryService,
+    *,
+    outcome: str,
+    status: str,
+    entity_id: int | None,
+) -> None:
+    telemetry.record_metric(
+        name="blog.comment.create.count",
+        value=1,
+        unit="count",
+        type="counter",
+        tags={
+            "environment": telemetry.environment,
+            "version": telemetry.version,
+            "component": "public-api",
+            "scope": "public",
+            "outcome": outcome,
+            "status": status,
+        },
+        payload={"entity_id": entity_id},
+    )
+
+
+def record_comment_review_telemetry(
+    telemetry: TelemetryService,
+    *,
+    action: str,
+    previous_status: str,
+    status: str,
+    entity_id: int | None,
+) -> None:
+    telemetry.record_metric(
+        name="blog.comment.review.count",
+        value=1,
+        unit="count",
+        type="counter",
+        tags={
+            "environment": telemetry.environment,
+            "version": telemetry.version,
+            "component": "admin-api",
+            "scope": "admin",
+            "action": action,
+            "status": status,
+            "previous_status": previous_status,
+        },
+        payload={"entity_id": entity_id},
+    )
+
+
+def record_comment_delete_telemetry(
+    telemetry: TelemetryService,
+    *,
+    scope: str,
+    outcome: str,
+    entity_id: int | None,
+) -> None:
+    telemetry.record_metric(
+        name="blog.comment.delete.count",
+        value=1,
+        unit="count",
+        type="counter",
+        tags={
+            "environment": telemetry.environment,
+            "version": telemetry.version,
+            "component": "admin-api" if scope == "admin" else "public-api",
+            "scope": scope,
+            "outcome": outcome,
+        },
+        payload={"entity_id": entity_id},
+    )
+
+
 def sanitize_business_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
     if not payload:
         return {}
@@ -118,6 +192,8 @@ def sanitize_business_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
         "public_listed",
         "show_in_nav",
         "review_status",
+        "reason_class",
+        "previous_status",
         "deleted",
         "is_public",
         "published_at_set",
