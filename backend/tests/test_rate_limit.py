@@ -22,6 +22,25 @@ class FakeLogService:
         self.events.append(payload)
 
 
+class FakeTelemetry:
+    environment = "test"
+    version = "1.0.0"
+
+    def __init__(self) -> None:
+        self.metrics: list[dict[str, object]] = []
+        self.events: list[dict[str, object]] = []
+        self.logs: list[dict[str, object]] = []
+
+    def record_metric(self, **payload: object) -> None:
+        self.metrics.append(payload)
+
+    def record_event(self, **payload: object) -> None:
+        self.events.append(payload)
+
+    def record_log(self, **payload: object) -> None:
+        self.logs.append(payload)
+
+
 def test_rate_limit_blocks_after_window_is_full() -> None:
     service = RateLimitService()
     rule = RateLimitRule(max_attempts=2, window_seconds=60)
@@ -167,6 +186,72 @@ async def test_enforce_rate_limit_records_security_event() -> None:
             "detail_json": {"credential": "username"},
         },
     ]
+
+
+@pytest.mark.anyio
+async def test_enforce_rate_limit_sanitizes_telemetry_detail() -> None:
+    service = RateLimitService()
+    logs = FakeLogService()
+    telemetry = FakeTelemetry()
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/public/posts/my-secret-slug/like",
+            "headers": [(b"user-agent", b"pytest")],
+            "client": ("127.0.0.1", 12345),
+            "scheme": "http",
+            "server": ("testserver", 80),
+            "app": type(
+                "FakeApp",
+                (),
+                {
+                    "state": type(
+                        "FakeState",
+                        (),
+                        {"telemetry_service": telemetry},
+                    )(),
+                },
+            )(),
+        },
+    )
+    rule = RateLimitRule(max_attempts=1, window_seconds=60)
+    detail = {
+        "scope": "public",
+        "action": "post.like",
+        "username": "admin",
+        "path": "/api/public/posts/my-secret-slug/like",
+        "ip": "127.0.0.1",
+    }
+
+    await enforce_rate_limit(
+        request=request,
+        limiter=service,
+        logs=logs,
+        key="post-interaction:127.0.0.1:like",
+        rule=rule,
+        event_type="rate_limit.post_interaction",
+        detail_json=detail,
+    )
+
+    with pytest.raises(HTTPException):
+        await enforce_rate_limit(
+            request=request,
+            limiter=service,
+            logs=logs,
+            key="post-interaction:127.0.0.1:like",
+            rule=rule,
+            event_type="rate_limit.post_interaction",
+            detail_json=detail,
+        )
+
+    telemetry_event = telemetry.events[0]
+    payload = telemetry_event["payload"]
+    assert payload["scope"] == "public"
+    assert payload["action"] == "post.like"
+    assert "username" not in payload
+    assert "path" not in payload
+    assert "ip" not in payload
 
 
 class FakeRedis:

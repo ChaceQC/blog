@@ -19,6 +19,8 @@ async def record_admin_audit(
     before_json: dict[str, Any] | None = None,
     after_json: dict[str, Any] | None = None,
 ) -> None:
+    sanitized_before = sanitize_audit_log_payload(before_json)
+    sanitized_after = sanitize_audit_log_payload(after_json)
     await logs.record_audit_log(
         action=action,
         entity_type=entity_type,
@@ -26,8 +28,8 @@ async def record_admin_audit(
         actor_id=actor.id,
         ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
-        before_json=sanitize_audit_log_payload(before_json),
-        after_json=sanitize_audit_log_payload(after_json),
+        before_json=sanitized_before,
+        after_json=sanitized_after,
     )
     telemetry = getattr(request.app.state, "telemetry_service", None)
     if telemetry is not None:
@@ -37,5 +39,5 @@ async def record_admin_audit(
             entity_type=entity_type,
             entity_id=entity_id,
             actor_id=actor.id,
-            after_json=after_json,
+            after_json=sanitized_after,
         )

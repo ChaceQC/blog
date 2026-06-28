@@ -264,7 +264,7 @@ def record_admin_audit_telemetry(
             },
             payload={
                 "entity_id": entity_id,
-                "changed_fields_count": len(sanitized.get("changed_fields", [])),
+                "changed_fields_count": _changed_fields_count(sanitized),
             },
         )
         telemetry.record_event(
@@ -763,10 +763,11 @@ def sanitize_business_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
     for key, value in payload.items():
         if key not in allowed:
             continue
-        if key == "changed_fields" and isinstance(value, (list, tuple, set)):
-            fields = sorted(str(item) for item in value if isinstance(item, str))
-            if fields:
-                sanitized[key] = fields[:64]
+        if key == "changed_fields":
+            if isinstance(value, (list, tuple, set)):
+                fields = sorted(str(item) for item in value if isinstance(item, str))
+                if fields:
+                    sanitized[key] = fields[:64]
             continue
         if isinstance(value, (str, bool, int, float)):
             sanitized[key] = value
@@ -923,6 +924,13 @@ def _access_outcome(*, access_type: str, status_code: int) -> str:
 
 def _is_write_action(action: str) -> bool:
     return action.startswith(_WRITE_ACTION_PREFIXES)
+
+
+def _changed_fields_count(payload: dict[str, Any]) -> int:
+    changed_fields = payload.get("changed_fields")
+    if not isinstance(changed_fields, list):
+        return 0
+    return len([item for item in changed_fields if isinstance(item, str)])
 
 
 def _safe_value(value: object) -> str | None:

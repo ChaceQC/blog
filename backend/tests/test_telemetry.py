@@ -210,7 +210,7 @@ def test_oversized_single_event_payload_is_not_queued() -> None:
 
 def test_retryable_telemetry_errors_use_retry_after(monkeypatch) -> None:
     calls: list[str] = []
-    sleeps: list[float] = []
+    waits: list[float] = []
 
     def fake_urlopen(request: object, *, timeout: float) -> FakeUrlopenResponse:
         calls.append(request.full_url)
@@ -225,7 +225,11 @@ def test_retryable_telemetry_errors_use_retry_after(monkeypatch) -> None:
         return FakeUrlopenResponse()
 
     monkeypatch.setattr(telemetry_module.urllib_request, "urlopen", fake_urlopen)
-    monkeypatch.setattr(telemetry_module.time, "sleep", sleeps.append)
+    monkeypatch.setattr(
+        telemetry_module.threading.Event,
+        "wait",
+        lambda _, value: waits.append(value) or False,
+    )
     service = TelemetryService(
         endpoint="http://telemetry.local",
         api_key="tlm_project_key",
@@ -246,7 +250,96 @@ def test_retryable_telemetry_errors_use_retry_after(monkeypatch) -> None:
     )
 
     assert len(calls) == 2
-    assert sleeps == [0.5]
+    assert waits == [0.5]
+
+
+def test_retry_after_is_capped(monkeypatch) -> None:
+    sleeps: list[float] = []
+
+    def fake_urlopen(request: object, *, timeout: float) -> FakeUrlopenResponse:
+        raise error.HTTPError(
+            request.full_url,
+            429,
+            "too many requests",
+            {"Retry-After": "600"},
+            None,
+        )
+
+    monkeypatch.setattr(telemetry_module.urllib_request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        telemetry_module.threading.Event,
+        "wait",
+        lambda _, value: sleeps.append(value) or False,
+    )
+    service = TelemetryService(
+        endpoint="http://telemetry.local",
+        api_key="tlm_project_key",
+        enabled=True,
+        source="blog-backend",
+        environment="test",
+        version="1.0.0",
+        retry_attempts=1,
+    )
+
+    service._send_with_retry(
+        kind="metrics",
+        payload={
+            "metrics": [
+                {"name": "blog.test.count", "value": 1, "source": "blog-backend"},
+            ],
+        },
+    )
+
+    assert sleeps == [30.0]
+
+
+def test_permanent_error_worker_can_be_stopped(monkeypatch) -> None:
+    def fake_urlopen(request: object, *, timeout: float) -> FakeUrlopenResponse:
+        raise error.HTTPError(
+            request.full_url,
+            401,
+            "unauthorized",
+            {},
+            None,
+        )
+
+    monkeypatch.setattr(telemetry_module.urllib_request, "urlopen", fake_urlopen)
+    service = TelemetryService(
+        endpoint="http://telemetry.local",
+        api_key="tlm_bad",
+        enabled=True,
+        source="blog-backend",
+        environment="test",
+        version="1.0.0",
+        timeout_seconds=1.0,
+        retry_attempts=1,
+    )
+
+    service._send_with_retry(
+        kind="metrics",
+        payload={
+            "metrics": [
+                {"name": "blog.test.count", "value": 1, "source": "blog-backend"},
+            ],
+        },
+    )
+    service._worker_thread = type(
+        "FakeThread",
+        (),
+        {
+            "joined": False,
+            "alive": True,
+            "join": lambda self, timeout: (
+                setattr(self, "joined", True),
+                setattr(self, "alive", False),
+            ),
+            "is_alive": lambda self: self.alive,
+        },
+    )()
+
+    service.stop()
+
+    assert service._worker_thread is None
 
 
 def test_http_middleware_records_route_template_without_query() -> None:
@@ -298,6 +391,31 @@ def test_admin_audit_telemetry_sanitizes_business_payload() -> None:
     assert "url" not in payload
     assert payload["changed_fields"] == ["slug", "status", "title"]
     assert payload["status"] == "published"
+
+
+def test_admin_audit_telemetry_ignores_invalid_changed_fields() -> None:
+    fake = FakeTelemetry()
+
+    record_admin_audit_telemetry(
+        fake,
+        action="post.update",
+        entity_type="post",
+        entity_id=12,
+        actor_id=1,
+        after_json={
+            "status": "published",
+            "changed_fields": "title",
+        },
+    )
+
+    payload = fake.events[0]["payload"]
+    write_metric = next(
+        metric
+        for metric in fake.metrics
+        if metric["name"] == "blog.content.write.count"
+    )
+    assert "changed_fields" not in payload
+    assert write_metric["payload"]["changed_fields_count"] == 0
 
 
 def test_deployment_finished_event_uses_backend_settings(monkeypatch) -> None:

@@ -27,6 +27,7 @@ _QUEUE_MAX_SIZE = 5_000
 _FLUSH_INTERVAL_SECONDS = 1.0
 _DEFAULT_TIMEOUT_SECONDS = 5.0
 _DEFAULT_RETRY_ATTEMPTS = 3
+_MAX_RETRY_AFTER_SECONDS = 30.0
 _METRIC_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _EVENT_TYPE_PATTERN = _METRIC_NAME_PATTERN
 _LOG_LEVEL_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,31}$")
@@ -100,7 +101,7 @@ class TelemetryService:
 
     def stop(self) -> None:
         thread = self._worker_thread
-        if not self.enabled or self._disabled_permanently or thread is None:
+        if not self.enabled or thread is None:
             return
         self._stop_event.set()
         try:
@@ -114,8 +115,11 @@ class TelemetryService:
             except queue.Full:
                 _LOGGER.debug("telemetry queue stayed full during shutdown")
         thread.join(timeout=self.timeout_seconds * 2)
-        self._worker_thread = None
-        self._stop_event.clear()
+        if thread.is_alive():
+            _LOGGER.debug("telemetry worker did not stop before timeout")
+        else:
+            self._worker_thread = None
+            self._stop_event.clear()
 
     def record_metric(
         self,
@@ -385,7 +389,8 @@ class TelemetryService:
                     exc,
                     retry_after,
                 )
-                time.sleep(retry_after)
+                if self._stop_event.wait(retry_after):
+                    return
         _LOGGER.debug("telemetry batch dropped after retries: %s", kind)
 
     def _send_once(self, *, kind: TelemetryKind, payload: TelemetryPayload) -> None:
@@ -573,7 +578,7 @@ def _retry_after_seconds(headers: Any) -> float | None:
     if raw_value is None:
         return None
     try:
-        return max(0.5, float(raw_value))
+        return min(_MAX_RETRY_AFTER_SECONDS, max(0.5, float(raw_value)))
     except (TypeError, ValueError):
         return None
 

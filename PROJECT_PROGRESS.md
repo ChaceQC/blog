@@ -4,6 +4,35 @@
 
 ### 本轮计划
 
+- 根据代码审计结果修复遥测实现中的收尾、安全脱敏和重试边界问题。
+- 补充回归测试，确认遥测失败不影响主流程，且不会因配置错误留下后台 worker。
+
+### 已完成
+
+- 修复 `TelemetryService.stop()` 在 401/403/422 永久禁用后提前返回的问题；现在永久错误后仍会设置停止信号、投递停止标记并 join worker。
+- 将遥测重试等待改为可被停止信号打断，并将 `Retry-After` 上限限制为 30 秒，避免关闭阶段被超长服务端重试时间拖住。
+- 调整后台审计遥测输入，复用已脱敏的审计 payload，避免审计落库与遥测外发使用两套独立白名单后续漂移。
+- 调整限流遥测输入，复用安全事件脱敏 detail，并仅额外允许低基数 `action` 字段；用户名、路径、IP 等不会进入遥测 payload。
+- 强化 `changed_fields` 边界处理，类型不正确时不会作为字符串外发，也不会按字符数计算变更字段数量。
+
+### 下一步
+
+- 在生产启用遥测前，用真实 Project API Key 进行一次部署流程验证，确认错误 API Key、429 `Retry-After` 和正常 202 Accepted 三种路径都不会影响业务进程退出。
+
+### 验证
+
+- 已运行 `uv run ruff check app tests`，通过。
+- 已运行 `uv run pytest tests/test_telemetry.py tests/test_rate_limit.py -q`，19 个测试通过；仍有 FastAPI/Starlette TestClient 上游弃用警告。
+- 已运行 `uv run pytest tests/test_telemetry.py tests/test_health.py tests/test_rate_limit.py tests/test_log_service.py tests/test_post_interactions.py tests/test_admin_encryption_api.py tests/test_public_encryption_api.py tests/test_admin_files_api.py tests/test_public_files_api.py tests/test_public_links_api.py tests/test_admin_links_api.py tests/test_admin_content_api.py tests/test_encryption_salts.py tests/test_file_cleanup.py tests/test_link_health.py -q`，110 个测试通过；仍有 FastAPI/Starlette TestClient、per-request cookies 和 HTTP 413 常量的上游弃用警告。
+- 已运行 `uv run python -m app.cli --help`，确认 CLI 可加载。
+- 已运行 `C:\Program Files\Git\bin\bash.exe -n deploy/scripts/upgrade_backend_db.sh`，通过。
+- 已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
+- 已运行 `git diff --check`，未发现空白或行尾问题。
+
+## 2026-06-28
+
+### 本轮计划
+
 - 补充根目录 `VERSION` 文件，并将项目显式版本统一到 `1.0.0`。
 - 同步后端、前端、部署示例和遥测文档里的版本示例，避免配置与文档继续停留在旧版号。
 - 按 `docs/telemetry-reporting-design.md` 完成服务端遥测上报实现，且上传开关和 Project API Key 均由后端 `.env` 控制。
