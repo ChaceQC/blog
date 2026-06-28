@@ -18,6 +18,7 @@
 - 防止评论删除权被 URL、日志、数据库或遥测泄漏。
 - 尽量复用当前项目已有能力：public scope 加密请求、匿名访客指纹、Redis/内存限流、后台审计日志、管理员权限和遥测脱敏策略。
 - 默认适合公网部署，不把原始 IP、UA、浏览器高维指纹、评论删除 token、正文内容发到遥测。
+- 把 XSS、CSRF/跨站提交、IDOR、删除 token 爆破、刷评论、日志注入、SQL 注入和 DoS 作为第一版必须覆盖的安全边界。
 
 ## 非目标
 
@@ -103,7 +104,8 @@
 第一版使用纯文本，不使用 Markdown：
 
 - 服务端保存 `body_text`。
-- 前端用普通文本节点渲染，换行展示为 `<br>` 或 CSS `white-space: pre-wrap`。
+- 前端和后台审核页都只能用普通文本节点渲染，推荐 React 默认文本转义加 CSS `white-space: pre-wrap`。
+- 禁止把评论正文、昵称、删除占位文案传给 `dangerouslySetInnerHTML`、`innerHTML`、`insertAdjacentHTML` 或任何 HTML 模板拼接。
 - 不允许 HTML。
 - 不允许图片、iframe、视频、script。
 - 链接第一版不自动变成 `<a>`；后续若需要自动链接，必须加 `rel="nofollow ugc noopener noreferrer"` 并继续限制协议。
@@ -117,6 +119,151 @@
 | 单行长度 | 300 |
 | 单条链接数量 | 0 或 2，取决于是否开启自动链接 |
 | 回复深度 | 最多 2 层 |
+
+## 安全威胁模型
+
+评论功能是公开写入口，必须按不可信输入处理。第一版实现前，需要把下面防护点作为验收标准。
+
+### XSS 与 HTML 注入
+
+风险：
+
+- 访客提交 `<script>`、事件属性、SVG、MathML、`javascript:` URL 或闭合标签，试图在公开文章页或后台审核页执行脚本。
+- 管理员审核页更敏感，一旦后台被存储型 XSS 命中，攻击者可能借管理员会话执行后台操作。
+
+约束：
+
+- 评论正文和昵称默认纯文本，服务端不生成评论 HTML。
+- 前端公开页和后台审核页都必须依赖 React 文本转义，不允许使用 `dangerouslySetInnerHTML` 展示评论字段。
+- 换行只通过 CSS `white-space: pre-wrap` 处理，不把换行手写拼接成 HTML 字符串。
+- 服务端校验并拒绝控制字符；保留普通换行和制表时，也要在日志与后台列表中做安全显示。
+- 如果未来支持 Markdown，必须单独设计：禁用 raw HTML，复用后端 `MarkdownRenderer` 的 bleach allowlist，图片和链接协议继续白名单，且新增 XSS 回归测试后才能开启。
+
+### DOM XSS 与前端状态污染
+
+风险：
+
+- localStorage 中的 receipt、昵称草稿或接口返回值被篡改后进入 DOM。
+- 评论 id、cursor、状态等被拼接到选择器、URL 或 HTML 片段中。
+
+约束：
+
+- 从 localStorage 读取的 receipt 必须做 schema 校验：`comment_id` 为正整数，`post_slug` 符合 slug 规则，`delete_token` 长度和字符集符合约束。
+- 前端只把 receipt 用于加密请求体，不直接展示 `delete_token`。
+- cursor、comment id、post slug 只能通过 URL builder / `URLSearchParams` 拼接，不手写字符串插入 HTML。
+- 前端不要把服务端返回的 `status`、`display_name` 当作 className 原样拼接；需要映射到固定枚举。
+
+### CSRF、跨站提交与重放
+
+风险：
+
+- 第三方站点诱导浏览器向评论接口发起提交或删除请求。
+- 攻击者重放旧的加密请求体重复提交评论或重复删除。
+
+约束：
+
+- 公开写接口必须使用现有 public scope `content-v1` 加密请求体，并要求有效加密会话、`esid` Cookie 和一次性 `X-Encryption-Esid-Salt`。
+- 删除 token 只能放在加密请求体中，不能放 URL、query、fragment、Referer 或日志字段。
+- `delete_token` 验证通过后的删除操作应幂等；重复删除返回相同删除状态或 404，但不能恢复正文。
+- 评论创建接口应结合 `body_hash`、`risk_hash` 和短窗口去重，避免同一加密体被重放造成多条相同评论。
+
+### IDOR 与越权删除
+
+风险：
+
+- 攻击者枚举 `comment_id`，尝试删除其他文章或其他人的评论。
+- 回复接口把 `parent_id` 指向另一篇文章的评论，破坏数据边界。
+
+约束：
+
+- 所有评论读取、删除、审核都必须同时校验 `post_id` 和 `comment_id` 关系。
+- `parent_id` 必须存在、属于同一篇文章、且不是已删除/拒绝/垃圾评论；第一版只允许回复顶层评论。
+- 作者删除必须同时满足：评论属于当前文章、状态可删除、`delete_token_hash` 常量时间比较通过。
+- 后台审核接口必须走管理员权限和 CSRF，不允许公开接口传状态直接发布。
+
+### 删除 Token 安全
+
+风险：
+
+- token 过短被爆破。
+- token 进入 URL、日志、遥测、报错、浏览器 Referer 或截图。
+- 数据库泄漏后攻击者直接拿明文 token 删除评论。
+
+约束：
+
+- `delete_token` 使用至少 32 字节 CSPRNG 随机数，base64url 编码。
+- 服务端只保存 `HMAC(secret, "comment:delete:" + delete_token)`，不保存明文。
+- token 输入设置长度上限，例如 256 字符；超长值在进入 HMAC 前拒绝。
+- 比较使用 `hmac.compare_digest`。
+- 创建响应只返回一次明文 token；后台接口和日志永不返回。
+- Nginx access log、应用访问日志、审计日志和遥测都不能包含 token。
+
+### 评论刷量、垃圾内容与 DoS
+
+风险：
+
+- 高频提交压垮数据库或审核队列。
+- 大请求体、超长正文、超多换行、复杂 Unicode 或重复内容增加处理成本。
+- 攻击者批量制造待审核评论，占满磁盘或后台页面。
+
+约束：
+
+- 公开创建、owned 查询、作者删除都要限流；生产必须使用 Redis。
+- 请求体大小、正文长度、昵称长度、receipt 数量、分页 limit、cursor 长度都必须有硬上限。
+- 全站待审核评论数达到阈值时，公开提交返回 429 或 503，并给出普通提示。
+- 正文规范化后生成 `body_hash`，同文章短窗口内重复正文直接拒绝或返回已有状态。
+- 后台列表必须分页，不允许一次加载全部评论。
+
+### SQL 注入、查询滥用与事务一致性
+
+风险：
+
+- sort/cursor/status/filter 直接拼接 SQL。
+- 审核通过、删除和 `comment_count` 更新出现竞态，导致计数错误。
+
+约束：
+
+- Repository 使用 SQLAlchemy 表达式，不拼接原生 SQL。
+- `status`、排序方向、筛选条件必须用固定枚举映射。
+- 审核通过、作者删除、管理员删除和 `posts.comment_count` 更新放在同一事务。
+- 对同一评论状态迁移使用行锁或带状态条件的 update，避免重复通过/重复扣减。
+
+### 日志注入与后台展示
+
+风险：
+
+- 评论正文包含换行、控制字符或伪造日志片段，污染日志。
+- 后台审核页把正文放进表格 title、tooltip、data 属性或 HTML attribute，触发注入。
+
+约束：
+
+- 评论正文、昵称不进入访问日志、审计日志、结构化应用日志和遥测。
+- 后台审核页表格只展示截断纯文本摘要，详情区仍按文本节点渲染。
+- 如果需要导出评论，导出文件必须转义 CSV/Excel 公式前缀，例如 `=`, `+`, `-`, `@`。
+
+### 隐私与关联风险
+
+风险：
+
+- 同一匿名读者在不同文章下被公开关联。
+- 后台或遥测保存可逆身份材料。
+
+约束：
+
+- 公开 `author_public_id` 按文章隔离，不能直接暴露全站稳定作者 id。
+- `author_secret_proof`、fingerprint 明细、原始 IP、完整 UA 不落库。
+- 风险字段只保存 HMAC 摘要和低精度 IP prefix，且遵循日志保留策略。
+
+### 第三方资源与 SSRF
+
+风险：
+
+- 如果评论支持头像 URL、图片 URL 或自动展开链接，服务端可能被诱导请求内网地址，前端可能加载跟踪资源。
+
+约束：
+
+- 第一版不接收头像 URL，不支持评论图片，不做链接预览，不服务端抓取评论中的 URL。
+- 如果未来允许外部资源，必须先复用头像缓存的 SSRF 校验策略，并新增协议、DNS、重定向、大小、MIME 和像素限制。
 
 ## 数据模型
 
