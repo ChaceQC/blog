@@ -18,6 +18,10 @@ from app.api.public.common import (
     validate_decrypted_payload,
     validate_public_content_session,
 )
+from app.api.telemetry import (
+    record_friend_link_application_telemetry,
+    record_site_nav_visit_telemetry,
+)
 from app.core.encryption import EncryptionProfile
 from app.core.request import client_ip
 from app.schemas.encryption import EncryptedApiRequest
@@ -94,18 +98,28 @@ async def create_public_friend_link_application(
     logs: LogServiceDependency,
     rate_limiter: RateLimitServiceDependency,
 ):
-    await enforce_rate_limit(
-        request=request,
-        limiter=rate_limiter,
-        logs=logs,
-        key=f"friend-link-application:{client_ip(request) or 'unknown'}",
-        rule=RateLimitRule(
-            max_attempts=settings.friend_link_application_rate_limit_max_attempts,
-            window_seconds=settings.friend_link_application_rate_limit_window_seconds,
-        ),
-        event_type="rate_limit.friend_link_application",
-        detail_json={"scope": "public"},
-    )
+    try:
+        await enforce_rate_limit(
+            request=request,
+            limiter=rate_limiter,
+            logs=logs,
+            key=f"friend-link-application:{client_ip(request) or 'unknown'}",
+            rule=RateLimitRule(
+                max_attempts=settings.friend_link_application_rate_limit_max_attempts,
+                window_seconds=settings.friend_link_application_rate_limit_window_seconds,
+            ),
+            event_type="rate_limit.friend_link_application",
+            detail_json={"scope": "public"},
+        )
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+            telemetry = getattr(request.app.state, "telemetry_service", None)
+            if telemetry is not None:
+                record_friend_link_application_telemetry(
+                    telemetry,
+                    outcome="rate_limited",
+                )
+        raise
     decrypted_payload = await decrypt_encrypted_request(
         payload,
         request=request,
@@ -131,11 +145,24 @@ async def create_public_friend_link_application(
             ),
         )
     except DuplicateFriendLinkApplicationError as exc:
+        telemetry = getattr(request.app.state, "telemetry_service", None)
+        if telemetry is not None:
+            record_friend_link_application_telemetry(
+                telemetry,
+                outcome="duplicate",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="friend link application already exists",
         ) from exc
     except FriendLinkApplicationLimitExceededError as exc:
+        outcome = "domain_limited" if "domain" in str(exc) else "global_limited"
+        telemetry = getattr(request.app.state, "telemetry_service", None)
+        if telemetry is not None:
+            record_friend_link_application_telemetry(
+                telemetry,
+                outcome=outcome,
+            )
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="too many pending friend link applications",
@@ -155,6 +182,13 @@ async def create_public_friend_link_application(
         entity_type="friend_link",
         entity_id=link.id,
     )
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    if telemetry is not None:
+        record_friend_link_application_telemetry(
+            telemetry,
+            outcome="accepted",
+            entity_id=link.id,
+        )
     return response
 
 
@@ -231,6 +265,15 @@ async def visit_public_site_item(
             entity_type="site_nav_item",
             entity_id=item.id,
         )
+    else:
+        telemetry = getattr(request.app.state, "telemetry_service", None)
+        if telemetry is not None:
+            record_site_nav_visit_telemetry(
+                telemetry,
+                outcome="deduped",
+                entity_id=item.id,
+                status_code=status.HTTP_302_FOUND,
+            )
     return RedirectResponse(url=item.url, status_code=status.HTTP_302_FOUND)
 
 

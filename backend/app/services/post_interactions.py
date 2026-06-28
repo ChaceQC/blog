@@ -5,6 +5,10 @@ from ipaddress import ip_address, ip_network
 from json import dumps
 from typing import Protocol
 
+from app.api.telemetry import (
+    record_post_like_telemetry,
+    record_post_view_telemetry,
+)
 from app.schemas.content import PublicPostInteractionState, VisitorFingerprint
 from app.services.content_errors import ContentNotFoundError
 from app.services.logs import AccessLogDedupeBackend, AccessLogDedupeRule
@@ -58,12 +62,14 @@ class PostInteractionService:
         secret_key: str,
         view_dedupe_seconds: int,
         like_risk_window_seconds: int,
+        telemetry: object | None = None,
     ) -> None:
         self.repository = repository
         self._dedupe_backend = dedupe_backend
         self._secret_key = secret_key
         self._view_dedupe_seconds = view_dedupe_seconds
         self._like_risk_window_seconds = like_risk_window_seconds
+        self._telemetry = telemetry
 
     async def record_view(
         self,
@@ -82,10 +88,16 @@ class PostInteractionService:
             user_agent=user_agent,
             accept_language=accept_language,
         )
-        if self._should_record_view(post_id=post_id, identity=identity):
+        recorded = self._should_record_view(post_id=post_id, identity=identity)
+        if recorded:
             await self.repository.increment_post_view_count(post_id=post_id)
             await self.repository.commit()
-        return await self._state(slug=slug, identity=identity)
+        state = await self._state(slug=slug, identity=identity)
+        self._record_view_telemetry(
+            outcome="recorded" if recorded else "deduped",
+            entity_id=post_id,
+        )
+        return state
 
     async def set_like(
         self,
@@ -109,11 +121,18 @@ class PostInteractionService:
             post_id=post_id,
             visitor_hash=identity.visitor_hash,
         )
-        if liked and current is None and not self._reserve_like_risk(
+        risk_limited = liked and current is None and not self._reserve_like_risk(
             post_id=post_id,
             identity=identity,
-        ):
+        )
+        if risk_limited:
+            self._record_like_telemetry(
+                outcome="risk_limited",
+                liked=liked,
+                entity_id=post_id,
+            )
             raise PostInteractionRiskLimited("post like risk limited")
+        previous = current
         await self.repository.set_post_like_state(
             post_id=post_id,
             visitor_hash=identity.visitor_hash,
@@ -122,7 +141,14 @@ class PostInteractionService:
             liked=liked,
         )
         await self.repository.commit()
-        return await self._state(slug=slug, identity=identity)
+        state = await self._state(slug=slug, identity=identity)
+        outcome = _like_outcome(previous=previous, liked=liked)
+        self._record_like_telemetry(
+            outcome=outcome,
+            liked=liked,
+            entity_id=post_id,
+        )
+        return state
 
     async def _state(
         self,
@@ -221,6 +247,31 @@ class PostInteractionService:
             risk_hash=risk_hash,
         )
 
+    def _record_view_telemetry(self, *, outcome: str, entity_id: int) -> None:
+        if self._telemetry is None:
+            return
+        record_post_view_telemetry(
+            self._telemetry,
+            outcome=outcome,
+            entity_id=entity_id,
+        )
+
+    def _record_like_telemetry(
+        self,
+        *,
+        outcome: str,
+        liked: bool,
+        entity_id: int,
+    ) -> None:
+        if self._telemetry is None:
+            return
+        record_post_like_telemetry(
+            self._telemetry,
+            outcome=outcome,
+            liked=liked,
+            entity_id=entity_id,
+        )
+
     def _hmac(self, namespace: str, payload: dict[str, object]) -> str:
         canonical = dumps(
             payload,
@@ -251,3 +302,9 @@ def _short_text(value: str | None, limit: int) -> str | None:
     if value is None:
         return None
     return value[:limit]
+
+
+def _like_outcome(*, previous: bool | None, liked: bool) -> str:
+    if previous is None:
+        return "changed" if liked else "noop"
+    return "changed" if previous != liked else "noop"

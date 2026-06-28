@@ -5,6 +5,10 @@ from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.api.state import get_app_rate_limit_service
+from app.api.telemetry import (
+    record_salt_lease_telemetry,
+    record_salt_websocket_closed,
+)
 from app.core.config import get_settings
 from app.core.encryption import EncryptionProfile
 from app.core.request import client_ip
@@ -87,6 +91,7 @@ async def salt_websocket(
     await websocket.accept()
     settings = get_settings()
     rate_limiter = get_app_rate_limit_service(websocket.app, settings)
+    telemetry = getattr(websocket.app.state, "telemetry_service", None)
     rate_limit_rule = RateLimitRule(
         max_attempts=settings.encryption_session_rate_limit_max_attempts,
         window_seconds=settings.encryption_session_rate_limit_window_seconds,
@@ -162,6 +167,20 @@ async def salt_websocket(
                     for lease_request in lease_requests
                     for _ in range(lease_request.count)
                 ]
+                if telemetry is not None:
+                    for lease_request in lease_requests:
+                        record_salt_lease_telemetry(
+                            telemetry,
+                            scope=scope,
+                            purpose=lease_request.purpose,
+                            profile=(
+                                lease_request.profile.value
+                                if lease_request.profile is not None
+                                else None
+                            ),
+                            stage="issued",
+                            count=lease_request.count,
+                        )
                 await websocket.send_json(
                     SaltFrameResponse(
                         frames=[
@@ -177,6 +196,12 @@ async def salt_websocket(
                 )
             except TimeoutError:
                 await websocket.close(code=1001)
+                _record_websocket_closed(
+                    telemetry,
+                    scope=scope,
+                    close_code=1001,
+                    reason_class="idle_timeout",
+                )
                 return
             except (
                 EncryptionSessionError,
@@ -185,12 +210,47 @@ async def salt_websocket(
                 ValueError,
             ):
                 await websocket.close(code=1008)
+                _record_websocket_closed(
+                    telemetry,
+                    scope=scope,
+                    close_code=1008,
+                    reason_class="invalid_request",
+                )
                 return
             except RateLimitExceeded:
                 await websocket.close(code=1008)
+                _record_websocket_closed(
+                    telemetry,
+                    scope=scope,
+                    close_code=1008,
+                    reason_class="rate_limited",
+                )
                 return
     except WebSocketDisconnect:
+        _record_websocket_closed(
+            telemetry,
+            scope=scope,
+            close_code=1000,
+            reason_class="client_disconnect",
+        )
         return
+
+
+def _record_websocket_closed(
+    telemetry: object | None,
+    *,
+    scope: EncryptionSessionScope,
+    close_code: int,
+    reason_class: str,
+) -> None:
+    if telemetry is None:
+        return
+    record_salt_websocket_closed(
+        telemetry,
+        scope=scope,
+        close_code=close_code,
+        reason_class=reason_class,
+    )
 
 
 def _enforce_message_rate_limit(

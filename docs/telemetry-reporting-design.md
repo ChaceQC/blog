@@ -8,6 +8,7 @@
 - 前端如需上报 Web Vitals 或 JS 错误，必须先走后端受控转发接口，后端负责脱敏、限流和补充项目 API Key。
 - 业务主流程不能同步阻塞在遥测发送上；后端应本地内存队列或后台任务异步发送，失败只影响观测数据。
 - 所有上报都使用 UTF-8 JSON，单批不超过 100 条和 256 KB；高频事件优先聚合成指标。
+- 当前实现通过后端环境变量控制是否上传：`BLOG_TELEMETRY_ENABLED=false` 默认关闭，启用时还必须提供 `BLOG_TELEMETRY_ENDPOINT` 和 `BLOG_TELEMETRY_API_KEY`。Project API Key 只放在 `backend/.env` 或 `deploy/env/backend.env`，不进入前端配置、浏览器包或请求参数。
 
 ## 通用标签
 
@@ -17,7 +18,7 @@
 | --- | --- | --- | --- |
 | `source` | 顶层 | `blog-backend` | 来源服务；trace 拓扑也依赖它 |
 | `environment` | tags/payload | `production` | 来自 `settings.environment` |
-| `version` | tags/payload | `0.1.0` | 来自 `settings.version` |
+| `version` | tags/payload | `1.0.0` | 来自 `settings.version` |
 | `component` | tags | `public-api` / `admin-api` / `encryption` / `files` / `tasks` | 模块边界 |
 | `scope` | tags | `public` / `admin` / `system` | API 或任务范围 |
 | `route` | tags | `/api/public/posts/{slug}` | 必须使用路由模板，不用真实 path |
@@ -57,7 +58,7 @@
 | `blog.task.deleted.rows` | gauge | count | 日志/加密会话/文件清理任务结束 | `task_name`、`table` | 无 |
 | `blog.friend_link.health.count` | gauge | count | 友链健康检查结束 | `outcome=healthy/unhealthy/skipped` | 无 |
 
-`blog.public.post.view.count` 的 `recorded/deduped` 和 `blog.public.post.like.count` 的 `changed/noop` 需要服务层在后续实现时返回状态标记；当前代码只有最终计数状态，第一版可以先按接口成功计 `outcome=ok`，再补细分。
+`blog.public.post.view.count` 当前由服务层精确上报 `recorded/deduped`，`blog.public.post.like.count` 当前由点赞状态机精确上报 `changed/noop/risk_limited`。
 
 示例：
 
@@ -72,7 +73,7 @@
       "source": "blog-backend",
       "tags": {
         "environment": "production",
-        "version": "0.1.0",
+        "version": "1.0.0",
         "component": "public-api",
         "scope": "public",
         "method": "GET",
@@ -113,7 +114,7 @@
   "source": "blog-backend",
   "payload": {
     "environment": "production",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "action": "post.publish",
     "entity_type": "post",
     "entity_id": 123,
@@ -167,23 +168,25 @@ trace 用于定位慢请求和依赖瓶颈。建议采样规则：
 
 同一个 HTTP 请求内生成 `trace_id`，根 span 是路由模板，内部 Redis/MySQL/Storage span 按父子关系关联。跨请求的文章图片、公开文件下载等不强行与文章详情请求关联，除非后续在短时签名中安全地携带不可逆 trace continuation。
 
-## 推荐挂载点
+## 当前挂载点
 
-结合当前代码，第一版实现可放这些位置：
+当前后端已按这些位置落地第一版：
 
-- `app.main.create_app()` 增加 HTTP middleware：统一记录 `blog.http.server.*` 指标、慢请求/error trace 根 span。
-- `app.api.admin.audit.record_admin_audit()`：上报 `blog.admin.audit` 事件和后台写入指标。
-- `app.api.public.common.record_public_access()` 与 `LogService.record_access_log()`：上报公开访问、文件访问和跳转计数指标；仍遵守现有去重。
+- `app.main.create_app()`：HTTP middleware 统一记录 `blog.http.server.*` 指标，并按错误、慢请求、后台写操作和公开 GET 采样规则上报 root span。
+- `app.api.admin.audit.record_admin_audit()`：上报 `blog.admin.audit` 事件和后台内容写入指标。
+- `LogService.record_access_log()`：只在访问日志实际落库后上报公开文件访问和站点跳转指标；短时去重命中时不重复上报。
 - `app.api.limits.enforce_rate_limit()`：上报限流指标、`blog.security.rate_limit.hit` 事件和 warn log。
-- `app.api.admin.encryption`、`app.api.public.encryption`、`app.api.encryption_salts.salt_websocket()`：上报加密会话、salt WSS 和 lease 指标。
-- `PostInteractionService.record_view()`、`PostInteractionService.set_like()`：后续返回 `recorded/deduped/changed/noop` 标记后，上报更准确的互动指标。
-- `FileService.upload_file()`、公开/后台文件下载与短时链接路由：上报上传体积、访问结果和拒绝原因类别。
-- `app.tasks.*` 和 `app.cli`：任务结束时用 `/api/v1/ingest/batch` 上报任务事件，用 metrics 上报清理数量。
+- `app.api.admin.encryption`、`app.api.public.encryption`、`app.api.encryption_salts.salt_websocket()` 和 salt lease 服务：上报加密会话、salt WSS 关闭和 lease 签发/消费/拒绝指标。
+- `PostInteractionService.record_view()`、`PostInteractionService.set_like()`：上报 `recorded/deduped/changed/noop/risk_limited` 互动指标。
+- 后台/公开文件路由与文件管理路由：上报上传成功/失败、上传体积、删除事件和短时链接创建事件；文件下载/文章图片访问通过访问日志服务统一上报。
+- 公开友链申请、后台友链审核和站点跳转路由：上报申请结果、审核事件、跳转首访和去重结果。
+- `app.tasks.*`：维护任务结束时上报任务完成指标、事件、日志和 root span。
+- `deploy/scripts/upgrade_backend_db.sh` 通过 `python -m app.cli record-deployment-finished` 在数据库升级脚本退出时尽力上报 `blog.deployment.finished`。
 
-## 最小落地顺序
+## 落地状态
 
-1. 新增 `TelemetryClient` adapter，读取 `BLOG_TELEMETRY_ENDPOINT`、`BLOG_TELEMETRY_API_KEY`、`BLOG_TELEMETRY_ENABLED`，并实现异步队列、批量发送、429 `Retry-After`、5xx 短重试。
-2. 接入 HTTP middleware、`enforce_rate_limit()`、`record_admin_audit()` 这三个高价值低侵入点。
-3. 接入文件、公开文章互动、加密 salt WSS 和维护任务的业务指标。
-4. 加入采样 trace，并只对错误、慢请求、后台写操作和任务全量上报。
-5. 为遥测失败增加本地 debug/info 级日志，但不得把遥测 API Key 打进日志。
+1. 已新增 `TelemetryService` adapter，读取 `BLOG_TELEMETRY_ENDPOINT`、`BLOG_TELEMETRY_API_KEY`、`BLOG_TELEMETRY_ENABLED`，并实现异步队列、批量发送、429 `Retry-After`、5xx 短重试、100 条/256 KB 切块和超大单项丢弃。
+2. 已接入 HTTP middleware、`enforce_rate_limit()`、`record_admin_audit()` 三个高价值低侵入点。
+3. 已接入文件、公开文章互动、加密 salt WSS、友链/站点跳转和维护任务的业务指标与事件。
+4. 已加入采样 trace，并只对错误、慢请求、后台写操作、维护任务和少量公开 GET 成功请求上报 root span。
+5. 已为遥测失败使用本地 debug/warn 日志记录原因，不记录遥测 API Key。

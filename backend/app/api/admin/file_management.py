@@ -22,6 +22,11 @@ from app.api.dependencies import (
     LogServiceDependency,
     SettingsDependency,
 )
+from app.api.telemetry import (
+    record_file_deleted_telemetry,
+    record_file_upload_telemetry,
+    record_temporary_url_telemetry,
+)
 from app.core.request import client_ip
 from app.core.urls import public_file_download_url
 from app.schemas.encryption import EncryptedApiResponse
@@ -93,11 +98,27 @@ async def upload_file(
             ),
         )
     except FileTooLargeError as exc:
+        telemetry = getattr(request.app.state, "telemetry_service", None)
+        if telemetry is not None:
+            record_file_upload_telemetry(
+                telemetry,
+                outcome="error",
+                visibility=visibility,
+                public_listed=public_listed,
+            )
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="file is too large",
         ) from exc
     except FileValidationError as exc:
+        telemetry = getattr(request.app.state, "telemetry_service", None)
+        if telemetry is not None:
+            record_file_upload_telemetry(
+                telemetry,
+                outcome="error",
+                visibility=visibility,
+                public_listed=public_listed,
+            )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="invalid file upload",
@@ -112,6 +133,16 @@ async def upload_file(
         entity_id=uploaded_file.id,
         after_json=file_audit_payload(uploaded_file),
     )
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    if telemetry is not None:
+        record_file_upload_telemetry(
+            telemetry,
+            outcome="ok",
+            visibility=visibility,
+            public_listed=public_listed,
+            entity_id=uploaded_file.id,
+            size_bytes=uploaded_file.size_bytes,
+        )
     return await files_response(
         AdminFileItem.model_validate(uploaded_file),
         request=request,
@@ -146,6 +177,13 @@ async def delete_file(
         entity_id=file.id,
         after_json=file_audit_payload(file),
     )
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    if telemetry is not None:
+        record_file_deleted_telemetry(
+            telemetry,
+            entity_id=file.id,
+            actor_id=current_user.id,
+        )
     return await files_response(
         AdminFileItem.model_validate(file),
         request=request,
@@ -201,4 +239,12 @@ async def create_file_temporary_url(
         user_agent=request.headers.get("user-agent"),
         detail_json=None,
     )
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    if telemetry is not None:
+        record_temporary_url_telemetry(
+            telemetry,
+            scope="admin",
+            entity_id=access.file.id,
+            expires_seconds=settings.file_temporary_url_expire_seconds,
+        )
     return response

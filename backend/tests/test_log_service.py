@@ -32,6 +32,21 @@ class FakeLogRepository:
         self.commit_count += 1
 
 
+class FakeTelemetry:
+    environment = "test"
+    version = "1.0.0"
+
+    def __init__(self) -> None:
+        self.metrics: list[dict[str, object]] = []
+        self.events: list[dict[str, object]] = []
+
+    def record_metric(self, **kwargs: object) -> None:
+        self.metrics.append(dict(kwargs))
+
+    def record_event(self, **kwargs: object) -> None:
+        self.events.append(dict(kwargs))
+
+
 class FakeReadableLogRepository(FakeLogRepository):
     async def list_audit_logs(self, *, limit: int, offset: int) -> list[object]:
         assert limit == 10
@@ -201,6 +216,46 @@ def test_record_access_log_dedupes_same_ip_method_and_path(monkeypatch) -> None:
     assert len(repository.items) == 1
     assert repository.items[0]["path"] == "/api/public/posts"
     assert repository.commit_count == 1
+
+
+def test_record_access_log_reports_telemetry_only_after_persist(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(logs_module, "get_settings", lambda: FakeSettings())
+    repository = FakeLogRepository()
+    telemetry = FakeTelemetry()
+    service = LogService(repository=repository, telemetry=telemetry)
+
+    async def run() -> tuple[bool, bool]:
+        first = await service.record_access_log(
+            access_type="public_site_item_visit",
+            method="GET",
+            path="/api/public/site-items/1/visit",
+            status_code=302,
+            ip="127.0.0.1",
+            user_agent="pytest",
+            entity_type="site_nav_item",
+            entity_id=1,
+        )
+        second = await service.record_access_log(
+            access_type="public_site_item_visit",
+            method="GET",
+            path="/api/public/site-items/1/visit",
+            status_code=302,
+            ip="127.0.0.1",
+            user_agent="pytest",
+            entity_type="site_nav_item",
+            entity_id=1,
+        )
+        return first, second
+
+    assert asyncio.run(run()) == (True, False)
+    assert len(repository.items) == 1
+    assert repository.commit_count == 1
+    assert [metric["name"] for metric in telemetry.metrics] == [
+        "blog.site_nav.visit.count",
+    ]
+    assert telemetry.metrics[0]["tags"]["outcome"] == "redirect"
 
 
 def test_record_access_log_keeps_different_paths(monkeypatch) -> None:

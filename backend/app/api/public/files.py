@@ -16,6 +16,7 @@ from app.api.public.common import (
     record_public_access,
     validate_public_content_session,
 )
+from app.api.telemetry import record_temporary_url_telemetry
 from app.core.encryption import EncryptionProfile
 from app.core.urls import public_file_download_url
 from app.schemas.encryption import EncryptedApiResponse
@@ -139,6 +140,14 @@ async def create_public_file_temporary_url(
         status_code=status.HTTP_200_OK,
         file_id=file_id,
     )
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    if telemetry is not None:
+        record_temporary_url_telemetry(
+            telemetry,
+            scope="public",
+            entity_id=access.file.id,
+            expires_seconds=settings.file_temporary_url_expire_seconds,
+        )
     return response
 
 

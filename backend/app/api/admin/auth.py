@@ -28,6 +28,7 @@ from app.api.encrypted_response import (
     validate_encryption_session,
 )
 from app.api.limits import enforce_rate_limit
+from app.api.telemetry import record_auth_login_telemetry
 from app.core.encryption import EncryptionProfile
 from app.core.request import client_ip
 from app.schemas.auth import (
@@ -76,34 +77,56 @@ async def login(
     )
 
     client = client_ip(request) or "unknown"
-    await enforce_rate_limit(
-        request=request,
-        limiter=rate_limiter,
-        logs=logs,
-        key=f"admin-login-ip:{client}",
-        rule=RateLimitRule(
-            max_attempts=settings.admin_login_rate_limit_max_attempts * 3,
-            window_seconds=settings.admin_login_rate_limit_window_seconds,
-        ),
-        event_type="rate_limit.admin_login",
-        detail_json={"credential": "ip"},
-    )
+    try:
+        await enforce_rate_limit(
+            request=request,
+            limiter=rate_limiter,
+            logs=logs,
+            key=f"admin-login-ip:{client}",
+            rule=RateLimitRule(
+                max_attempts=settings.admin_login_rate_limit_max_attempts * 3,
+                window_seconds=settings.admin_login_rate_limit_window_seconds,
+            ),
+            event_type="rate_limit.admin_login",
+            detail_json={"credential": "ip"},
+        )
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+            telemetry = getattr(request.app.state, "telemetry_service", None)
+            if telemetry is not None:
+                record_auth_login_telemetry(
+                    telemetry,
+                    outcome="limited",
+                    reason_class="rate_limited",
+                )
+        raise
     limit_key = (
         f"admin-login:{client}:"
         f"{login_payload.username.casefold()}"
     )
-    await enforce_rate_limit(
-        request=request,
-        limiter=rate_limiter,
-        logs=logs,
-        key=limit_key,
-        rule=RateLimitRule(
-            max_attempts=settings.admin_login_rate_limit_max_attempts,
-            window_seconds=settings.admin_login_rate_limit_window_seconds,
-        ),
-        event_type="rate_limit.admin_login",
-        detail_json={"credential": "username"},
-    )
+    try:
+        await enforce_rate_limit(
+            request=request,
+            limiter=rate_limiter,
+            logs=logs,
+            key=limit_key,
+            rule=RateLimitRule(
+                max_attempts=settings.admin_login_rate_limit_max_attempts,
+                window_seconds=settings.admin_login_rate_limit_window_seconds,
+            ),
+            event_type="rate_limit.admin_login",
+            detail_json={"credential": "username"},
+        )
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+            telemetry = getattr(request.app.state, "telemetry_service", None)
+            if telemetry is not None:
+                record_auth_login_telemetry(
+                    telemetry,
+                    outcome="limited",
+                    reason_class="rate_limited",
+                )
+        raise
     try:
         tokens = await service.login(
             username=login_payload.username,
@@ -112,6 +135,13 @@ async def login(
             user_agent=request.headers.get("user-agent"),
         )
     except AuthenticationError as exc:
+        telemetry = getattr(request.app.state, "telemetry_service", None)
+        if telemetry is not None:
+            record_auth_login_telemetry(
+                telemetry,
+                outcome="error",
+                reason_class="invalid_credentials",
+            )
         raise _unauthorized() from exc
 
     csrf_token = create_csrf_token()
@@ -121,6 +151,14 @@ async def login(
         csrf_token=csrf_token,
         settings=settings,
     )
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    if telemetry is not None:
+        record_auth_login_telemetry(
+            telemetry,
+            outcome="ok",
+            reason_class="success",
+            actor_id=tokens.user.id,
+        )
     return await encrypted_response(
         session_response(
             user=tokens.user,

@@ -24,7 +24,7 @@ cp deploy/env/mysql.env.example deploy/env/mysql.env
 cp deploy/env/nginx.env.example deploy/env/nginx.env
 ```
 
-- `backend.env`：后端应用配置，包括容器时区、数据库连接、密钥、公开域名、CORS、Trusted Host、Cookie、安全限流、上传目录和 Redis。
+- `backend.env`：后端应用配置，包括容器时区、数据库连接、密钥、公开域名、CORS、Trusted Host、Cookie、安全限流、上传目录、Redis 和可选遥测上报配置。遥测默认关闭；启用时 `BLOG_TELEMETRY_API_KEY` 必须填写 Project API Key，不得放入前端配置。
 - `mysql.env`：MySQL root 密码、业务库、业务账号和密码。
 - `nginx.env`：Nginx 模板渲染所需的域名和容器内证书路径。
 
@@ -134,6 +134,8 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml -f
 ```bash
 bash deploy/scripts/upgrade_backend_db.sh
 ```
+
+`upgrade_backend_db.sh` 退出时会通过一次性后端容器尽力调用 `python -m app.cli record-deployment-finished`，在已启用遥测时上报 `blog.deployment.finished` 事件；该上报失败不会改变数据库升级脚本本身的退出码。
 
 如已通过其他方式完成备份，可跳过脚本内置备份：
 

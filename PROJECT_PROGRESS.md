@@ -1,5 +1,38 @@
 # 项目进度
 
+## 2026-06-28
+
+### 本轮计划
+
+- 补充根目录 `VERSION` 文件，并将项目显式版本统一到 `1.0.0`。
+- 同步后端、前端、部署示例和遥测文档里的版本示例，避免配置与文档继续停留在旧版号。
+- 按 `docs/telemetry-reporting-design.md` 完成服务端遥测上报实现，且上传开关和 Project API Key 均由后端 `.env` 控制。
+
+### 已完成
+
+- 新增根目录 `VERSION`，内容为 `1.0.0`，无 BOM。
+- 已将 `backend/.env.example`、`deploy/env/backend.env.example`、`backend/.env`、`backend/pyproject.toml`、`backend/uv.lock`、`frontend/package.json`、`frontend/package-lock.json`、`PROJECT_PLAN.md` 和 `docs/telemetry-reporting-design.md` 中的版本口径统一为 `1.0.0`。
+- 新增后端 `TelemetryService` adapter，读取 `BLOG_TELEMETRY_ENABLED`、`BLOG_TELEMETRY_ENDPOINT` 和 `BLOG_TELEMETRY_API_KEY`；默认关闭，启用时使用 `X-API-Key` 发送 UTF-8 JSON，支持内存队列、100 条/256 KB 切块、单条 event payload 64 KB 限制、429 `Retry-After` 和 5xx 短重试。
+- 接入 HTTP middleware、限流、后台审计、后台登录、加密会话、salt WSS/lease、公开文章浏览/点赞、文件上传/删除/短时链接、文件/站点访问日志、公开友链申请、后台友链审核和维护任务遥测。
+- 新增部署完成事件：`deploy/scripts/upgrade_backend_db.sh` 退出时尽力调用 `python -m app.cli record-deployment-finished`，在启用遥测时上报 `blog.deployment.finished`，上报失败不改变脚本退出码。
+- 已同步 `README.md`、`backend/README.md`、`deploy/README.md`、`PROJECT_PLAN.md` 和 `docs/telemetry-reporting-design.md`，明确 Project API Key 只放后端/部署 env，前端不持有，且不上报正文、slug、完整 URL/query、签名 token、Cookie、加密材料、文件名、MIME、外部 URL 或完整设置值。
+
+### 下一步
+
+- 如需开启生产遥测，在服务器 `deploy/env/backend.env` 中显式填写 `BLOG_TELEMETRY_ENABLED=true`、`BLOG_TELEMETRY_ENDPOINT` 和 Project API Key，并用真实部署流程验证摄入端收到 `blog.http.server.*` 与 `blog.deployment.finished`。
+
+### 验证
+
+- 已检查根目录 `VERSION` 为纯文本 `1.0.0`。
+- 已运行 `uv run ruff check app tests`，通过。
+- 已运行 `uv run pytest tests/test_telemetry.py tests/test_health.py tests/test_rate_limit.py tests/test_log_service.py tests/test_post_interactions.py tests/test_admin_encryption_api.py tests/test_public_encryption_api.py tests/test_admin_files_api.py tests/test_public_files_api.py tests/test_public_links_api.py tests/test_admin_links_api.py tests/test_admin_content_api.py tests/test_encryption_salts.py tests/test_file_cleanup.py tests/test_link_health.py -q`，106 个测试通过；仍有 FastAPI/Starlette TestClient 与 HTTP 413 常量的上游弃用警告。
+- 已运行 `uv run python -m app.cli --help`，确认 `record-deployment-finished` 命令可加载。
+- 已运行 `C:\Program Files\Git\bin\bash.exe -n deploy/scripts/upgrade_backend_db.sh`，通过。
+- 已运行 `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config --quiet`，通过。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；Vite/Rolldown 仍提示既有混淆插件耗时较高。
+- 已运行 `git diff --check`，未发现空白或行尾问题。
+
 ## 2026-06-27
 
 ### 本轮计划

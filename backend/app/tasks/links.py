@@ -13,6 +13,7 @@ from app.services.link_health import (
     FriendLinkHealthCheckResult,
     FriendLinkHealthService,
 )
+from app.tasks.telemetry import start_task_telemetry
 
 
 @dataclass(frozen=True)
@@ -50,14 +51,29 @@ async def check_friend_links(
 ) -> FriendLinkHealthCheckResult:
     """检查已通过友链的 HTTP 状态，供 CLI 或定时任务调用。"""
     _ = settings or get_settings()
-    async with AsyncSessionLocal() as session:
-        service = FriendLinkHealthService(
-            repository=LinkRepository(session),
-            checker=UrlFriendLinkHealthChecker(
-                timeout_seconds=command.timeout_seconds,
-            ),
-        )
-        return await service.check_healthy_friend_links(limit=command.limit)
+    telemetry = start_task_telemetry()
+    try:
+        async with AsyncSessionLocal() as session:
+            service = FriendLinkHealthService(
+                repository=LinkRepository(session),
+                checker=UrlFriendLinkHealthChecker(
+                    timeout_seconds=command.timeout_seconds,
+                ),
+            )
+            result = await service.check_healthy_friend_links(limit=command.limit)
+    except Exception:
+        telemetry.finish(task_name="check-friend-links", outcome="error")
+        raise
+    telemetry.finish(
+        task_name="check-friend-links",
+        outcome="ok",
+        friend_link_counts={
+            "healthy": result.healthy_links,
+            "unhealthy": result.unhealthy_links,
+            "skipped": result.failed_links,
+        },
+    )
+    return result
 
 
 def _check_url(url: str, *, timeout_seconds: float) -> int | None:

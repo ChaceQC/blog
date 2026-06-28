@@ -83,9 +83,11 @@ class FileService:
         *,
         repository: FileRepositoryProtocol,
         storage: StorageProvider,
+        telemetry: object | None = None,
     ) -> None:
         self.repository = repository
         self.storage = storage
+        self._telemetry = telemetry
 
     async def list_files(self, *, limit: int, offset: int) -> list[AdminFileRead]:
         files = await self.repository.list_files(limit=limit, offset=offset)

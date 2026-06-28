@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     )
     post_view_dedupe_seconds: int = Field(default=600, ge=0, le=86400)
     post_like_risk_window_seconds: int = Field(default=86400, ge=60, le=604800)
+    telemetry_enabled: bool = False
+    telemetry_endpoint: str | None = None
+    telemetry_api_key: str | None = None
     rate_limit_backend: Literal["memory", "redis"] = "memory"
     redis_url: str | None = None
     redis_key_prefix: str = "blog:rate-limit"

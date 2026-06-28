@@ -2,6 +2,7 @@ from typing import Any
 
 from fastapi import Request
 
+from app.api.telemetry import record_admin_audit_telemetry
 from app.core.request import client_ip
 from app.services.auth import AuthenticatedUser
 from app.services.logs import LogService, sanitize_audit_log_payload
@@ -28,3 +29,13 @@ async def record_admin_audit(
         before_json=sanitize_audit_log_payload(before_json),
         after_json=sanitize_audit_log_payload(after_json),
     )
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    if telemetry is not None:
+        record_admin_audit_telemetry(
+            telemetry,
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            actor_id=actor.id,
+            after_json=after_json,
+        )

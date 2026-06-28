@@ -18,6 +18,7 @@ from app.tasks.files import (
 )
 from app.tasks.links import FriendLinkHealthCheckCommand, check_friend_links
 from app.tasks.logs import LogCleanupCommand, cleanup_logs
+from app.tasks.telemetry import record_deployment_finished
 
 
 def main() -> None:
@@ -41,6 +42,9 @@ def main() -> None:
         return
     if args.command == "cleanup-logs":
         asyncio.run(_cleanup_logs(args))
+        return
+    if args.command == "record-deployment-finished":
+        _record_deployment_finished(args)
         return
 
     parser.print_help()
@@ -146,6 +150,25 @@ def _build_parser() -> argparse.ArgumentParser:
         default=5000,
         help="每张表单次最多删除的日志数量，默认 5000",
     )
+    deployment_finished = subparsers.add_parser(
+        "record-deployment-finished",
+        help="按当前后端环境变量上报部署完成遥测事件",
+    )
+    deployment_finished.add_argument(
+        "--status",
+        choices=("ok", "error"),
+        required=True,
+        help="部署结果",
+    )
+    deployment_finished.add_argument(
+        "--duration-seconds",
+        type=_non_negative_float,
+        help="部署耗时秒数",
+    )
+    deployment_finished.add_argument(
+        "--git-sha",
+        help="部署对应的 Git commit",
+    )
     return parser
 
 
@@ -248,6 +271,15 @@ async def _cleanup_logs(args: argparse.Namespace) -> None:
     )
 
 
+def _record_deployment_finished(args: argparse.Namespace) -> None:
+    record_deployment_finished(
+        status=args.status,
+        duration_seconds=args.duration_seconds,
+        git_sha=args.git_sha,
+    )
+    print("已记录部署完成遥测事件")
+
+
 def _prompt_password() -> str:
     password = getpass("管理员密码：")
     confirmation = getpass("再次输入密码：")
@@ -276,6 +308,13 @@ def _positive_float(value: str) -> float:
     parsed = float(value)
     if parsed <= 0:
         raise argparse.ArgumentTypeError("必须大于 0")
+    return parsed
+
+
+def _non_negative_float(value: str) -> float:
+    parsed = float(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("不能小于 0")
     return parsed
 
 

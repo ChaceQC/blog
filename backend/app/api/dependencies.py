@@ -8,10 +8,12 @@ from app.api.state import (
     get_app_access_log_dedupe_backend,
     get_app_rate_limit_service,
     get_app_salt_lease_service,
+    get_app_telemetry_service,
 )
 from app.core.config import Settings, get_settings
 from app.core.database import get_session
 from app.core.storage import LocalStorageProvider
+from app.providers.telemetry import TelemetryService
 from app.repositories.content import ContentRepository
 from app.repositories.encryption import EncryptionSessionRepository
 from app.repositories.files import FileRepository
@@ -36,6 +38,19 @@ SessionDependency = Annotated[AsyncSession, Depends(get_session)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
 
 
+def get_telemetry_service(
+    connection: HTTPConnection,
+    settings: SettingsDependency,
+) -> TelemetryService:
+    return get_app_telemetry_service(connection.app, settings)
+
+
+TelemetryServiceDependency = Annotated[
+    TelemetryService,
+    Depends(get_telemetry_service),
+]
+
+
 def get_content_service(session: SessionDependency) -> ContentService:
     return ContentService(repository=ContentRepository(session))
 
@@ -46,10 +61,12 @@ ContentServiceDependency = Annotated[ContentService, Depends(get_content_service
 def get_file_service(
     session: SessionDependency,
     settings: SettingsDependency,
+    telemetry: TelemetryServiceDependency,
 ) -> FileService:
     return FileService(
         repository=FileRepository(session),
         storage=LocalStorageProvider(settings.upload_root),
+        telemetry=telemetry,
     )
 
 
@@ -77,11 +94,13 @@ def get_encryption_session_manager(
     connection: HTTPConnection,
     session: SessionDependency,
     settings: SettingsDependency,
+    telemetry: TelemetryServiceDependency,
 ) -> EncryptionSessionManager:
     return EncryptionSessionManager(
         repository=EncryptionSessionRepository(session),
         settings=settings,
         salt_leases=get_app_salt_lease_service(connection.app, settings),
+        telemetry=telemetry,
     )
 
 
@@ -107,10 +126,12 @@ AccessLogDedupeDependency = Annotated[
 def get_log_service(
     session: SessionDependency,
     dedupe_backend: AccessLogDedupeDependency,
+    telemetry: TelemetryServiceDependency,
 ) -> LogService:
     return LogService(
         repository=LogRepository(session),
         dedupe_backend=dedupe_backend,
+        telemetry=telemetry,
     )
 
 
@@ -121,6 +142,7 @@ def get_post_interaction_service(
     session: SessionDependency,
     dedupe_backend: AccessLogDedupeDependency,
     settings: SettingsDependency,
+    telemetry: TelemetryServiceDependency,
 ) -> PostInteractionService:
     return PostInteractionService(
         repository=ContentRepository(session),
@@ -128,6 +150,7 @@ def get_post_interaction_service(
         secret_key=settings.secret_key,
         view_dedupe_seconds=settings.post_view_dedupe_seconds,
         like_risk_window_seconds=settings.post_like_risk_window_seconds,
+        telemetry=telemetry,
     )
 
 

@@ -68,6 +68,17 @@ class FakePostInteractionRepository:
         self.commit_count += 1
 
 
+class FakeTelemetry:
+    environment = "test"
+    version = "1.0.0"
+
+    def __init__(self) -> None:
+        self.metrics: list[dict[str, object]] = []
+
+    def record_metric(self, **kwargs: object) -> None:
+        self.metrics.append(dict(kwargs))
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
@@ -76,7 +87,12 @@ def anyio_backend() -> str:
 @pytest.mark.anyio
 async def test_record_view_dedupes_incognito_visitor_id_rotation() -> None:
     repository = FakePostInteractionRepository()
-    service = create_service(repository, view_dedupe_seconds=600)
+    telemetry = FakeTelemetry()
+    service = create_service(
+        repository,
+        view_dedupe_seconds=600,
+        telemetry=telemetry,
+    )
     fingerprint = visitor_fingerprint(composite_hash="c" * 64)
 
     first = await service.record_view(
@@ -98,12 +114,18 @@ async def test_record_view_dedupes_incognito_visitor_id_rotation() -> None:
     assert second.view_count == 11
     assert repository.view_count == 11
     assert repository.commit_count == 1
+    assert [
+        metric["tags"]["outcome"]
+        for metric in telemetry.metrics
+        if metric["name"] == "blog.public.post.view.count"
+    ] == ["recorded", "deduped"]
 
 
 @pytest.mark.anyio
 async def test_like_is_idempotent_target_state() -> None:
     repository = FakePostInteractionRepository()
-    service = create_service(repository)
+    telemetry = FakeTelemetry()
+    service = create_service(repository, telemetry=telemetry)
     fingerprint = visitor_fingerprint(composite_hash="c" * 64)
 
     first = await service.set_like(
@@ -135,12 +157,43 @@ async def test_like_is_idempotent_target_state() -> None:
     assert second.like_count == 3
     assert removed.like_count == 2
     assert removed.liked is False
+    assert [
+        metric["tags"]["outcome"]
+        for metric in telemetry.metrics
+        if metric["name"] == "blog.public.post.like.count"
+    ] == ["changed", "noop", "changed"]
+
+
+@pytest.mark.anyio
+async def test_unlike_without_existing_like_reports_noop() -> None:
+    repository = FakePostInteractionRepository()
+    telemetry = FakeTelemetry()
+    service = create_service(repository, telemetry=telemetry)
+
+    state = await service.set_like(
+        slug="public-post",
+        fingerprint=visitor_fingerprint(composite_hash="c" * 64),
+        liked=False,
+        client_ip="203.0.113.8",
+        user_agent="pytest-browser",
+        accept_language="zh-CN",
+    )
+
+    assert state.like_count == 2
+    assert state.liked is False
+    assert telemetry.metrics[0]["name"] == "blog.public.post.like.count"
+    assert telemetry.metrics[0]["tags"]["outcome"] == "noop"
 
 
 @pytest.mark.anyio
 async def test_like_risk_window_blocks_incognito_visitor_id_rotation() -> None:
     repository = FakePostInteractionRepository()
-    service = create_service(repository, like_risk_window_seconds=86400)
+    telemetry = FakeTelemetry()
+    service = create_service(
+        repository,
+        like_risk_window_seconds=86400,
+        telemetry=telemetry,
+    )
 
     await service.set_like(
         slug="public-post",
@@ -163,6 +216,11 @@ async def test_like_risk_window_blocks_incognito_visitor_id_rotation() -> None:
 
     assert repository.like_count == 3
     assert len(repository.likes) == 1
+    assert [
+        metric["tags"]["outcome"]
+        for metric in telemetry.metrics
+        if metric["name"] == "blog.public.post.like.count"
+    ] == ["changed", "risk_limited"]
 
 
 def create_service(
@@ -170,6 +228,7 @@ def create_service(
     *,
     view_dedupe_seconds: int = 600,
     like_risk_window_seconds: int = 86400,
+    telemetry: object | None = None,
 ) -> PostInteractionService:
     return PostInteractionService(
         repository=repository,
@@ -177,6 +236,7 @@ def create_service(
         secret_key="test-secret-key-with-at-least-32-chars",
         view_dedupe_seconds=view_dedupe_seconds,
         like_risk_window_seconds=like_risk_window_seconds,
+        telemetry=telemetry,
     )
 
 

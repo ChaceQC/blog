@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
+from app.api.telemetry import record_access_telemetry
 from app.core.config import get_settings
 from app.models.log import AccessLog, AuditLog, LoginLog, SecurityEvent
 from app.services.access_log_dedupe import (
@@ -170,9 +171,11 @@ class LogService:
         self,
         repository: LogRepositoryProtocol,
         dedupe_backend: AccessLogDedupeBackend | None = None,
+        telemetry: object | None = None,
     ) -> None:
         self.repository = repository
         self._dedupe_backend = dedupe_backend or InMemoryAccessLogDedupeBackend()
+        self._telemetry = telemetry
 
     async def list_audit_logs(
         self,
@@ -283,14 +286,14 @@ class LogService:
         entity_type: str | None = None,
         entity_id: int | None = None,
         detail_json: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> bool:
         if not self._should_record_access_log(
             method=method,
             path=path,
             status_code=status_code,
             ip=ip,
         ):
-            return
+            return False
         await self.repository.record_access_log(
             access_type=access_type,
             method=method,
@@ -303,6 +306,15 @@ class LogService:
             detail_json=sanitize_access_log_detail(detail_json),
         )
         await self.repository.commit()
+        if self._telemetry is not None:
+            record_access_telemetry(
+                self._telemetry,
+                access_type=access_type,
+                status_code=status_code,
+                entity_type=entity_type,
+                entity_id=entity_id,
+            )
+        return True
 
     def _should_record_access_log(
         self,

@@ -11,6 +11,7 @@ from cryptography.hazmat.primitives.serialization import (
     load_der_public_key,
 )
 
+from app.api.telemetry import record_salt_lease_telemetry
 from app.core.config import Settings
 from app.core.crypto_context import CONTEXT_SEED_BYTES
 from app.core.encryption import (
@@ -111,12 +112,14 @@ class EncryptionSessionManager:
         repository: EncryptionSessionRepositoryProtocol,
         settings: Settings,
         salt_leases: SaltLeaseService | None = None,
+        telemetry: object | None = None,
     ) -> None:
         self._repository = repository
         self._settings = settings
         self._salt_leases = salt_leases or SaltLeaseService(
             store=InMemorySaltLeaseStore(),
         )
+        self._telemetry = telemetry
 
     async def create_session(
         self,
@@ -509,8 +512,38 @@ class EncryptionSessionManager:
                 profile=profile,
             )
         except EncryptionSaltError as exc:
+            self._record_salt_lease(
+                scope=scope,
+                purpose=purpose,
+                profile=profile,
+                stage="rejected",
+            )
             raise EncryptionSessionError("invalid encryption salt") from exc
+        self._record_salt_lease(
+            scope=scope,
+            purpose=purpose,
+            profile=profile,
+            stage="consumed",
+        )
         return lease.salt
+
+    def _record_salt_lease(
+        self,
+        *,
+        scope: EncryptionSessionScope,
+        purpose: SaltPurpose,
+        profile: EncryptionProfile | None,
+        stage: str,
+    ) -> None:
+        if self._telemetry is None:
+            return
+        record_salt_lease_telemetry(
+            self._telemetry,
+            scope=scope,
+            purpose=purpose,
+            profile=profile.value if profile is not None else None,
+            stage=stage,
+        )
 
 
 def _load_browser_public_key(client_key: BrowserPublicKey) -> ec.EllipticCurvePublicKey:

@@ -19,6 +19,7 @@ from app.api.dependencies import (
     LinkServiceDependency,
     LogServiceDependency,
 )
+from app.api.telemetry import record_friend_link_reviewed_telemetry
 from app.schemas.encryption import EncryptedApiRequest, EncryptedApiResponse
 from app.schemas.links import (
     AdminFriendLinkItem,
@@ -201,6 +202,14 @@ async def review_friend_link(
             "review_status": review_payload.status,
         },
     )
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    if telemetry is not None:
+        record_friend_link_reviewed_telemetry(
+            telemetry,
+            entity_id=link.id,
+            actor_id=current_user.id,
+            review_status=review_payload.status,
+        )
     return await links_response(
         AdminFriendLinkItem.model_validate(link),
         request=request,
