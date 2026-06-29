@@ -10,6 +10,10 @@ import {
 
 import { publicErrorMessage } from '../../api/client.ts'
 import {
+  formatChinaShortDateTime,
+  parseApiTime,
+} from '../../utils/datetime.ts'
+import {
   createPublicComment,
   deletePublicComment,
   listOwnedPublicComments,
@@ -703,20 +707,11 @@ function isOwnedCommentResponse(
 }
 
 function formatCommentTime(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
+  return formatChinaShortDateTime(value, value)
 }
 
 function dateTime(value: string): number {
-  const time = new Date(value).getTime()
+  const time = parseApiTime(value)
   return Number.isNaN(time) ? 0 : time
 }
 

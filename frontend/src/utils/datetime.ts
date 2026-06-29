@@ -7,6 +7,15 @@ const chinaDateFormatter = new Intl.DateTimeFormat('zh-CN', {
   timeZone: 'Asia/Shanghai',
 })
 
+const chinaShortDateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'Asia/Shanghai',
+})
+
 const chinaDateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
   year: 'numeric',
   month: '2-digit',
@@ -53,6 +62,22 @@ export function formatChinaDateTime(
   }
 
   return chinaDateTimeFormatter.format(date).replaceAll('/', '-')
+}
+
+export function formatChinaShortDateTime(
+  value: string | null,
+  fallback: string,
+): string {
+  if (!value) {
+    return fallback
+  }
+
+  const date = parseApiDate(value)
+  if (Number.isNaN(date.getTime())) {
+    return fallback
+  }
+
+  return chinaShortDateTimeFormatter.format(date)
 }
 
 export function localDateTimeInputFromApi(value: string | null): string | null {
