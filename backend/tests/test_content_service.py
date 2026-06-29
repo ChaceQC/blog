@@ -35,6 +35,7 @@ class FakePost:
     seo_description: str | None
     view_count: int = 0
     like_count: int = 0
+    comment_count: int = 0
     seo_keywords: str | None = None
     category_names: list[str] = field(default_factory=list)
     tag_names: list[str] = field(default_factory=list)
@@ -145,6 +146,7 @@ class FakeContentRepository:
                 continue
             post.view_count = 0
             post.like_count = 0
+            post.comment_count = 0
             break
 
     async def replace_post_categories(
@@ -430,6 +432,7 @@ async def test_delete_post_soft_deletes_and_releases_slug() -> None:
     )
     post.view_count = 12
     post.like_count = 4
+    post.comment_count = 3
 
     deleted = await service.delete_post(post.id)
     recreated = await service.create_post(
@@ -451,6 +454,7 @@ async def test_delete_post_soft_deletes_and_releases_slug() -> None:
     assert deleted.slug == f"old-post-deleted-{post.id}"
     assert deleted.view_count == 0
     assert deleted.like_count == 0
+    assert deleted.comment_count == 0
     assert repository.file_usages[("post", post.id)] == []
     assert repository.cleared_post_interaction_ids == [post.id]
     assert recreated.id != post.id
