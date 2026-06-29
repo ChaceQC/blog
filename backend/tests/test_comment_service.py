@@ -29,18 +29,35 @@ class FakeCommentRepository:
     async def get_public_post_by_slug(self, slug: str) -> object | None:
         return self.post if slug == self.post.slug else None
 
-    async def get_parent_comment(self, *, post_id: int, parent_id: int):
+    async def get_reply_target_with_root(self, *, post_id: int, comment_id: int):
+        target = self._comment_by_id(post_id=post_id, comment_id=comment_id)
+        if target is None or target.status != "published":
+            return None
+        if target.parent_id is None:
+            return target, target
+        root = self._comment_by_id(post_id=post_id, comment_id=target.parent_id)
+        if (
+            root is None
+            or root.parent_id is not None
+            or root.status not in {"published", "deleted_by_author", "deleted_by_admin"}
+        ):
+            return None
+        return target, root
+
+    def _comment_by_id(self, *, post_id: int, comment_id: int):
         for comment in self.comments:
             if (
-                comment.id == parent_id
+                comment.id == comment_id
                 and comment.post_id == post_id
-                and comment.parent_id is None
-                and comment.status == "published"
             ):
                 return comment
         return None
 
     async def create_comment(self, **kwargs: object):
+        values = dict(kwargs)
+        values.setdefault("reply_to_id", None)
+        values.setdefault("reply_to_display_name", None)
+        values.setdefault("display_name_base", None)
         comment = SimpleNamespace(
             id=self.next_id,
             created_at=datetime(2026, 6, 29, tzinfo=UTC),
@@ -50,7 +67,7 @@ class FakeCommentRepository:
             reviewed_by=None,
             deleted_at=None,
             deleted_reason=None,
-            **kwargs,
+            **values,
         )
         self.next_id += 1
         self.comments.append(comment)
@@ -66,7 +83,14 @@ class FakeCommentRepository:
         items = [
             comment
             for comment in self.comments
-            if comment.post_id == post_id and comment.status == "published"
+            if comment.post_id == post_id
+            and (
+                comment.status == "published"
+                or (
+                    comment.status in {"deleted_by_author", "deleted_by_admin"}
+                    and comment.reply_count > 0
+                )
+            )
         ]
         return items[offset : offset + limit]
 
@@ -176,6 +200,38 @@ class FakeCommentRepository:
             if comment.id == parent_id:
                 comment.reply_count = max(0, comment.reply_count - 1)
 
+    async def get_author_display_name(
+        self,
+        *,
+        post_id: int,
+        author_key_hash: str,
+        display_name_base: str,
+    ) -> str | None:
+        for comment in self.comments:
+            if (
+                comment.post_id == post_id
+                and comment.author_key_hash == author_key_hash
+                and comment.display_name_base == display_name_base
+                and comment.display_name is not None
+            ):
+                return comment.display_name
+        return None
+
+    async def display_name_exists_for_other_author(
+        self,
+        *,
+        post_id: int,
+        author_key_hash: str,
+        display_name: str,
+    ) -> bool:
+        return any(
+            comment.post_id == post_id
+            and comment.author_key_hash != author_key_hash
+            and comment.display_name is not None
+            and comment.display_name.casefold() == display_name.casefold()
+            for comment in self.comments
+        )
+
     async def commit(self) -> None:
         self.commits += 1
 
@@ -272,8 +328,222 @@ async def test_delete_with_token_clears_body_and_token_hash() -> None:
     assert deleted.status == "deleted_by_author"
     assert deleted.body_text == "评论已删除"
     assert stored.body_text == ""
+    assert stored.display_name_base is None
     assert stored.delete_token_hash is None
     assert repository.comment_count == 0
+
+
+@pytest.mark.anyio
+async def test_reply_to_reply_stays_in_root_thread_with_target_snapshot() -> None:
+    repository = FakeCommentRepository()
+    service = create_service(repository, auto_publish=True)
+    root = await service.create_public_comment(
+        slug="public-post",
+        payload=create_payload(body_text="根评论", display_name="楼主"),
+        client_ip="203.0.113.8",
+        user_agent="pytest-browser",
+        accept_language="zh-CN",
+    )
+    reply = await service.create_public_comment(
+        slug="public-post",
+        payload=create_payload(
+            body_text="第一条回复",
+            display_name="甲",
+            parent_id=root.comment.id,
+            author_secret_proof="b" * 64,
+        ),
+        client_ip="203.0.113.8",
+        user_agent="pytest-browser",
+        accept_language="zh-CN",
+    )
+
+    nested = await service.create_public_comment(
+        slug="public-post",
+        payload=create_payload(
+            body_text="回复回复",
+            display_name="乙",
+            parent_id=reply.comment.id,
+            author_secret_proof="c" * 64,
+        ),
+        client_ip="203.0.113.8",
+        user_agent="pytest-browser",
+        accept_language="zh-CN",
+    )
+
+    stored = repository.comments[-1]
+    assert nested.comment.parent_id == root.comment.id
+    assert nested.comment.reply_to_id == reply.comment.id
+    assert nested.comment.reply_to_display_name == "甲"
+    assert stored.parent_id == root.comment.id
+    assert stored.reply_to_id == reply.comment.id
+    assert repository.comments[0].reply_count == 2
+    assert repository.comments[1].reply_count == 1
+
+
+@pytest.mark.anyio
+async def test_deleting_one_reply_keeps_other_replies_from_same_author() -> None:
+    repository = FakeCommentRepository()
+    service = create_service(repository, auto_publish=True)
+    root = await service.create_public_comment(
+        slug="public-post",
+        payload=create_payload(body_text="根评论"),
+        client_ip="203.0.113.8",
+        user_agent="pytest-browser",
+        accept_language="zh-CN",
+    )
+    first_reply = await service.create_public_comment(
+        slug="public-post",
+        payload=create_payload(
+            body_text="同一作者回复一",
+            display_name="同名",
+            parent_id=root.comment.id,
+            author_secret_proof="d" * 64,
+        ),
+        client_ip="203.0.113.8",
+        user_agent="pytest-browser",
+        accept_language="zh-CN",
+    )
+    second_reply = await service.create_public_comment(
+        slug="public-post",
+        payload=create_payload(
+            body_text="同一作者回复二",
+            display_name="同名",
+            parent_id=root.comment.id,
+            author_secret_proof="d" * 64,
+        ),
+        client_ip="203.0.113.8",
+        user_agent="pytest-browser",
+        accept_language="zh-CN",
+    )
+
+    await service.delete_public_comment(
+        slug="public-post",
+        comment_id=first_reply.comment.id,
+        delete_token=first_reply.delete_token,
+    )
+    comments, _ = await service.list_public_comments(
+        slug="public-post",
+        limit=20,
+        offset=0,
+    )
+
+    assert [comment.id for comment in comments] == [
+        root.comment.id,
+        second_reply.comment.id,
+    ]
+    assert comments[1].body_text == "同一作者回复二"
+    assert repository.comments[0].reply_count == 1
+
+
+@pytest.mark.anyio
+async def test_deleted_reply_target_keeps_snapshot_for_later_replies() -> None:
+    repository = FakeCommentRepository()
+    service = create_service(repository, auto_publish=True)
+    root = await service.create_public_comment(
+        slug="public-post",
+        payload=create_payload(body_text="根评论"),
+        client_ip="203.0.113.8",
+        user_agent="pytest-browser",
+        accept_language="zh-CN",
+    )
+    target = await service.create_public_comment(
+        slug="public-post",
+        payload=create_payload(
+            body_text="会被删除的回复",
+            display_name="被回复的人",
+            parent_id=root.comment.id,
+            author_secret_proof="e" * 64,
+        ),
+        client_ip="203.0.113.8",
+        user_agent="pytest-browser",
+        accept_language="zh-CN",
+    )
+    later_reply = await service.create_public_comment(
+        slug="public-post",
+        payload=create_payload(
+            body_text="先回复它",
+            display_name="后来的回复",
+            parent_id=target.comment.id,
+            author_secret_proof="f" * 64,
+        ),
+        client_ip="203.0.113.8",
+        user_agent="pytest-browser",
+        accept_language="zh-CN",
+    )
+
+    await service.delete_public_comment(
+        slug="public-post",
+        comment_id=target.comment.id,
+        delete_token=target.delete_token,
+    )
+    comments, _ = await service.list_public_comments(
+        slug="public-post",
+        limit=20,
+        offset=0,
+    )
+
+    deleted_target = next(
+        comment for comment in comments if comment.id == target.comment.id
+    )
+    visible_later_reply = next(
+        comment for comment in comments if comment.id == later_reply.comment.id
+    )
+    assert deleted_target.body_text == "评论已删除"
+    assert deleted_target.reply_count == 1
+    assert visible_later_reply.reply_to_id == target.comment.id
+    assert visible_later_reply.reply_to_display_name == "被回复的人"
+
+
+@pytest.mark.anyio
+async def test_duplicate_display_name_suffix_only_for_other_authors() -> None:
+    repository = FakeCommentRepository()
+    service = create_service(repository, auto_publish=True)
+    first = await service.create_public_comment(
+        slug="public-post",
+        payload=create_payload(display_name="访客", author_secret_proof="a" * 64),
+        client_ip="203.0.113.8",
+        user_agent="pytest-browser",
+        accept_language="zh-CN",
+    )
+    same_author = await service.create_public_comment(
+        slug="public-post",
+        payload=create_payload(
+            body_text="同一作者继续评论",
+            display_name="访客",
+            author_secret_proof="a" * 64,
+        ),
+        client_ip="203.0.113.8",
+        user_agent="pytest-browser",
+        accept_language="zh-CN",
+    )
+    other_author = await service.create_public_comment(
+        slug="public-post",
+        payload=create_payload(
+            body_text="另一个作者",
+            display_name="访客",
+            author_secret_proof="b" * 64,
+        ),
+        client_ip="203.0.113.8",
+        user_agent="pytest-browser",
+        accept_language="zh-CN",
+    )
+    same_other_author = await service.create_public_comment(
+        slug="public-post",
+        payload=create_payload(
+            body_text="另一个作者继续评论",
+            display_name="访客",
+            author_secret_proof="b" * 64,
+        ),
+        client_ip="203.0.113.8",
+        user_agent="pytest-browser",
+        accept_language="zh-CN",
+    )
+
+    assert first.comment.display_name == "访客"
+    assert same_author.comment.display_name == "访客"
+    assert other_author.comment.display_name.startswith("访客#")
+    assert 4 <= len(other_author.comment.display_name.removeprefix("访客#")) <= 8
+    assert same_other_author.comment.display_name == other_author.comment.display_name
 
 
 @pytest.mark.anyio
@@ -376,11 +646,15 @@ def create_service(
 def create_payload(
     *,
     body_text: str = "这是一条评论",
+    display_name: str | None = None,
+    parent_id: int | None = None,
+    author_secret_proof: str = "a" * 64,
 ) -> PublicCommentCreateRequest:
     return PublicCommentCreateRequest(
-        display_name=None,
+        parent_id=parent_id,
+        display_name=display_name,
         body_text=body_text,
-        author_secret_proof="a" * 64,
+        author_secret_proof=author_secret_proof,
         fingerprint=VisitorFingerprint(
             version="web-v1",
             visitor_id="local-visitor-id-0123456789",

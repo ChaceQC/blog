@@ -290,7 +290,7 @@ deploy/
 - 指纹采集必须版本化，`fingerprint.version` 变更时保留后端兼容窗口；后续如果接入 FingerprintJS Pro、Cloudflare Turnstile 或自建风控服务，应作为 `providers`/`services` 下的可替换策略，不把第三方 SDK 调用散落在路由或 React 页面中。
 - 点赞是服务端幂等状态机：前端只能提交目标状态 `liked=true/false`，不能提交增减数量；后端根据当前记录精确增加或减少 1，重复提交同一状态不改变计数。
 - 浏览统计按服务端风险指纹和文章做短时去重，同一设备在 `BLOG_POST_VIEW_DEDUPE_SECONDS` 窗口内多次打开同一文章只计一次；风险指纹不直接依赖无痕窗口会变化的本地匿名 ID；生产使用 Redis 共享去重，本地开发可回落内存。
-- 文章详情支持匿名评论：公开访客无需登录即可提交评论和一级回复，默认进入审核；提交成功后服务端只返回一次单条评论删除凭证，前端保存为 localStorage receipt。刷新页面时，前端通过 `comments/owned` 加密接口提交本地 receipt，服务端校验删除 token 后返回属于当前浏览器的待审核评论，因此提交者能看到自己的评论处于“审核中”。
+- 文章详情支持匿名评论：公开访客无需登录即可提交评论，评论采用常见二级展示，可回复任意已发布评论但不继续增加缩进层级；回复二级评论时仍归入同一个顶层楼层，并用 `reply_to_id` 和回复目标昵称快照展示“回复 @某某”。评论默认进入审核；提交成功后服务端只返回一次单条评论删除凭证，前端保存为 localStorage receipt。刷新页面时，前端通过 `comments/owned` 加密接口提交本地 receipt，服务端校验删除 token 后返回属于当前浏览器的待审核评论，因此提交者能看到自己的评论处于“审核中”。
 - 评论删除权只认单条 `delete_token`，不依赖昵称、IP、UA 或浏览器指纹；服务端只保存 HMAC 后的 `delete_token_hash`，作者删除和后台删除都会清空正文、昵称和 token hash。评论正文和昵称按纯文本处理，公开页和后台审核页均使用 React 文本转义，不使用 HTML 拼接或 `dangerouslySetInnerHTML`。
 - RSS、站点地图、归档页。
 
@@ -346,7 +346,7 @@ deploy/
 | POST | `/api/public/posts/{slug}/view` | 按匿名访客指纹短时去重记录浏览，只接受加密请求体 |
 | POST | `/api/public/posts/{slug}/like` | 设置当前匿名访客的点赞状态，只接受目标状态，不接受计数增减 |
 | GET | `/api/public/posts/{slug}/comments` | 公开评论列表，返回已发布评论和必要删除占位，响应加密 |
-| POST | `/api/public/posts/{slug}/comments` | 提交匿名评论或一级回复，只接受 public scope `content-v1` 加密请求体，默认待审核 |
+| POST | `/api/public/posts/{slug}/comments` | 提交匿名评论或回复；`parent_id` 可指向任意已发布评论，后端归并到二级楼层，只接受 public scope `content-v1` 加密请求体 |
 | POST | `/api/public/posts/{slug}/comments/owned` | 通过本地 receipt 和删除 token 找回当前浏览器自己的待审核评论，只接受加密请求体 |
 | POST | `/api/public/posts/{slug}/comments/{comment_id}/delete` | 作者凭单条删除 token 删除自己的评论，token 只在加密请求体中传输 |
 | GET | `/api/public/posts/{slug}/files/{file_id}/render` | 文章正文图片渲染 |
@@ -562,9 +562,12 @@ deploy/
 | --- | --- | --- |
 | id | BIGINT UNSIGNED | 主键 |
 | post_id | BIGINT UNSIGNED | 所属文章 |
-| parent_id | BIGINT UNSIGNED | 父评论，只允许一级回复 |
+| parent_id | BIGINT UNSIGNED | 顶层楼层 id；为空表示顶层评论，非空表示二级回复 |
+| reply_to_id | BIGINT UNSIGNED | 实际回复目标评论 id，目标删除后可置空 |
+| reply_to_display_name | VARCHAR(64) | 回复目标昵称快照，目标删除后仍用于显示“回复 @某某” |
 | status | VARCHAR(32) | pending, published, rejected, deleted_by_author, deleted_by_admin, spam |
 | display_name | VARCHAR(64) | 访客昵称，删除后清空 |
+| display_name_base | VARCHAR(32) | 用户提交的基础昵称；同一匿名作者复用昵称时用于复用同一个展示名，删除后清空 |
 | author_public_id | VARCHAR(32) | 按文章隔离的匿名展示短号 |
 | author_key_hash | CHAR(64) | 匿名作者 HMAC，用于 owned 找回与风控 |
 | fingerprint_hash | CHAR(64) | 客户端指纹摘要的服务端派生值 |
@@ -594,6 +597,8 @@ deploy/
 - 公开写接口必须使用 public scope 的 `content-v1` 加密请求体；删除 token 不能出现在 URL、query、fragment、access log、审计日志或遥测中。
 - 默认 `BLOG_COMMENT_AUTO_PUBLISH=false`，评论先进入待审核；仅本地持有 receipt 的提交者可通过 `comments/owned` 看见自己的 `pending` 评论。
 - 公开列表只返回 `published` 评论，以及有回复时必须保留结构的删除占位；`posts.comment_count` 只统计已发布评论。
+- 删除顶层评论但仍有回复时，顶层保留 tombstone；删除 `reply_to_id` 指向的目标但仍有后续回复时，目标回复保留 tombstone，后续回复继续显示已保存的回复目标昵称快照。
+- 同一篇文章中，不同匿名作者不能使用完全相同的自定义昵称；发生冲突时后端追加 4 到 8 位字母数字后缀。同一匿名作者再次使用同一基础昵称时不视为冲突，并复用自己之前分配到的展示名。
 - 评论正文、昵称、`author_secret_proof`、fingerprint 明细、删除 token 和原始 IP/UA 不进入遥测；后台审计只记录状态、动作、原因分类和实体 id。
 - 第一版不接收头像 URL、图片、Markdown、HTML 或自动链接，不做外部资源抓取，避免评论入口引入 SSRF、存储型 XSS 和第三方跟踪。
 

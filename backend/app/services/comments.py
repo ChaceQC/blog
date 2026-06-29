@@ -1,5 +1,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
+from secrets import choice
+from string import ascii_letters, digits
 from typing import Protocol
 
 from app.core.auth import utc_now
@@ -54,20 +56,23 @@ class CommentStateConflictError(Exception):
 class CommentRepositoryProtocol(Protocol):
     async def get_public_post_by_slug(self, slug: str) -> Post | None: ...
 
-    async def get_parent_comment(
+    async def get_reply_target_with_root(
         self,
         *,
         post_id: int,
-        parent_id: int,
-    ) -> PostComment | None: ...
+        comment_id: int,
+    ) -> tuple[PostComment, PostComment] | None: ...
 
     async def create_comment(
         self,
         *,
         post_id: int,
         parent_id: int | None,
+        reply_to_id: int | None,
+        reply_to_display_name: str | None,
         status: str,
         display_name: str | None,
+        display_name_base: str | None,
         author_public_id: str,
         author_key_hash: str,
         fingerprint_hash: str,
@@ -76,6 +81,22 @@ class CommentRepositoryProtocol(Protocol):
         body_text: str,
         body_hash: str,
     ) -> PostComment: ...
+
+    async def get_author_display_name(
+        self,
+        *,
+        post_id: int,
+        author_key_hash: str,
+        display_name_base: str,
+    ) -> str | None: ...
+
+    async def display_name_exists_for_other_author(
+        self,
+        *,
+        post_id: int,
+        author_key_hash: str,
+        display_name: str,
+    ) -> bool: ...
 
     async def get_comment_for_update(
         self,
@@ -231,14 +252,16 @@ class CommentService:
             )
             raise CommentQueueFullError("comment review queue is full")
 
-        parent = None
+        reply_target = None
+        root_parent = None
         if payload.parent_id is not None:
-            parent = await self.repository.get_parent_comment(
+            reply_row = await self.repository.get_reply_target_with_root(
                 post_id=post.id,
-                parent_id=payload.parent_id,
+                comment_id=payload.parent_id,
             )
-            if parent is None:
+            if reply_row is None:
                 raise CommentParentInvalidError("invalid comment parent")
+            reply_target, root_parent = reply_row
 
         identity = self.identity.identity(
             post_id=post.id,
@@ -287,11 +310,23 @@ class CommentService:
             if self._auto_publish
             else COMMENT_STATUS_PENDING
         )
+        display_name = await self._display_name_for_author(
+            post_id=post.id,
+            author_key_hash=identity.author_key_hash,
+            display_name=payload.display_name,
+        )
         comment = await self.repository.create_comment(
             post_id=post.id,
-            parent_id=payload.parent_id,
+            parent_id=root_parent.id if root_parent is not None else None,
+            reply_to_id=reply_target.id if reply_target is not None else None,
+            reply_to_display_name=(
+                public_comment_item(reply_target).display_name
+                if reply_target is not None
+                else None
+            ),
             status=status,
-            display_name=payload.display_name,
+            display_name=display_name,
+            display_name_base=payload.display_name,
             author_public_id=identity.author_public_id,
             author_key_hash=identity.author_key_hash,
             fingerprint_hash=identity.fingerprint_hash,
@@ -302,8 +337,11 @@ class CommentService:
         )
         if status == COMMENT_STATUS_PUBLISHED:
             await self.repository.increment_post_comment_count(post_id=post.id)
-            if parent is not None:
-                await self.repository.increment_parent_reply_count(parent_id=parent.id)
+            if root_parent is not None:
+                await self._increment_reply_counts(
+                    root_parent_id=root_parent.id,
+                    reply_to_id=reply_target.id if reply_target is not None else None,
+                )
         await self.repository.commit()
         await self.repository.refresh(comment)
         self._record_create_telemetry(
@@ -377,10 +415,7 @@ class CommentService:
         )
         if was_published:
             await self.repository.decrement_post_comment_count(post_id=post.id)
-            if comment.parent_id is not None:
-                await self.repository.decrement_parent_reply_count(
-                    parent_id=comment.parent_id,
-                )
+            await self._decrement_reply_counts(comment)
         await self.repository.commit()
         await self.repository.refresh(comment)
         self._record_delete_telemetry(
@@ -424,8 +459,9 @@ class CommentService:
             comment.reviewed_by = reviewer_id
             await self.repository.increment_post_comment_count(post_id=comment.post_id)
             if comment.parent_id is not None:
-                await self.repository.increment_parent_reply_count(
-                    parent_id=comment.parent_id,
+                await self._increment_reply_counts(
+                    root_parent_id=comment.parent_id,
+                    reply_to_id=comment.reply_to_id,
                 )
         elif action in {"reject", "spam"}:
             if comment.status not in {COMMENT_STATUS_PENDING, COMMENT_STATUS_PUBLISHED}:
@@ -434,10 +470,7 @@ class CommentService:
                 await self.repository.decrement_post_comment_count(
                     post_id=comment.post_id,
                 )
-                if comment.parent_id is not None:
-                    await self.repository.decrement_parent_reply_count(
-                        parent_id=comment.parent_id,
-                    )
+                await self._decrement_reply_counts(comment)
             comment.status = (
                 COMMENT_STATUS_REJECTED if action == "reject" else COMMENT_STATUS_SPAM
             )
@@ -454,10 +487,7 @@ class CommentService:
                 await self.repository.decrement_post_comment_count(
                     post_id=comment.post_id,
                 )
-                if comment.parent_id is not None:
-                    await self.repository.decrement_parent_reply_count(
-                        parent_id=comment.parent_id,
-                    )
+                await self._decrement_reply_counts(comment)
             _mark_comment_deleted(
                 comment,
                 status=COMMENT_STATUS_DELETED_BY_ADMIN,
@@ -499,6 +529,60 @@ class CommentService:
         if post is None:
             raise CommentNotFoundError("post not found")
         return post
+
+    async def _display_name_for_author(
+        self,
+        *,
+        post_id: int,
+        author_key_hash: str,
+        display_name: str | None,
+    ) -> str | None:
+        if display_name is None:
+            return None
+        existing = await self.repository.get_author_display_name(
+            post_id=post_id,
+            author_key_hash=author_key_hash,
+            display_name_base=display_name,
+        )
+        if existing is not None:
+            return existing
+        if not await self.repository.display_name_exists_for_other_author(
+            post_id=post_id,
+            author_key_hash=author_key_hash,
+            display_name=display_name,
+        ):
+            return display_name
+        for suffix_length in (4, 5, 6, 7, 8):
+            for _ in range(4):
+                suffix = _random_suffix(suffix_length)
+                candidate = _append_display_name_suffix(display_name, suffix)
+                if not await self.repository.display_name_exists_for_other_author(
+                    post_id=post_id,
+                    author_key_hash=author_key_hash,
+                    display_name=candidate,
+                ):
+                    return candidate
+        suffix = _random_suffix(8)
+        return _append_display_name_suffix(display_name, suffix)
+
+    async def _increment_reply_counts(
+        self,
+        *,
+        root_parent_id: int,
+        reply_to_id: int | None,
+    ) -> None:
+        await self.repository.increment_parent_reply_count(parent_id=root_parent_id)
+        if reply_to_id is not None and reply_to_id != root_parent_id:
+            await self.repository.increment_parent_reply_count(parent_id=reply_to_id)
+
+    async def _decrement_reply_counts(self, comment: PostComment) -> None:
+        if comment.parent_id is None:
+            return
+        await self.repository.decrement_parent_reply_count(parent_id=comment.parent_id)
+        if comment.reply_to_id is not None and comment.reply_to_id != comment.parent_id:
+            await self.repository.decrement_parent_reply_count(
+                parent_id=comment.reply_to_id,
+            )
 
     def _record_create_telemetry(
         self,
@@ -566,6 +650,8 @@ def public_comment_item(comment: PostComment) -> PublicCommentItem:
     return PublicCommentItem(
         id=comment.id,
         parent_id=comment.parent_id,
+        reply_to_id=comment.reply_to_id,
+        reply_to_display_name=comment.reply_to_display_name,
         status=comment.status,
         display_name="匿名读者" if deleted else display_name,
         author_public_id=comment.author_public_id,
@@ -587,6 +673,8 @@ def admin_comment_item(
         post_title=post_title,
         post_slug=post_slug,
         parent_id=comment.parent_id,
+        reply_to_id=comment.reply_to_id,
+        reply_to_display_name=public_item.reply_to_display_name,
         status=comment.status,
         display_name=public_item.display_name,
         author_public_id=comment.author_public_id,
@@ -610,6 +698,18 @@ def _mark_comment_deleted(
     comment.status = status
     comment.body_text = ""
     comment.display_name = None
+    comment.display_name_base = None
     comment.delete_token_hash = None
     comment.deleted_at = utc_now()
     comment.deleted_reason = reason
+
+
+def _random_suffix(length: int) -> str:
+    alphabet = ascii_letters + digits
+    return "".join(choice(alphabet) for _ in range(length))
+
+
+def _append_display_name_suffix(display_name: str, suffix: str) -> str:
+    marker = f"#{suffix}"
+    base_length = 32 - len(marker)
+    return f"{display_name[:base_length]}{marker}"

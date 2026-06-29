@@ -25,18 +25,66 @@ class CommentRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_parent_comment(
+    async def get_reply_target_with_root(
         self,
         *,
         post_id: int,
-        parent_id: int,
+        comment_id: int,
+    ) -> tuple[PostComment, PostComment] | None:
+        target = await self.get_comment_for_reply(
+            post_id=post_id,
+            comment_id=comment_id,
+        )
+        if target is None:
+            return None
+        if target.parent_id is None:
+            return target, target
+        root = await self.get_public_thread_root(
+            post_id=post_id,
+            comment_id=target.parent_id,
+        )
+        if root is None:
+            return None
+        return target, root
+
+    async def get_comment_for_reply(
+        self,
+        *,
+        post_id: int,
+        comment_id: int,
     ) -> PostComment | None:
         result = await self.session.execute(
             select(PostComment).where(
-                PostComment.id == parent_id,
+                PostComment.id == comment_id,
+                PostComment.post_id == post_id,
+                PostComment.status == "published",
+            ),
+        )
+        return result.scalar_one_or_none()
+
+    async def get_public_thread_root(
+        self,
+        *,
+        post_id: int,
+        comment_id: int,
+    ) -> PostComment | None:
+        result = await self.session.execute(
+            select(PostComment).where(
+                PostComment.id == comment_id,
                 PostComment.post_id == post_id,
                 PostComment.parent_id.is_(None),
-                PostComment.status == "published",
+                or_(
+                    PostComment.status == COMMENT_STATUS_PUBLISHED,
+                    and_(
+                        PostComment.status.in_(
+                            (
+                                COMMENT_STATUS_DELETED_BY_AUTHOR,
+                                COMMENT_STATUS_DELETED_BY_ADMIN,
+                            ),
+                        ),
+                        PostComment.reply_count > 0,
+                    ),
+                ),
             ),
         )
         return result.scalar_one_or_none()
@@ -46,8 +94,11 @@ class CommentRepository:
         *,
         post_id: int,
         parent_id: int | None,
+        reply_to_id: int | None,
+        reply_to_display_name: str | None,
         status: str,
         display_name: str | None,
+        display_name_base: str | None,
         author_public_id: str,
         author_key_hash: str,
         fingerprint_hash: str,
@@ -59,8 +110,11 @@ class CommentRepository:
         comment = PostComment(
             post_id=post_id,
             parent_id=parent_id,
+            reply_to_id=reply_to_id,
+            reply_to_display_name=reply_to_display_name,
             status=status,
             display_name=display_name,
+            display_name_base=display_name_base,
             author_public_id=author_public_id,
             author_key_hash=author_key_hash,
             fingerprint_hash=fingerprint_hash,
@@ -72,6 +126,42 @@ class CommentRepository:
         self.session.add(comment)
         await self.session.flush()
         return comment
+
+    async def get_author_display_name(
+        self,
+        *,
+        post_id: int,
+        author_key_hash: str,
+        display_name_base: str,
+    ) -> str | None:
+        result = await self.session.execute(
+            select(PostComment.display_name)
+            .where(
+                PostComment.post_id == post_id,
+                PostComment.author_key_hash == author_key_hash,
+                PostComment.display_name_base == display_name_base,
+                PostComment.display_name.is_not(None),
+            )
+            .order_by(PostComment.created_at.asc(), PostComment.id.asc())
+            .limit(1),
+        )
+        return result.scalar_one_or_none()
+
+    async def display_name_exists_for_other_author(
+        self,
+        *,
+        post_id: int,
+        author_key_hash: str,
+        display_name: str,
+    ) -> bool:
+        result = await self.session.execute(
+            select(func.count(PostComment.id)).where(
+                PostComment.post_id == post_id,
+                func.lower(PostComment.display_name) == display_name.casefold(),
+                PostComment.author_key_hash != author_key_hash,
+            ),
+        )
+        return int(result.scalar_one()) > 0
 
     async def get_comment_for_update(
         self,

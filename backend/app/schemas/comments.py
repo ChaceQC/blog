@@ -67,6 +67,8 @@ AdminCommentReviewAction = Literal["approve", "reject", "spam", "delete"]
 class PublicCommentItem(BaseModel):
     id: int
     parent_id: int | None = None
+    reply_to_id: int | None = None
+    reply_to_display_name: str | None = None
     status: CommentStatus
     display_name: str
     author_public_id: str
@@ -172,6 +174,8 @@ class AdminCommentItem(BaseModel):
     post_title: str
     post_slug: str
     parent_id: int | None = None
+    reply_to_id: int | None = None
+    reply_to_display_name: str | None = None
     status: CommentStatus
     display_name: str
     author_public_id: str

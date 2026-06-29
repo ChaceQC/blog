@@ -4,6 +4,46 @@
 
 ### 本轮计划
 
+- 修复评论区不能回复二级回复的问题。
+- 修复同一人多条回复时删除一条不应影响其它回复的问题。
+- 补充 `parent_id` 根评论被删除、`reply_to_id` 目标被删除和昵称冲突规则的后端边界。
+
+### 已完成
+
+- 将评论模型调整为常见二级展示：`parent_id` 表示顶层楼层，新增 `reply_to_id` 表示实际回复目标，新增 `reply_to_display_name` 保存回复目标昵称快照；前端可对任意已发布评论点击“回复”，但二级回复仍归入同一个顶层楼层，不继续增加第三层缩进。
+- 新增迁移 `20260629_0014_comment_reply_targets.py`，为 `post_comments` 增加 `reply_to_id`、`reply_to_display_name` 和 `display_name_base`。
+- 修复删除边界：删除根评论但仍有回复时保留顶层 `评论已删除` 占位；删除被 `reply_to_id` 引用的二级评论时，只清空该评论并保留占位，后续回复继续显示创建时保存的“回复 @某某”。
+- 修复同一作者多次回复删除误伤问题：作者删除只按单条 `comment_id + delete_token` 清空当前评论，并只扣当前评论所属根楼层和实际回复目标的 `reply_count`，不会按作者或父楼层批量删除其它回复。
+- 调整昵称冲突规则：同一篇文章中不同匿名作者同名时后端自动追加 4 到 8 位字母数字后缀；同一匿名作者重复使用同一基础昵称不视为冲突，并复用自己的展示名。
+- 同步更新 `README.md`、`PROJECT_PLAN.md` 和 `docs/anonymous-comments-design.md`。
+
+### 状态
+
+- 已完成代码、文档和本轮验证；本轮收口范围包括提交推送 `dev`、快进合并到 `main`，然后切回 `dev`。
+
+### 阻塞与风险
+
+- 本轮新增字段需要执行数据库迁移；生产发布前必须先备份数据库再升级。
+
+### 下一步
+
+- 生产发布前备份数据库并执行本轮新增迁移；后续可继续做匿名评论真实页面级端到端联调。
+
+### 验证
+
+- 已运行 `uv run ruff check app tests`，通过。
+- 已运行 `uv run pytest tests/test_comment_service.py tests/test_public_comments_api.py tests/test_admin_comments_api.py tests/test_public_content_api.py tests/test_post_interactions.py -q`，40 passed，2 个既有 Starlette 弃用警告。
+- 已运行 `uv run alembic upgrade head --sql`，迁移 SQL 可生成。
+- 已运行 `npm.cmd run lint`，通过。
+- 已运行 `npm.cmd run build`，通过；仍有既有混淆插件耗时和大 chunk 提醒。
+- 已运行 `npm.cmd run test -- src/features/posts/commentReceipts.test.ts`，3 passed。
+- 已运行 `git diff --check`，通过。
+- 删除隐私字段清理补丁后已重新运行 `uv run ruff check app tests`、上述 40 个后端相关 pytest 和 `git diff --check`，均通过。
+
+## 2026-06-29
+
+### 本轮计划
+
 - 按 `docs/anonymous-comments-design.md` 实施匿名评论功能。
 - 确保没有公开登录系统时，提交者仍能在当前浏览器看到自己的评论处于“审核中”。
 - 覆盖 XSS、删除凭证、日志/遥测脱敏、后台审核和文档同步。

@@ -158,7 +158,7 @@ export function PostComments({ slug, initialCount }: PostCommentsProps) {
         </label>
         {replyTo ? (
           <div className="comment-form__replying">
-            <span>回复 {replyTo.display_name}</span>
+            <span>回复 @{replyTo.display_name}</span>
             <button type="button" onClick={() => setReplyTo(null)}>
               <X size={15} strokeWidth={1.8} aria-hidden="true" />
               取消
@@ -198,6 +198,13 @@ export function PostComments({ slug, initialCount }: PostCommentsProps) {
               <div className="comment-item__body">
                 <header>
                   <strong>{comment.display_name}</strong>
+                  {comment.reply_to_id &&
+                  comment.reply_to_display_name &&
+                  comment.parent_id !== null ? (
+                    <span className="comment-item__reply-target">
+                      回复 @{comment.reply_to_display_name}
+                    </span>
+                  ) : null}
                   <StatusBadge status={comment.status} owned={owned} />
                 </header>
                 <p>{comment.body_text}</p>
@@ -205,8 +212,7 @@ export function PostComments({ slug, initialCount }: PostCommentsProps) {
                   <time dateTime={comment.created_at}>
                     {formatCommentTime(comment.created_at)}
                   </time>
-                  {comment.parent_id === null &&
-                  comment.status === 'published' ? (
+                  {comment.status === 'published' ? (
                     <button
                       type="button"
                       className="comment-delete-button"

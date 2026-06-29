@@ -157,8 +157,18 @@ class PostComment(TimestampMixin, Base):
         ForeignKey("post_comments.id", ondelete="SET NULL"),
         nullable=True,
     )
+    reply_to_id: Mapped[int | None] = mapped_column(
+        BIGINT_UNSIGNED,
+        ForeignKey("post_comments.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reply_to_display_name: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
     status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
     display_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    display_name_base: Mapped[str | None] = mapped_column(String(32), nullable=True)
     author_public_id: Mapped[str] = mapped_column(String(32), nullable=False)
     author_key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     fingerprint_hash: Mapped[str] = mapped_column(String(64), nullable=False)

@@ -267,6 +267,11 @@
   align-items: center;
 }
 
+.comment-item__reply-target {
+  color: var(--color-neutral-6);
+  font-size: 0.86rem;
+}
+
 .comment-item__body p {
   margin: 0;
   color: var(--color-neutral-8);

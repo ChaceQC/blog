@@ -86,6 +86,8 @@ export type PublicCommentStatus =
 export type PublicCommentItem = {
   id: number
   parent_id: number | null
+  reply_to_id: number | null
+  reply_to_display_name: string | null
   status: PublicCommentStatus
   display_name: string
   author_public_id: string

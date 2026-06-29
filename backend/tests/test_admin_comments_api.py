@@ -236,6 +236,8 @@ def admin_comment_item(*, status: str) -> AdminCommentItem:
         post_title="公开文章",
         post_slug="public-post",
         parent_id=None,
+        reply_to_id=None,
+        reply_to_display_name=None,
         status=status,
         display_name="匿名读者 #A1B2C3",
         author_public_id="A1B2C3",
