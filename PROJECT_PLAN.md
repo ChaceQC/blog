@@ -596,6 +596,7 @@ deploy/
 - 评论开关复用 `posts.allow_comment`，不新增重复字段；未发布、隐藏、私有、归档或关闭评论的文章不能提交。
 - 公开写接口必须使用 public scope 的 `content-v1` 加密请求体；删除 token 不能出现在 URL、query、fragment、access log、审计日志或遥测中。
 - 默认 `BLOG_COMMENT_AUTO_PUBLISH=false`，评论先进入待审核；仅本地持有 receipt 的提交者可通过 `comments/owned` 看见自己的 `pending` 评论。
+- `comments/owned` 是前台找回和同步当前浏览器评论状态的读接口，使用独立 `BLOG_COMMENT_OWNED_RATE_LIMIT_MAX_ATTEMPTS` / `BLOG_COMMENT_OWNED_RATE_LIMIT_WINDOW_SECONDS`，默认比评论创建/删除宽松；创建和删除继续使用较严格的 `BLOG_COMMENT_RATE_LIMIT_*`。
 - 公开列表只返回 `published` 评论，以及有回复时必须保留结构的删除占位；`posts.comment_count` 只统计已发布评论。
 - 删除顶层评论但仍有回复时，顶层保留 tombstone；删除 `reply_to_id` 指向的目标但仍有后续回复时，目标回复保留 tombstone，后续回复继续显示已保存的回复目标昵称快照。
 - 同一篇文章中，不同匿名作者不能使用完全相同的自定义昵称；发生冲突时后端追加 4 到 8 位字母数字后缀。同一匿名作者再次使用同一基础昵称时不视为冲突，并复用自己之前分配到的展示名。

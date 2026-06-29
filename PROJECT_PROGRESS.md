@@ -4,6 +4,38 @@
 
 ### 本轮计划
 
+- 修复 `comments/owned` 找回审核中评论时容易触发 429 的限流配置问题。
+- 保留评论创建和删除接口的严格限流，避免放宽写入口防刷强度。
+
+### 已完成
+
+- 新增 `BLOG_COMMENT_OWNED_RATE_LIMIT_MAX_ATTEMPTS` / `BLOG_COMMENT_OWNED_RATE_LIMIT_WINDOW_SECONDS`，默认 `60/600s`。
+- `POST /api/public/posts/{slug}/comments/owned` 改用 owned 独立限流；评论创建和作者删除继续使用 `BLOG_COMMENT_RATE_LIMIT_MAX_ATTEMPTS` / `BLOG_COMMENT_RATE_LIMIT_WINDOW_SECONDS`，默认 `5/600s`。
+- 同步更新 `backend/.env.example`、`deploy/env/backend.env.example`、`README.md` 和 `PROJECT_PLAN.md`。
+- 新增回归测试覆盖同一客户端连续 6 次调用 `comments/owned` 仍返回 200，避免再被旧的 `5/600s` 写接口限流误伤。
+
+### 状态
+
+- 已完成代码、文档和本轮验证；等待提交推送 `dev`、快进合并到 `main`，然后切回 `dev`。
+
+### 阻塞与风险
+
+- 生产环境如果已有 `deploy/env/backend.env`，需要同步新增 owned 限流变量；不配置时应用会使用默认 `60/600s`。
+
+### 下一步
+
+- 部署后观察生产日志中 `POST /comments/owned` 的 429 是否消失；如仍有异常高频访问，再单独调低 owned 限额或增加前端轮询退避。
+
+### 验证
+
+- 已运行 `uv run ruff check app tests`，通过。
+- 已运行 `uv run pytest tests/test_public_comments_api.py tests/test_comment_service.py -q`，16 passed，1 个既有 Starlette 弃用警告。
+- 已运行 `git diff --check`，通过。
+
+## 2026-06-29
+
+### 本轮计划
+
 - 修复评论区不能回复二级回复的问题。
 - 修复同一人多条回复时删除一条不应影响其它回复的问题。
 - 补充 `parent_id` 根评论被删除、`reply_to_id` 目标被删除和昵称冲突规则的后端边界。

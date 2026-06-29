@@ -187,6 +187,8 @@ async def list_owned_public_comments(
         logs=logs,
         settings=settings,
         action="owned",
+        max_attempts=settings.comment_owned_rate_limit_max_attempts,
+        window_seconds=settings.comment_owned_rate_limit_window_seconds,
     )
     decrypted_payload = await decrypt_encrypted_request(
         payload,
@@ -306,6 +308,8 @@ async def _enforce_comment_rate_limit(
     logs: LogServiceDependency,
     settings: SettingsDependency,
     action: str,
+    max_attempts: int | None = None,
+    window_seconds: int | None = None,
 ) -> None:
     await enforce_rate_limit(
         request=request,
@@ -313,8 +317,8 @@ async def _enforce_comment_rate_limit(
         logs=logs,
         key=f"comment:{client_ip(request) or 'unknown'}:{action}",
         rule=RateLimitRule(
-            max_attempts=settings.comment_rate_limit_max_attempts,
-            window_seconds=settings.comment_rate_limit_window_seconds,
+            max_attempts=max_attempts or settings.comment_rate_limit_max_attempts,
+            window_seconds=window_seconds or settings.comment_rate_limit_window_seconds,
         ),
         event_type="rate_limit.comment",
         detail_json={"scope": "public", "action": action},

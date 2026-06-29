@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     post_like_risk_window_seconds: int = Field(default=86400, ge=60, le=604800)
     comment_rate_limit_max_attempts: int = Field(default=5, ge=1, le=100)
     comment_rate_limit_window_seconds: int = Field(default=600, ge=10, le=3600)
+    comment_owned_rate_limit_max_attempts: int = Field(default=60, ge=1, le=600)
+    comment_owned_rate_limit_window_seconds: int = Field(
+        default=600,
+        ge=10,
+        le=3600,
+    )
     comment_risk_rate_limit_max_attempts: int = Field(default=3, ge=1, le=100)
     comment_risk_rate_limit_window_seconds: int = Field(default=600, ge=10, le=3600)
     comment_author_rate_limit_max_attempts: int = Field(default=10, ge=1, le=200)

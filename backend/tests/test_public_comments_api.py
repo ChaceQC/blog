@@ -4,9 +4,11 @@ from app.api.dependencies import (
     get_comment_service,
     get_encryption_session_manager,
     get_log_service,
+    get_rate_limit_service,
 )
 from app.schemas.comments import PublicCommentItem
 from app.services.comments import CommentNotFoundError, CreatedComment
+from app.services.rate_limit import RateLimitService
 from tests.public_content_api_helpers import (
     FakeEncryptionSessionManager,
     FakeLogService,
@@ -205,6 +207,44 @@ def test_public_owned_comments_return_pending_items_for_receipts() -> None:
     assert manager.payload is not None
     assert manager.payload["items"][0]["status"] == "pending"
     assert len(service.owned_receipts) == 1
+
+
+def test_public_owned_comments_uses_relaxed_rate_limit() -> None:
+    client = TestClient(app)
+    service = FakeCommentService()
+    manager = FakeEncryptionSessionManager(
+        {
+            "receipts": [
+                {
+                    "comment_id": 2,
+                    "post_slug": "public-post",
+                    "delete_token": "delete-token-value-with-enough-length-123456",
+                },
+            ],
+        },
+    )
+    app.dependency_overrides[get_comment_service] = lambda: service
+    app.dependency_overrides[get_encryption_session_manager] = lambda: manager
+    app.dependency_overrides[get_log_service] = lambda: FakeLogService()
+    app.dependency_overrides[get_rate_limit_service] = lambda: RateLimitService()
+
+    try:
+        responses = [
+            client.post(
+                "/api/public/posts/public-post/comments/owned",
+                json=encrypted_body(),
+                headers={
+                    "X-Encryption-Session": "public-session",
+                    "X-Encryption-Response-Salt": "test-response-salt",
+                },
+            )
+            for _ in range(6)
+        ]
+    finally:
+        app.dependency_overrides.clear()
+
+    assert [response.status_code for response in responses] == [200] * 6
+    assert len(service.owned_receipts) == 6
 
 
 def test_public_comment_delete_token_stays_in_encrypted_body_not_url_or_logs() -> None:
