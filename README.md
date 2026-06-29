@@ -222,7 +222,7 @@ npm.cmd run build
 
 文章浏览和点赞使用版本化匿名设备指纹摘要，后端再结合可信代理 IP、UA 和语言头做 HMAC 派生，不保存原始高维指纹；点赞接口只接受目标布尔状态，不接受计数增减。文章软删除时会清理对应匿名点赞记录并重置展示计数，物理删除由外键级联兜底。
 
-匿名评论设计见 `docs/anonymous-comments-design.md`。公开评论写接口使用 public scope `content-v1` 加密请求体，评论创建默认进入审核；创建成功只返回一次 `delete_token`，前端保存到 localStorage receipt，刷新后通过 `comments/owned` 加密接口找回自己的待审核评论。评论采用常见二级展示：可回复任意已发布评论，但二级回复仍归入同一个顶层楼层，并用 `reply_to_id` 与回复目标昵称快照显示“回复 @某某”；根评论或被回复评论删除后，有下级回复时保留“评论已删除”占位。后端只保存删除 token 的 HMAC，作者删除时用常量时间比较，删除后清空正文和 token hash。评论正文和昵称按纯文本处理，公开页和后台审核页都不使用 `dangerouslySetInnerHTML` 渲染评论字段；日志、审计日志和遥测不记录评论正文、昵称、删除 token、fingerprint 或 `author_secret_proof`。
+匿名评论设计见 `docs/anonymous-comments-design.md`。公开评论写接口使用 public scope `content-v1` 加密请求体，评论创建默认进入审核；创建成功只返回一次 `delete_token`，前端保存到 localStorage receipt，刷新后通过 `comments/owned` 加密接口找回自己的待审核评论。评论采用常见二级展示：可回复任意已发布评论，但二级回复仍归入同一个顶层楼层，并用 `reply_to_id` 与回复目标昵称快照显示“回复 @某某”；顶部表单只用于顶层评论，回复表单显示在被回复评论附近。公开页默认展示 5 条顶层评论、每个楼层 3 条回复，剩余内容通过“显示更多”展开；过长评论默认折叠，点击“展开”后显示全文。根评论或被回复评论删除后，有下级回复时保留“评论已删除”占位。后端只保存删除 token 的 HMAC，作者删除时用常量时间比较，删除后清空正文和 token hash。评论正文和昵称按纯文本处理，公开页和后台审核页都不使用 `dangerouslySetInnerHTML` 渲染评论字段；日志、审计日志和遥测不记录评论正文、昵称、删除 token、fingerprint 或 `author_secret_proof`。
 
 公开首页头像和友链头像会先通过后端签名缓存地址读取服务器本地缓存，前端再写入浏览器 Cache Storage；默认前后端都按 1 小时缓存窗口复用头像，减少访客浏览器直接触达原头像站点和重复请求。
 

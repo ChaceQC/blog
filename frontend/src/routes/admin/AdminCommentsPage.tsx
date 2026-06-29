@@ -4,6 +4,7 @@ import { Check, MessageSquare, ShieldAlert, Trash2, X } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { publicErrorMessage } from '../../api/client.ts'
+import { ListPager } from '../../components/ListPager.tsx'
 import {
   deleteAdminComment,
   listAdminComments,
@@ -32,15 +33,23 @@ const STATUS_LABELS = {
   spam: '垃圾',
 } as const
 
+const COMMENT_REVIEW_PAGE_SIZE = 10
+
 export function AdminCommentsPage() {
   const queryClient = useQueryClient()
   const { session } = useAuth()
   const [statusFilter, setStatusFilter] =
     useState<AdminCommentStatusFilter>('pending')
+  const [page, setPage] = useState(0)
   const commentsQuery = useQuery({
-    queryKey: ['admin-comments', statusFilter],
+    queryKey: ['admin-comments', statusFilter, page],
     queryFn: ({ signal }) =>
-      listAdminComments({ status: statusFilter, limit: 50, signal }),
+      listAdminComments({
+        status: statusFilter,
+        limit: COMMENT_REVIEW_PAGE_SIZE,
+        offset: page * COMMENT_REVIEW_PAGE_SIZE,
+        signal,
+      }),
   })
   const reviewMutation = useMutation({
     mutationFn: ({
@@ -103,7 +112,10 @@ export function AdminCommentsPage() {
                 className={
                   statusFilter === tab.value ? 'admin-tab active' : 'admin-tab'
                 }
-                onClick={() => setStatusFilter(tab.value)}
+                onClick={() => {
+                  setStatusFilter(tab.value)
+                  setPage(0)
+                }}
               >
                 {tab.label}
               </button>
@@ -185,6 +197,14 @@ export function AdminCommentsPage() {
               </article>
             ))}
           </div>
+          <ListPager
+            page={page}
+            pageSize={COMMENT_REVIEW_PAGE_SIZE}
+            totalItems={commentsQuery.data?.total ?? 0}
+            isLoading={commentsQuery.isLoading || commentsQuery.isFetching}
+            variant="admin"
+            onPageChange={setPage}
+          />
         </section>
       </div>
     </div>

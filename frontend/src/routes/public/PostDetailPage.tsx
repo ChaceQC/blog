@@ -192,7 +192,11 @@ export function PostDetailPage() {
           className="post-prose"
           html={post.content_html}
         />
-        <PostComments slug={slug} initialCount={post.comment_count} />
+        <PostComments
+          key={slug}
+          slug={slug}
+          initialCount={post.comment_count}
+        />
       </article>
       <div className="post-detail-actions" aria-label="文章互动">
         {interactionErrorMessage ? (
