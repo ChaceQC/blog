@@ -47,6 +47,13 @@ class CommentRepository:
             return None
         return target, root
 
+    async def lock_post_for_comment_write(self, *, post_id: int) -> None:
+        await self.session.execute(
+            select(Post.id)
+            .where(Post.id == post_id)
+            .with_for_update(),
+        )
+
     async def get_comment_for_reply(
         self,
         *,
@@ -186,20 +193,45 @@ class CommentRepository:
         limit: int,
         offset: int,
     ) -> Sequence[PostComment]:
+        root_result = await self.session.execute(
+            select(PostComment.id)
+            .where(
+                PostComment.post_id == post_id,
+                PostComment.parent_id.is_(None),
+                _public_list_filter(),
+            )
+            .order_by(PostComment.created_at.asc(), PostComment.id.asc())
+            .limit(limit)
+            .offset(offset),
+        )
+        root_ids = list(root_result.scalars().all())
+        if not root_ids:
+            return []
+        root_id_expr = case(
+            (PostComment.parent_id.is_(None), PostComment.id),
+            else_=PostComment.parent_id,
+        )
+        root_order = case(
+            {root_id: index for index, root_id in enumerate(root_ids)},
+            value=root_id_expr,
+            else_=len(root_ids),
+        )
         result = await self.session.execute(
             select(PostComment)
             .where(
                 PostComment.post_id == post_id,
                 _public_list_filter(),
+                or_(
+                    PostComment.id.in_(root_ids),
+                    PostComment.parent_id.in_(root_ids),
+                ),
             )
             .order_by(
+                root_order,
                 PostComment.parent_id.is_not(None),
-                PostComment.parent_id,
                 PostComment.created_at.asc(),
                 PostComment.id.asc(),
             )
-            .limit(limit)
-            .offset(offset),
         )
         return list(result.scalars().all())
 
@@ -208,6 +240,16 @@ class CommentRepository:
             select(func.count(PostComment.id)).where(
                 PostComment.post_id == post_id,
                 PostComment.status == COMMENT_STATUS_PUBLISHED,
+            ),
+        )
+        return int(result.scalar_one())
+
+    async def count_public_comment_threads(self, *, post_id: int) -> int:
+        result = await self.session.execute(
+            select(func.count(PostComment.id)).where(
+                PostComment.post_id == post_id,
+                PostComment.parent_id.is_(None),
+                _public_list_filter(),
             ),
         )
         return int(result.scalar_one())

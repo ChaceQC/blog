@@ -18,6 +18,8 @@ import type {
   PublicTaxonomyListResponse,
 } from './types.ts'
 
+const OWNED_COMMENT_RECEIPT_BATCH_SIZE = 50
+
 export function listPublicPosts(
   params: {
     limit?: number
@@ -117,12 +119,45 @@ export function listOwnedPublicComments(
   payload: PublicOwnedCommentsPayload,
   options: { signal?: AbortSignal } = {},
 ): Promise<PublicOwnedCommentsResponse> {
+  if (payload.receipts.length > OWNED_COMMENT_RECEIPT_BATCH_SIZE) {
+    return listOwnedPublicCommentsInBatches(slug, payload, options)
+  }
   return apiPostEncrypted<PublicOwnedCommentsPayload, PublicOwnedCommentsResponse>(
     `/public/posts/${encodeURIComponent(slug)}/comments/owned`,
     payload,
     'content-v1',
     { encryptionScope: 'public', encryptRequest: true, signal: options.signal },
   )
+}
+
+async function listOwnedPublicCommentsInBatches(
+  slug: string,
+  payload: PublicOwnedCommentsPayload,
+  options: { signal?: AbortSignal } = {},
+): Promise<PublicOwnedCommentsResponse> {
+  const batches: PublicOwnedCommentsPayload[] = []
+  for (
+    let index = 0;
+    index < payload.receipts.length;
+    index += OWNED_COMMENT_RECEIPT_BATCH_SIZE
+  ) {
+    batches.push({
+      receipts: payload.receipts.slice(
+        index,
+        index + OWNED_COMMENT_RECEIPT_BATCH_SIZE,
+      ),
+    })
+  }
+  const responses = await Promise.all(
+    batches.map((batch) => listOwnedPublicComments(slug, batch, options)),
+  )
+  const items = new Map<number, PublicOwnedCommentsResponse['items'][number]>()
+  for (const response of responses) {
+    for (const item of response.items) {
+      items.set(item.id, item)
+    }
+  }
+  return { items: Array.from(items.values()) }
 }
 
 export function deletePublicComment(

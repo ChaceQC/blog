@@ -1,7 +1,12 @@
 import { Fragment, useMemo, useState } from 'react'
 
 import { MessageCircle, Reply, Send, Trash2, X } from 'lucide-react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 
 import { publicErrorMessage } from '../../api/client.ts'
 import {
@@ -67,9 +72,22 @@ export function PostComments({ slug, initialCount }: PostCommentsProps) {
   const [expandedCommentIds, setExpandedCommentIds] = useState<Set<number>>(
     () => new Set(),
   )
-  const commentsQuery = useQuery({
+  const commentsQuery = useInfiniteQuery({
     queryKey: ['public-comments', slug],
-    queryFn: ({ signal }) => listPublicComments(slug, { limit: 100, signal }),
+    queryFn: ({ pageParam, signal }) =>
+      listPublicComments(slug, {
+        limit: ROOT_COMMENT_BATCH_SIZE,
+        offset: Number(pageParam),
+        signal,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, pages) => {
+      const loadedRootCount = pages.reduce(
+        (count, page) => count + countRootComments(page.items),
+        0,
+      )
+      return loadedRootCount < lastPage.thread_total ? loadedRootCount : undefined
+    },
     enabled: slug.length > 0,
   })
   const ownedQuery = useQuery({
@@ -118,6 +136,8 @@ export function PostComments({ slug, initialCount }: PostCommentsProps) {
         return { items: mergeComments(current.items, [response.comment]) }
       })
       queryClient.invalidateQueries({ queryKey: ['public-comments', slug] })
+      queryClient.invalidateQueries({ queryKey: ['public-post', slug] })
+      queryClient.invalidateQueries({ queryKey: ['public-posts'] })
     },
   })
   const deleteMutation = useMutation({
@@ -132,24 +152,38 @@ export function PostComments({ slug, initialCount }: PostCommentsProps) {
       removeCommentReceipt(response.id)
       queryClient.invalidateQueries({ queryKey: ['public-comments', slug] })
       queryClient.invalidateQueries({ queryKey: ['public-comments-owned', slug] })
+      queryClient.invalidateQueries({ queryKey: ['public-post', slug] })
+      queryClient.invalidateQueries({ queryKey: ['public-posts'] })
     },
   })
 
+  const publicComments = useMemo(
+    () => commentsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [commentsQuery.data?.pages],
+  )
+  const publicThreadTotal =
+    commentsQuery.data?.pages.at(-1)?.thread_total ?? publicComments.length
+  const loadedPublicRootCount = useMemo(
+    () => countRootComments(publicComments),
+    [publicComments],
+  )
   const comments = useMemo(
     () =>
       mergeComments(
-        commentsQuery.data?.items ?? [],
+        publicComments,
         ownedQuery.data?.items ?? [],
       ),
-    [commentsQuery.data?.items, ownedQuery.data?.items],
+    [publicComments, ownedQuery.data?.items],
   )
   const threads = useMemo(() => buildCommentThreads(comments), [comments])
   const visibleThreads = visibleCommentThreads(threads, visibleRootCount, slug)
   const visibleThreadIds = new Set(visibleThreads.map((thread) => thread.root.id))
-  const hiddenRootCount = threads.filter(
+  const loadedHiddenRootCount = threads.filter(
     (thread) => !visibleThreadIds.has(thread.root.id),
   ).length
-  const visibleCount = commentsQuery.data?.total ?? initialCount
+  const unloadedRootCount = Math.max(0, publicThreadTotal - loadedPublicRootCount)
+  const hiddenRootCount = loadedHiddenRootCount + unloadedRootCount
+  const visibleCount = commentsQuery.data?.pages.at(-1)?.total ?? initialCount
   const error = commentsQuery.error ?? ownedQuery.error ?? createMutation.error
   const errorMessage = error
     ? publicErrorMessage(error, '评论暂时无法同步。')
@@ -308,12 +342,13 @@ export function PostComments({ slug, initialCount }: PostCommentsProps) {
         {hiddenRootCount > 0 ? (
           <button
             className="comment-more-button"
+            disabled={commentsQuery.isFetchingNextPage}
             type="button"
-            onClick={() =>
-              setVisibleRootCount((current) => current + ROOT_COMMENT_BATCH_SIZE)
-            }
+            onClick={showMoreRootComments}
           >
-            显示更多评论（剩余 {hiddenRootCount} 条）
+            {commentsQuery.isFetchingNextPage
+              ? '正在加载更多评论'
+              : `显示更多评论（剩余 ${hiddenRootCount} 条）`}
           </button>
         ) : null}
       </div>
@@ -340,6 +375,18 @@ export function PostComments({ slug, initialCount }: PostCommentsProps) {
       }
       return next
     })
+  }
+
+  function showMoreRootComments() {
+    const nextVisibleRootCount = visibleRootCount + ROOT_COMMENT_BATCH_SIZE
+    setVisibleRootCount(nextVisibleRootCount)
+    if (
+      nextVisibleRootCount > loadedPublicRootCount &&
+      commentsQuery.hasNextPage &&
+      !commentsQuery.isFetchingNextPage
+    ) {
+      void commentsQuery.fetchNextPage()
+    }
   }
 }
 
@@ -590,6 +637,10 @@ function threadHasOwnedComment(thread: CommentThread, slug: string): boolean {
     hasCommentReceipt(thread.root.id, slug) ||
     thread.replies.some((reply) => hasCommentReceipt(reply.id, slug))
   )
+}
+
+function countRootComments(comments: PublicCommentItem[]): number {
+  return comments.filter((comment) => comment.parent_id === null).length
 }
 
 function isLongComment(value: string): boolean {

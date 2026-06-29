@@ -99,6 +99,7 @@ export type PublicCommentItem = {
 export type PublicCommentListResponse = {
   items: PublicCommentItem[]
   total: number
+  thread_total: number
 }
 
 export type PublicCommentCreatePayload = {

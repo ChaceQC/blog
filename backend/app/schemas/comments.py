@@ -82,6 +82,7 @@ class PublicCommentItem(BaseModel):
 class PublicCommentListResponse(BaseModel):
     items: list[PublicCommentItem]
     total: int = Field(ge=0)
+    thread_total: int = Field(ge=0)
 
     model_config = ConfigDict(extra="forbid")
 

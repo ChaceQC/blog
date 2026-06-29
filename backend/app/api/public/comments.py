@@ -60,7 +60,7 @@ async def list_public_comments(
 ) -> EncryptedApiResponse:
     await validate_public_content_session(request, encryption_manager)
     try:
-        items, total = await comments.list_public_comments(
+        items, total, thread_total = await comments.list_public_comments(
             slug=slug,
             limit=limit,
             offset=offset,
@@ -75,7 +75,11 @@ async def list_public_comments(
         entity_type="post",
     )
     return await _public_comment_response(
-        PublicCommentListResponse(items=items, total=total),
+        PublicCommentListResponse(
+            items=items,
+            total=total,
+            thread_total=thread_total,
+        ),
         request=request,
         encryption_manager=encryption_manager,
     )

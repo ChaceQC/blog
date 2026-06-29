@@ -338,9 +338,9 @@
 
 ### 公开列表
 
-`GET /api/public/posts/{slug}/comments?limit=50&cursor=...`
+`GET /api/public/posts/{slug}/comments?limit=5&offset=0`
 
-返回 `published` 评论和必要 tombstone。响应继续使用 `EncryptedApiResponse`。
+`limit` / `offset` 按顶层楼层分页；每一页返回这些顶层楼层及其下所有可公开显示的二级回复，避免扁平分页截断回复。返回 `published` 评论和必要 tombstone。响应继续使用 `EncryptedApiResponse`。
 
 ```json
 {
@@ -356,8 +356,8 @@
       "created_at": "2026-06-29T12:00:00"
     }
   ],
-  "next_cursor": null,
-  "total": 1
+  "total": 1,
+  "thread_total": 1
 }
 ```
 
@@ -412,7 +412,7 @@
 }
 ```
 
-服务端最多接受 50 条 receipt，只返回 token 校验通过且属于当前文章的评论。这样不依赖指纹，也不会让别人枚举待审核内容。
+服务端单次最多接受 50 条 receipt，只返回 token 校验通过且属于当前文章的评论。前端本地可以保存更多 receipt，但调用 owned 接口时必须按 50 条分批请求。这样不依赖指纹，也不会让别人枚举待审核内容。
 
 ### 作者删除
 

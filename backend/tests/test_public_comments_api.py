@@ -29,7 +29,7 @@ class FakeCommentService:
         slug: str,
         limit: int,
         offset: int,
-    ) -> tuple[list[PublicCommentItem], int]:
+    ) -> tuple[list[PublicCommentItem], int, int]:
         assert slug == "public-post"
         assert limit == 50
         assert offset == 0
@@ -39,7 +39,7 @@ class FakeCommentService:
                 status="published",
                 body_text="公开评论",
             ),
-        ], 1
+        ], 1, 1
 
     async def create_public_comment(self, **kwargs: object) -> CreatedComment:
         self.created_payloads.append(dict(kwargs))
@@ -112,6 +112,7 @@ def test_public_comments_list_returns_encrypted_comments() -> None:
     assert response.status_code == 200
     assert manager.payload is not None
     assert manager.payload["total"] == 1
+    assert manager.payload["thread_total"] == 1
     assert manager.payload["items"][0]["body_text"] == "公开评论"
     assert logs.items[0]["access_type"] == "public_comments_list"
 

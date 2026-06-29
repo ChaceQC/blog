@@ -63,6 +63,8 @@ class CommentRepositoryProtocol(Protocol):
         comment_id: int,
     ) -> tuple[PostComment, PostComment] | None: ...
 
+    async def lock_post_for_comment_write(self, *, post_id: int) -> None: ...
+
     async def create_comment(
         self,
         *,
@@ -114,6 +116,8 @@ class CommentRepositoryProtocol(Protocol):
     ) -> Sequence[PostComment]: ...
 
     async def count_public_comments(self, *, post_id: int) -> int: ...
+
+    async def count_public_comment_threads(self, *, post_id: int) -> int: ...
 
     async def list_owned_comments(
         self,
@@ -213,7 +217,7 @@ class CommentService:
         slug: str,
         limit: int,
         offset: int,
-    ) -> tuple[list[PublicCommentItem], int]:
+    ) -> tuple[list[PublicCommentItem], int, int]:
         post = await self._require_public_post(slug)
         comments = await self.repository.list_public_comments(
             post_id=post.id,
@@ -221,7 +225,14 @@ class CommentService:
             offset=offset,
         )
         total = await self.repository.count_public_comments(post_id=post.id)
-        return [public_comment_item(comment) for comment in comments], total
+        thread_total = await self.repository.count_public_comment_threads(
+            post_id=post.id,
+        )
+        return (
+            [public_comment_item(comment) for comment in comments],
+            total,
+            thread_total,
+        )
 
     async def create_public_comment(
         self,
@@ -292,6 +303,7 @@ class CommentService:
                 entity_id=post.id,
             )
             raise CommentRiskLimitedError("comment author limited")
+        await self.repository.lock_post_for_comment_write(post_id=post.id)
         if await self.repository.count_recent_duplicate_body(
             post_id=post.id,
             body_hash=body_hash,
@@ -471,12 +483,28 @@ class CommentService:
                     post_id=comment.post_id,
                 )
                 await self._decrement_reply_counts(comment)
-            comment.status = (
-                COMMENT_STATUS_REJECTED if action == "reject" else COMMENT_STATUS_SPAM
-            )
+                if comment.reply_count > 0:
+                    _mark_comment_deleted(
+                        comment,
+                        status=COMMENT_STATUS_DELETED_BY_ADMIN,
+                        reason=reason_class or action,
+                    )
+                else:
+                    comment.status = (
+                        COMMENT_STATUS_REJECTED
+                        if action == "reject"
+                        else COMMENT_STATUS_SPAM
+                    )
+                    comment.deleted_reason = reason_class
+            else:
+                comment.status = (
+                    COMMENT_STATUS_REJECTED
+                    if action == "reject"
+                    else COMMENT_STATUS_SPAM
+                )
+                comment.deleted_reason = reason_class
             comment.reviewed_at = utc_now()
             comment.reviewed_by = reviewer_id
-            comment.deleted_reason = reason_class
         elif action == "delete":
             if comment.status in {
                 COMMENT_STATUS_DELETED_BY_AUTHOR,

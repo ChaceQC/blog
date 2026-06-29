@@ -35,6 +35,30 @@ const STATUS_LABELS = {
 
 const COMMENT_REVIEW_PAGE_SIZE = 10
 
+function nextStatusForAction(payload: AdminCommentReviewPayload) {
+  if (payload.action === 'approve') {
+    return 'published'
+  }
+  if (payload.action === 'reject') {
+    return 'rejected'
+  }
+  if (payload.action === 'spam') {
+    return 'spam'
+  }
+  return 'deleted_by_admin'
+}
+
+function leavesStatusFilter(
+  statusFilter: AdminCommentStatusFilter,
+  comment: AdminCommentItem,
+  payload: AdminCommentReviewPayload,
+) {
+  if (statusFilter === 'all' || comment.status !== statusFilter) {
+    return false
+  }
+  return nextStatusForAction(payload) !== statusFilter
+}
+
 export function AdminCommentsPage() {
   const queryClient = useQueryClient()
   const { session } = useAuth()
@@ -68,9 +92,18 @@ export function AdminCommentsPage() {
       }
       return reviewAdminComment(comment.id, payload, csrfToken)
     },
-    onSuccess: () => {
+    onSuccess: (_, { comment, payload }) => {
+      if (
+        page > 0 &&
+        commentsQuery.data?.items.length === 1 &&
+        leavesStatusFilter(statusFilter, comment, payload)
+      ) {
+        setPage((current) => Math.max(0, current - 1))
+      }
       queryClient.invalidateQueries({ queryKey: ['admin-comments'] })
       queryClient.invalidateQueries({ queryKey: ['public-comments'] })
+      queryClient.invalidateQueries({ queryKey: ['public-post'] })
+      queryClient.invalidateQueries({ queryKey: ['public-posts'] })
     },
   })
   const error = commentsQuery.error ?? reviewMutation.error
